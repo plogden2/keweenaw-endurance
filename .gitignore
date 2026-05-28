@@ -1,3 +1,4 @@
 uv.exe
 uvw.exe
 uvx.exe
+frontend/node_modules/**

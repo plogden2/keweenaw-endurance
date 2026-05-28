@@ -1,0 +1,34 @@
+# Build stage for testing
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install testing dependencies
+RUN apk add --no-cache chromium chromium-chromedriver
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev dependencies)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Create non-root user
+RUN addgroup -g 1001 -S appuser && \
+    adduser -S -u 1001 -G appuser appuser
+
+# Change ownership
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Set environment for testing
+ENV NODE_ENV=test
+ENV CHROME_BIN=/usr/bin/chromium-browser
+
+# Default command runs tests
+CMD ["npm", "run", "test:ci"]

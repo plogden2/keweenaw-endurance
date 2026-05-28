@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  frontend-test:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.test
+    environment:
+      - NODE_ENV=test
+      - VITE_API_URL=http://backend-test:8080
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend-test
+    networks:
+      - keweenaw-test-network
+    command: npm run test:ci
+
+  backend-test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.test
+    environment:
+      - GO_ENV=test
+      - DB_HOST=postgres-test
+      - DB_PORT=5432
+      - DB_NAME=keweenaw_test
+      - DB_USER=test_user
+      - DB_PASSWORD=test_pass
+      - REDIS_HOST=redis-test
+      - REDIS_PORT=6379
+      - JWT_SECRET=test-secret-key
+      - LOG_LEVEL=debug
+      - TESTING=true
+    volumes:
+      - ./backend:/app
+      - /app/vendor
+    depends_on:
+      - postgres-test
+      - redis-test
+    networks:
+      - keweenaw-test-network
+    command: go test ./... -v -cover
+
+  postgres-test:
+    image: postgres:14-alpine
+    environment:
+      - POSTGRES_DB=keweenaw_test
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_pass
+    networks:
+      - keweenaw-test-network
+
+  redis-test:
+    image: redis:7-alpine
+    networks:
+      - keweenaw-test-network
+
+networks:
+  keweenaw-test-network:
+    driver: bridge
