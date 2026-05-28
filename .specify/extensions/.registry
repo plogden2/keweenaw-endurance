@@ -8,6 +8,13 @@
       "enabled": true,
       "priority": 10,
       "registered_commands": {
+        "cursor-agent": [
+          "speckit.git.feature",
+          "speckit.git.validate",
+          "speckit.git.remote",
+          "speckit.git.initialize",
+          "speckit.git.commit"
+        ],
         "trae": [
           "speckit.git.feature",
           "speckit.git.validate",
@@ -17,7 +24,7 @@
         ]
       },
       "registered_skills": [],
-      "installed_at": "2026-05-28T01:03:34.039278+00:00"
+      "installed_at": "2026-05-28T23:57:10.989174+00:00"
     }
   }
 }
