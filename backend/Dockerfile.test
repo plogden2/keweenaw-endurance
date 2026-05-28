@@ -1,0 +1,49 @@
+# Build stage for testing
+FROM golang:1.21-alpine AS builder
+
+# Install dependencies
+RUN apk add --no-cache git ca-certificates tzdata
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Install testing tools
+RUN go install github.com/onsi/ginkgo/v2/ginkgo@latest
+RUN go install github.com/onsi/gomega/...@latest
+RUN go install github.com/stretchr/testify/...@latest
+
+# Final stage
+FROM alpine:latest
+
+# Install ca-certificates and testing tools
+RUN apk --no-cache add ca-certificates bash
+
+# Create non-root user
+RUN addgroup -g 1001 -S appuser && \
+    adduser -S -u 1001 -G appuser appuser
+
+WORKDIR /app
+
+# Copy the source code from builder
+COPY --from=builder /app .
+
+# Change ownership to non-root user
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Set environment
+ENV GO_ENV=test
+
+# Default command runs tests
+CMD ["go", "test", "./...", "-v", "-cover"]
