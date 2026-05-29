@@ -4,18 +4,21 @@
       <div class="hero-content">
         <h1 class="hero-title">Keweenaw Endurance Race Timing</h1>
         <p class="hero-subtitle">Comprehensive race timing and indexing for endurance events</p>
-        <router-link to="/timing" class="cta-button">View Live Timing</router-link>
+        <router-link to="/timing" class="cta-button" data-testid="timing-cta">
+          View Live Timing
+        </router-link>
       </div>
     </section>
 
     <section class="featured-event" aria-labelledby="featured-event">
       <h2 id="featured-event">Featured Event</h2>
       <div class="featured-content">
-        <a 
-          href="https://www.copperharbortrails.org/bluffet" 
-          target="_blank" 
+        <a
+          href="https://www.copperharbortrails.org/bluffet"
+          target="_blank"
           rel="noopener noreferrer"
           class="featured-link"
+          data-testid="bluffet-link"
         >
           All You Can East Bluffet
         </a>
@@ -28,66 +31,44 @@
     <section class="upcoming-races" aria-labelledby="upcoming-races">
       <h2 id="upcoming-races">Upcoming Races</h2>
       <div class="race-grid">
-        <article class="race-card" data-testid="race-card">
-          <img 
-            src="/images/race-placeholder.webp" 
-            alt="" 
-            loading="lazy"
-            class="race-image"
-          />
-          <h3 class="race-name">Summer Trail Challenge</h3>
-          <a 
-            href="https://example.com/summer-trail" 
-            target="_blank" 
-            rel="noopener noreferrer nofollow"
-            class="race-link"
-          >
-            View Details
-          </a>
-        </article>
-
-        <article class="race-card" data-testid="race-card">
-          <img 
-            src="/images/race-placeholder.webp" 
-            alt="" 
-            loading="lazy"
-            class="race-image"
-          />
-          <h3 class="race-name">Fall Colors Marathon</h3>
-          <a 
-            href="https://example.com/fall-marathon" 
-            target="_blank" 
-            rel="noopener noreferrer nofollow"
-            class="race-link"
-          >
-            View Details
-          </a>
-        </article>
-
-        <article class="race-card" data-testid="race-card">
-          <img 
-            src="/images/race-placeholder.webp" 
-            alt="" 
-            loading="lazy"
-            class="race-image"
-          />
-          <h3 class="race-name">Winter Ultra Challenge</h3>
-          <a 
-            href="https://example.com/winter-ultra" 
-            target="_blank" 
-            rel="noopener noreferrer nofollow"
-            class="race-link"
-          >
-            View Details
-          </a>
-        </article>
+        <RaceCard
+          v-for="race in teaserRaces"
+          :key="race.name"
+          :name="race.name"
+          :external-url="race.externalUrl"
+          :image-src="race.imageSrc"
+        />
       </div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-// Home component - minimal teaser approach as specified
+import RaceCard from '@/components/RaceCard.vue'
+
+interface TeaserRace {
+  name: string
+  externalUrl: string
+  imageSrc: string
+}
+
+const teaserRaces: TeaserRace[] = [
+  {
+    name: 'Summer Trail Challenge',
+    externalUrl: 'https://example.com/summer-trail',
+    imageSrc: '/images/race-placeholder.webp',
+  },
+  {
+    name: 'Fall Colors Marathon',
+    externalUrl: 'https://example.com/fall-marathon',
+    imageSrc: '/images/race-placeholder.webp',
+  },
+  {
+    name: 'Winter Ultra Challenge',
+    externalUrl: 'https://example.com/winter-ultra',
+    imageSrc: '/images/race-placeholder.webp',
+  },
+]
 </script>
 
 <style scoped>
@@ -182,57 +163,15 @@
   gap: 2rem;
 }
 
-.race-card {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s, box-shadow 0.3s;
-}
-
-.race-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
-}
-
-.race-image {
-  width: 100%;
-  height: 200px;
-  object-fit: cover;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-}
-
-.race-name {
-  font-size: 1.3rem;
-  margin-bottom: 1rem;
-  color: #2c3e50;
-}
-
-.race-link {
-  display: inline-block;
-  background: #3498db;
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border-radius: 6px;
-  text-decoration: none;
-  font-weight: 500;
-  transition: background-color 0.3s;
-}
-
-.race-link:hover {
-  background: #2980b9;
-}
-
 @media (max-width: 768px) {
   .home {
     padding: 0 1rem;
   }
-  
+
   .hero-title {
     font-size: 2rem;
   }
-  
+
   .race-grid {
     grid-template-columns: 1fr;
   }

@@ -250,14 +250,14 @@
 
 ### Tests for User Story 9
 
-- [ ] T062 [P] [US9] LiveTiming component tests in `frontend/src/views/LiveTiming.test.ts`
-- [ ] T063 [P] [US9] ManualTimingForm component tests in `frontend/src/components/ManualTimingForm.test.ts`
+- [X] T062 [P] [US9] LiveTiming component tests in `frontend/src/views/LiveTiming.test.ts`
+- [X] T063 [P] [US9] ManualTimingForm component tests in `frontend/src/components/ManualTimingForm.test.ts`
 
 ### Implementation for User Story 9
 
-- [ ] T064 [US9] Create `LiveTiming.vue` with bib and RFID lookup in `frontend/src/views/LiveTiming.vue`
-- [ ] T065 [US9] Create `ManualTimingForm.vue` in `frontend/src/components/ManualTimingForm.vue`
-- [ ] T066 [US9] Create sync status indicator component in `frontend/src/components/SyncStatus.vue`
+- [X] T064 [US9] Create `LiveTiming.vue` with bib and RFID lookup in `frontend/src/views/LiveTiming.vue`
+- [X] T065 [US9] Create `ManualTimingForm.vue` in `frontend/src/components/ManualTimingForm.vue`
+- [X] T066 [US9] Create sync status indicator component in `frontend/src/components/SyncStatus.vue`
 
 **Checkpoint**: Timing operators can record times from the browser UI
 
@@ -271,13 +271,13 @@
 
 ### Tests for User Story 10
 
-- [ ] T067 [P] [US10] Home page component tests in `frontend/src/views/Home.test.ts`
+- [X] T067 [P] [US10] Home page component tests in `frontend/src/views/Home.test.ts`
 
 ### Implementation for User Story 10
 
-- [ ] T068 [US10] Create HTML landing page prototype in `prototypes/landing.html`
-- [ ] T069 [US10] Refine `Home.vue` to match approved prototype in `frontend/src/views/Home.vue`
-- [ ] T070 [P] [US10] Create reusable `RaceCard.vue` teaser component in `frontend/src/components/RaceCard.vue`
+- [X] T068 [US10] Create HTML landing page prototype in `prototypes/landing.html`
+- [X] T069 [US10] Refine `Home.vue` to match approved prototype in `frontend/src/views/Home.vue`
+- [X] T070 [P] [US10] Create reusable `RaceCard.vue` teaser component in `frontend/src/components/RaceCard.vue`
 
 **Checkpoint**: Landing page meets constitutional HTML-first workflow and spec design
 

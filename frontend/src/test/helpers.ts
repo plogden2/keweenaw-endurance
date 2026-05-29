@@ -28,6 +28,11 @@ export function createTestRouter(routes: RouteRecordRaw[] = []): Router {
         name: 'race-details',
         component: { template: '<div />' },
       },
+      {
+        path: '/timing/live/:raceId',
+        name: 'live-timing',
+        component: { template: '<div />' },
+      },
       ...routes,
     ],
   })

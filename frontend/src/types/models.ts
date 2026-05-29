@@ -83,6 +83,52 @@ export type CreateParticipantPayload = Pick<
 
 export type UpdateParticipantPayload = Partial<Omit<CreateParticipantPayload, 'race_id'>>
 
+export type CheckpointType = 'start' | 'finish' | 'intermediate'
+export type SyncStatus = 'synced' | 'pending_sync' | 'failed_sync'
+
+export interface Checkpoint {
+  id: string
+  race_id: string
+  name: string
+  checkpoint_type: CheckpointType
+  distance_from_start_km?: number
+  location_description?: string
+  is_active: boolean
+}
+
+export interface TimingRecord {
+  id: string
+  participant_id: string
+  checkpoint_id: string
+  timestamp: string
+  local_timestamp: string
+  device_id?: string
+  sync_status: SyncStatus
+  participant?: Participant
+  checkpoint?: Checkpoint
+}
+
+export interface LiveTimingResponse {
+  race_id: string
+  records: TimingRecord[]
+}
+
+export interface SyncStatusResponse {
+  pending_count: number
+  failed_count: number
+  synced_count: number
+}
+
+export interface ManualTimingEntryPayload {
+  race_id: string
+  checkpoint_id: string
+  bib_number?: string
+  rfid_tag_uid?: string
+  timestamp: string
+  device_id?: string
+  sync_status?: SyncStatus
+}
+
 export interface ListParams {
   page?: number
   limit?: number
