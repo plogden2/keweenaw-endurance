@@ -1,10 +1,12 @@
 <template>
-  <article class="result-certificate" data-testid="result-certificate">
+  <div class="result-certificate-container">
+    <article ref="certificateRef" class="result-certificate" data-testid="result-certificate">
     <header class="certificate-section certificate-header">
       <h2 class="event-title">{{ eventTitle }}</h2>
-      <div v-if="logoUrl" class="event-logo">
-        <img :src="logoUrl" :alt="`${eventName} logo`" class="event-logo-image" />
-      </div>
+      <EventLogo
+        :logo-url="logoUrl"
+        :alt="`${eventName} logo`"
+      />
     </header>
 
     <section class="certificate-section certificate-date">
@@ -79,17 +81,34 @@
         Inferior Timing
       </RouterLink>
     </footer>
-  </article>
+    </article>
+
+    <div class="certificate-toolbar">
+      <button
+        type="button"
+        class="save-image-btn"
+        data-testid="save-certificate-image"
+        :disabled="saving"
+        @click="saveImage"
+      >
+        {{ saving ? 'Saving…' : 'Save image' }}
+      </button>
+      <p v-if="saveError" class="save-error">{{ saveError }}</p>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { RouteLocationRaw } from 'vue-router'
+import EventLogo from '@/components/EventLogo.vue'
 import {
   formatOrdinal,
   type ParticipantRankInfo,
 } from '@/utils/participantResults'
+import { buildImageFilename, saveElementAsImage } from '@/utils/saveElementAsImage'
 
-defineProps<{
+const props = defineProps<{
   eventTitle: string
   eventName: string
   eventDate: string
@@ -112,12 +131,74 @@ defineProps<{
 defineEmits<{
   viewLeaderboard: []
 }>()
+
+const certificateRef = ref<HTMLElement | null>(null)
+const saving = ref(false)
+const saveError = ref<string | null>(null)
+
+async function saveImage(): Promise<void> {
+  if (!certificateRef.value || saving.value) {
+    return
+  }
+
+  saving.value = true
+  saveError.value = null
+
+  try {
+    const filename = buildImageFilename(
+      props.participantName,
+      `bib-${props.bibNumber}-results`,
+    )
+    await saveElementAsImage(certificateRef.value, filename)
+  } catch {
+    saveError.value = 'Could not save image. Try again.'
+  } finally {
+    saving.value = false
+  }
+}
 </script>
 
 <style scoped>
-.result-certificate {
+.result-certificate-container {
   max-width: 420px;
   margin: 0 auto;
+}
+
+.certificate-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.save-image-btn {
+  padding: 0.55rem 1rem;
+  border: 1px solid #2c3e50;
+  border-radius: 4px;
+  background: #2c3e50;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.save-image-btn:hover:not(:disabled) {
+  background: #1f2d3a;
+}
+
+.save-image-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.save-error {
+  margin: 0;
+  color: #dc3545;
+  font-size: 0.85rem;
+}
+
+.result-certificate {
   background: white;
   border: 1px solid #222;
   font-family: Arial, Helvetica, sans-serif;
@@ -143,19 +224,6 @@ defineEmits<{
   font-size: 1rem;
   font-weight: 700;
   line-height: 1.35;
-}
-
-.event-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.event-logo-image {
-  max-width: 220px;
-  max-height: 220px;
-  width: auto;
-  height: auto;
 }
 
 .certificate-date p {

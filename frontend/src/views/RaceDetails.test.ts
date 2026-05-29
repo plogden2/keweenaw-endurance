@@ -231,6 +231,8 @@ describe('RaceDetails.vue', () => {
     expect(wrapper.find('[data-testid="result-certificate"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Preliminary Results:')
     expect(wrapper.text()).toContain('Tucson AZ')
+    expect(wrapper.text()).toContain('Save image')
+    expect(wrapper.find('[data-testid="save-certificate-image"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Inferior Timing')
     expect(wrapper.text()).toContain('Compare in Race Flow')
     expect(wrapper.find('[data-testid="inferior-timing-link"]').exists()).toBe(true)

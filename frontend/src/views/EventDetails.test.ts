@@ -81,4 +81,46 @@ describe('EventDetails.vue', () => {
     const link = wrapper.find('a.race-link')
     expect(link.attributes('href')).toBe('/timing/evt-1/race/race-1')
   })
+
+  it('displays event logo when logo_url is set', async () => {
+    eventsStore.currentEvent = {
+      id: 'evt-1',
+      name: '2025 Copper Harbor Trails Fest - XC MTB',
+      event_date: '2025-08-30',
+      location: 'Copper Harbor, MI',
+      logo_url: '/images/chtf-2025-logo.png',
+    }
+    racesStore.races = []
+
+    const router = createTestRouter()
+    await router.push('/timing/evt-1')
+    await router.isReady()
+
+    const wrapper = mount(EventDetails, {
+      global: { plugins: [router] },
+    })
+
+    const logo = wrapper.find('[data-testid="event-logo"] img')
+    expect(logo.exists()).toBe(true)
+    expect(logo.attributes('src')).toBe('/images/chtf-2025-logo.png')
+  })
+
+  it('hides event logo when logo_url is not set', async () => {
+    eventsStore.currentEvent = {
+      id: 'evt-1',
+      name: 'Copper Harbor Classic',
+      event_date: '2024-08-01',
+    }
+    racesStore.races = []
+
+    const router = createTestRouter()
+    await router.push('/timing/evt-1')
+    await router.isReady()
+
+    const wrapper = mount(EventDetails, {
+      global: { plugins: [router] },
+    })
+
+    expect(wrapper.find('[data-testid="event-logo"]').exists()).toBe(false)
+  })
 })

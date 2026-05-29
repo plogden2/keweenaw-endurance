@@ -4,13 +4,22 @@
     <div v-else-if="eventsStore.error" class="status error">{{ eventsStore.error }}</div>
 
     <template v-else-if="eventsStore.currentEvent">
-      <h1 class="page-title">{{ eventsStore.currentEvent.name }}</h1>
-      <p class="meta">
-        {{ formatDate(eventsStore.currentEvent.event_date) }}
-        <span v-if="eventsStore.currentEvent.location">
-          · {{ eventsStore.currentEvent.location }}
-        </span>
-      </p>
+      <header class="event-header">
+        <EventLogo
+          :logo-url="eventsStore.currentEvent.logo_url"
+          :alt="`${eventsStore.currentEvent.name} logo`"
+          class="event-logo-large"
+        />
+        <div class="event-heading">
+          <h1 class="page-title">{{ eventsStore.currentEvent.name }}</h1>
+          <p class="meta">
+            {{ formatDate(eventsStore.currentEvent.event_date) }}
+            <span v-if="eventsStore.currentEvent.location">
+              · {{ eventsStore.currentEvent.location }}
+            </span>
+          </p>
+        </div>
+      </header>
 
       <section class="races-section">
         <h2>Races</h2>
@@ -42,6 +51,7 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import EventLogo from '@/components/EventLogo.vue'
 import { useEventsStore } from '@/stores/events'
 import { useRacesStore } from '@/stores/races'
 import { useUnitsStore } from '@/stores/units'
@@ -84,9 +94,22 @@ watch(eventId, loadEvent)
   color: #2c3e50;
 }
 
+.event-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.event-heading {
+  width: 100%;
+}
+
 .meta {
   color: #6c757d;
-  margin-bottom: 2rem;
+  margin-bottom: 0;
 }
 
 .races-section h2 {
