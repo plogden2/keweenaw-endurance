@@ -21,7 +21,7 @@ func TestCategoryService_CreateAndGet(t *testing.T) {
 		DisplayOrder: 1,
 	})
 	require.NoError(t, err)
-	assert.NotEqual(t, uuid.Nil, category.ID)
+	assert.False(t, category.ID.IsZero())
 
 	fetched, err := svc.GetCategory(category.ID)
 	require.NoError(t, err)

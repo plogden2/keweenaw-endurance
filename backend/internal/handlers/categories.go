@@ -6,10 +6,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 )
 
 func (h *Handlers) GetCategoriesByRace(c *gin.Context) {
-	raceID, err := parseUUID(c.Param("id"))
+	raceID, err := h.resolveRaceID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
 		return
@@ -33,7 +34,7 @@ func (h *Handlers) GetCategoriesByRace(c *gin.Context) {
 }
 
 func (h *Handlers) CreateCategory(c *gin.Context) {
-	raceID, err := parseUUID(c.Param("id"))
+	raceID, err := h.resolveRaceID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
 		return
@@ -46,7 +47,7 @@ func (h *Handlers) CreateCategory(c *gin.Context) {
 	}
 
 	category := &models.Category{
-		RaceID:       raceID,
+		RaceID:       uuidutil.NewPublicUUID(raceID),
 		Name:         req.Name,
 		CategoryType: req.CategoryType,
 		AgeMin:       req.AgeMin,
@@ -65,7 +66,7 @@ func (h *Handlers) CreateCategory(c *gin.Context) {
 }
 
 func (h *Handlers) GetCategory(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveCategoryID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category id"})
 		return
@@ -81,7 +82,7 @@ func (h *Handlers) GetCategory(c *gin.Context) {
 }
 
 func (h *Handlers) UpdateCategory(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveCategoryID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category id"})
 		return
@@ -123,7 +124,7 @@ func (h *Handlers) UpdateCategory(c *gin.Context) {
 }
 
 func (h *Handlers) DeleteCategory(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveCategoryID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category id"})
 		return

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/cache"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 	"gorm.io/gorm"
 )
 
@@ -17,7 +18,7 @@ const leaderboardCacheTTL = 30 * time.Second
 
 type LeaderboardEntry struct {
 	Position         int       `json:"position"`
-	ParticipantID    uuid.UUID `json:"participant_id"`
+	ParticipantID    uuidutil.PublicUUID `json:"participant_id"`
 	BibNumber        string    `json:"bib_number"`
 	FirstName        string    `json:"first_name"`
 	LastName         string    `json:"last_name"`
@@ -28,7 +29,7 @@ type LeaderboardEntry struct {
 }
 
 type LiveTimingData struct {
-	RaceID  uuid.UUID              `json:"race_id"`
+	RaceID  uuidutil.PublicUUID    `json:"race_id"`
 	Records []models.TimingRecord  `json:"records"`
 }
 
@@ -120,7 +121,7 @@ func (s *ResultsService) GetLiveTiming(raceID uuid.UUID) (*LiveTimingData, error
 	}
 
 	return &LiveTimingData{
-		RaceID:  raceID,
+		RaceID:  uuidutil.NewPublicUUID(raceID),
 		Records: records,
 	}, nil
 }

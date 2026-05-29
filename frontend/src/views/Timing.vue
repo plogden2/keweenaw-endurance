@@ -7,6 +7,11 @@
 
     <template v-else>
       <section class="timing-section">
+        <h2>Upcoming Events</h2>
+        <EventsTable :events="eventsStore.upcomingEvents" empty-label="No upcoming events" />
+      </section>
+
+      <section class="timing-section">
         <h2>Active Events</h2>
         <EventsTable :events="eventsStore.activeEvents" empty-label="No active events" />
       </section>

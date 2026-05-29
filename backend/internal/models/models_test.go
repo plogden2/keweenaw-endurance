@@ -39,7 +39,7 @@ func TestEventModel(t *testing.T) {
 		require.NoError(t, err)
 		
 		// Verify UUID was generated
-		assert.NotEqual(t, uuid.Nil, event.ID)
+		assert.False(t, event.ID.IsZero())
 		
 		// Verify timestamps
 		assert.False(t, event.CreatedAt.IsZero())
@@ -132,7 +132,7 @@ func TestRaceModel(t *testing.T) {
 		require.NoError(t, err)
 		
 		// Verify UUID was generated
-		assert.NotEqual(t, uuid.Nil, race.ID)
+		assert.False(t, race.ID.IsZero())
 		
 		// Verify fields
 		assert.Equal(t, event.ID, race.EventID)
@@ -211,7 +211,7 @@ func TestParticipantModel(t *testing.T) {
 		require.NoError(t, err)
 		
 		// Verify UUID was generated
-		assert.NotEqual(t, uuid.Nil, participant.ID)
+		assert.False(t, participant.ID.IsZero())
 		
 		// Verify fields
 		assert.Equal(t, race.ID, participant.RaceID)
@@ -302,7 +302,7 @@ func TestTimingCheckpointModel(t *testing.T) {
 		require.NoError(t, err)
 		
 		// Verify UUID was generated
-		assert.NotEqual(t, uuid.Nil, checkpoint.ID)
+		assert.False(t, checkpoint.ID.IsZero())
 		
 		// Verify fields
 		assert.Equal(t, race.ID, checkpoint.RaceID)
@@ -409,7 +409,7 @@ func TestTimingRecordModel(t *testing.T) {
 		require.NoError(t, err)
 		
 		// Verify UUID was generated
-		assert.NotEqual(t, uuid.Nil, record.ID)
+		assert.False(t, record.ID.IsZero())
 		
 		// Verify fields
 		assert.Equal(t, participant.ID, record.ParticipantID)
@@ -491,7 +491,7 @@ func TestCategoryModel(t *testing.T) {
 		require.NoError(t, err)
 		
 		// Verify UUID was generated
-		assert.NotEqual(t, uuid.Nil, category.ID)
+		assert.False(t, category.ID.IsZero())
 		
 		// Verify fields
 		assert.Equal(t, race.ID, category.RaceID)
@@ -546,7 +546,7 @@ func TestModelUUIDGeneration(t *testing.T) {
 		}
 		err := db.Create(&event).Error
 		require.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, event.ID)
+		assert.False(t, event.ID.IsZero())
 		
 		race := Race{
 			EventID:  event.ID,
@@ -556,7 +556,7 @@ func TestModelUUIDGeneration(t *testing.T) {
 		}
 		err = db.Create(&race).Error
 		require.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, race.ID)
+		assert.False(t, race.ID.IsZero())
 		
 		participant := Participant{
 			RaceID:    race.ID,
@@ -567,7 +567,7 @@ func TestModelUUIDGeneration(t *testing.T) {
 		}
 		err = db.Create(&participant).Error
 		require.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, participant.ID)
+		assert.False(t, participant.ID.IsZero())
 		
 		checkpoint := TimingCheckpoint{
 			RaceID:         race.ID,
@@ -576,7 +576,7 @@ func TestModelUUIDGeneration(t *testing.T) {
 		}
 		err = db.Create(&checkpoint).Error
 		require.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, checkpoint.ID)
+		assert.False(t, checkpoint.ID.IsZero())
 		
 		record := TimingRecord{
 			ParticipantID: participant.ID,
@@ -586,7 +586,7 @@ func TestModelUUIDGeneration(t *testing.T) {
 		}
 		err = db.Create(&record).Error
 		require.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, record.ID)
+		assert.False(t, record.ID.IsZero())
 		
 		category := Category{
 			RaceID:       race.ID,
@@ -595,6 +595,6 @@ func TestModelUUIDGeneration(t *testing.T) {
 		}
 		err = db.Create(&category).Error
 		require.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, category.ID)
+		assert.False(t, category.ID.IsZero())
 	})
 }

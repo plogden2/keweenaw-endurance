@@ -209,7 +209,7 @@ func validateParticipantInput(participant *models.Participant) error {
 	if participant == nil {
 		return fmt.Errorf("%w: participant is required", ErrInvalidParticipantInput)
 	}
-	if participant.RaceID == uuid.Nil {
+	if participant.RaceID.IsZero() {
 		return fmt.Errorf("%w: race_id is required", ErrInvalidParticipantInput)
 	}
 	if strings.TrimSpace(participant.BibNumber) == "" {

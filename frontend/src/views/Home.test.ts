@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
+import { createPinia, setActivePinia } from 'pinia'
 import Home from './Home.vue'
+import { useEventsStore } from '@/stores/events'
 
 function createHomeRouter() {
   return createRouter({
@@ -14,6 +16,12 @@ function createHomeRouter() {
 }
 
 describe('Home.vue', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    const eventsStore = useEventsStore()
+    vi.spyOn(eventsStore, 'fetchEvents').mockResolvedValue()
+  })
+
   it('renders hero and link to timing section', async () => {
     const router = createHomeRouter()
     await router.push('/')
@@ -26,14 +34,31 @@ describe('Home.vue', () => {
     expect(cta.attributes('href')).toBe('/timing')
   })
 
-  it('shows featured Bluffet external link', () => {
-    const router = createHomeRouter()
-    const wrapper = mount(Home, { global: { plugins: [router] } })
+  it('shows featured Bluffet links', async () => {
+    const eventsStore = useEventsStore()
+    eventsStore.events = [
+      {
+        id: 'a1b2c3',
+        name: 'All You Can East Bluffet',
+        event_date: '2026-08-01',
+        status: 'upcoming',
+      },
+    ]
 
-    const link = wrapper.find('[data-testid="bluffet-link"]')
-    expect(link.attributes('href')).toBe('https://www.copperharbortrails.org/bluffet')
-    expect(link.attributes('target')).toBe('_blank')
-    expect(link.text()).toContain('All You Can East Bluffet')
+    const router = createHomeRouter()
+    await router.push('/')
+    await router.isReady()
+    const wrapper = mount(Home, { global: { plugins: [router] } })
+    await wrapper.vm.$nextTick()
+
+    const registerLink = wrapper.find('[data-testid="bluffet-link"]')
+    expect(registerLink.attributes('href')).toBe('https://www.copperharbortrails.org/bluffet')
+    expect(registerLink.attributes('target')).toBe('_blank')
+
+    const timingLink = wrapper.find('[data-testid="bluffet-timing-link"]')
+    expect(timingLink.attributes('href')).toBe('/timing/a1b2c3')
+    expect(wrapper.find('.featured-logo').attributes('alt')).toBe('All You Can East Bluffet')
+    expect(wrapper.text()).toContain('August 1, 2026')
   })
 
   it('renders teaser race cards with external links only', () => {

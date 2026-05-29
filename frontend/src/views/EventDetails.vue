@@ -31,8 +31,8 @@
               class="race-link"
             >
               <span class="race-name">{{ race.name }}</span>
-              <span v-if="race.distance_km != null" class="race-distance">
-                {{ formatRaceDistance(race.distance_km) }}
+              <span v-if="showRaceDistance(race)" class="race-distance">
+                {{ formatRaceDistance(race.distance_km!) }}
               </span>
               <span class="race-status" :class="`status-${race.status}`">
                 {{ race.status }}
@@ -55,7 +55,9 @@ import EventLogo from '@/components/EventLogo.vue'
 import { useEventsStore } from '@/stores/events'
 import { useRacesStore } from '@/stores/races'
 import { useUnitsStore } from '@/stores/units'
+import { formatEventDate } from '@/utils/participantResults'
 import { formatDistance } from '@/utils/units'
+import type { Race } from '@/types/models'
 
 const route = useRoute()
 const eventsStore = useEventsStore()
@@ -65,8 +67,11 @@ const unitsStore = useUnitsStore()
 const eventId = computed(() => String(route.params.eventId))
 
 function formatDate(value: string | undefined): string {
-  if (!value) return ''
-  return new Date(value).toLocaleDateString()
+  return formatEventDate(value)
+}
+
+function showRaceDistance(race: Race): boolean {
+  return race.race_type !== 'lap_based' && race.distance_km != null && race.distance_km > 0
 }
 
 function formatRaceDistance(distanceKm: number): string {

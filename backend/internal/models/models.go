@@ -5,12 +5,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 	"gorm.io/gorm"
 )
 
 // Event represents a race event
 type Event struct {
-	ID          uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
+	ID          uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
 	Name        string    `gorm:"type:varchar(255);not null" json:"name"`
 	Description string    `gorm:"type:text" json:"description"`
 	EventDate   time.Time `gorm:"type:date;not null" json:"event_date"`
@@ -27,8 +28,8 @@ type Event struct {
 
 // Race represents a race within an event
 type Race struct {
-	ID             uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
-	EventID        uuid.UUID `gorm:"type:uuid;not null" json:"event_id"`
+	ID             uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
+	EventID        uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"event_id"`
 	Name           string    `gorm:"type:varchar(255);not null" json:"name"`
 	RaceType       string    `gorm:"type:varchar(50);not null;check:race_type IN ('time_based','lap_based')" json:"race_type"`
 	DistanceKm     float64   `gorm:"type:decimal(10,2)" json:"distance_km"`
@@ -45,8 +46,8 @@ type Race struct {
 
 // Participant represents a race participant
 type Participant struct {
-	ID         uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
-	RaceID     uuid.UUID `gorm:"type:uuid;not null" json:"race_id"`
+	ID         uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
+	RaceID     uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"race_id"`
 	BibNumber  string    `gorm:"type:varchar(20);not null" json:"bib_number"`
 	FirstName  string    `gorm:"type:varchar(100);not null" json:"first_name"`
 	LastName   string    `gorm:"type:varchar(100);not null" json:"last_name"`
@@ -64,8 +65,8 @@ type Participant struct {
 
 // TimingCheckpoint represents a timing checkpoint in a race
 type TimingCheckpoint struct {
-	ID                uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
-	RaceID            uuid.UUID `gorm:"type:uuid;not null" json:"race_id"`
+	ID                uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
+	RaceID            uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"race_id"`
 	Name              string    `gorm:"type:varchar(255);not null" json:"name"`
 	CheckpointType    string    `gorm:"type:varchar(50);not null;check:checkpoint_type IN ('start','finish','intermediate')" json:"checkpoint_type"`
 	DistanceFromStartKm float64 `gorm:"type:decimal(10,2)" json:"distance_from_start_km"`
@@ -80,9 +81,9 @@ type TimingCheckpoint struct {
 
 // TimingRecord represents a timing record for a participant at a checkpoint
 type TimingRecord struct {
-	ID              uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
-	ParticipantID   uuid.UUID `gorm:"type:uuid;not null" json:"participant_id"`
-	CheckpointID    uuid.UUID `gorm:"type:uuid;not null" json:"checkpoint_id"`
+	ID              uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
+	ParticipantID   uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"participant_id"`
+	CheckpointID    uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"checkpoint_id"`
 	Timestamp       time.Time `gorm:"type:timestamp;not null" json:"timestamp"`
 	LocalTimestamp  time.Time `gorm:"type:timestamp;not null" json:"local_timestamp"`
 	DeviceID        string    `gorm:"type:varchar(100)" json:"device_id"`
@@ -96,8 +97,8 @@ type TimingRecord struct {
 
 // Category represents a participant category for race results
 type Category struct {
-	ID            uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
-	RaceID        uuid.UUID `gorm:"type:uuid;not null" json:"race_id"`
+	ID            uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
+	RaceID        uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"race_id"`
 	Name          string    `gorm:"type:varchar(255);not null" json:"name"`
 	CategoryType  string    `gorm:"type:varchar(50);not null;check:category_type IN ('overall','male','female','age_group','custom')" json:"category_type"`
 	AgeMin        int       `gorm:"type:integer" json:"age_min"`
@@ -112,22 +113,22 @@ type Category struct {
 
 // BeforeCreate hooks for UUID generation
 func (e *Event) BeforeCreate(tx *gorm.DB) error {
-	if e.ID == uuid.Nil {
-		e.ID = uuid.New()
+	if e.ID.IsZero() {
+		e.ID = uuidutil.PublicUUID(uuid.New())
 	}
 	return nil
 }
 
 func (r *Race) BeforeCreate(tx *gorm.DB) error {
-	if r.ID == uuid.Nil {
-		r.ID = uuid.New()
+	if r.ID.IsZero() {
+		r.ID = uuidutil.PublicUUID(uuid.New())
 	}
 	return nil
 }
 
 func (p *Participant) BeforeCreate(tx *gorm.DB) error {
-	if p.ID == uuid.Nil {
-		p.ID = uuid.New()
+	if p.ID.IsZero() {
+		p.ID = uuidutil.PublicUUID(uuid.New())
 	}
 	return p.validate()
 }
@@ -148,22 +149,22 @@ func (p *Participant) validate() error {
 }
 
 func (tc *TimingCheckpoint) BeforeCreate(tx *gorm.DB) error {
-	if tc.ID == uuid.Nil {
-		tc.ID = uuid.New()
+	if tc.ID.IsZero() {
+		tc.ID = uuidutil.PublicUUID(uuid.New())
 	}
 	return nil
 }
 
 func (tr *TimingRecord) BeforeCreate(tx *gorm.DB) error {
-	if tr.ID == uuid.Nil {
-		tr.ID = uuid.New()
+	if tr.ID.IsZero() {
+		tr.ID = uuidutil.PublicUUID(uuid.New())
 	}
 	return nil
 }
 
 func (c *Category) BeforeCreate(tx *gorm.DB) error {
-	if c.ID == uuid.Nil {
-		c.ID = uuid.New()
+	if c.ID.IsZero() {
+		c.ID = uuidutil.PublicUUID(uuid.New())
 	}
 	return nil
 }

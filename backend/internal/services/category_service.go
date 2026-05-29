@@ -148,7 +148,7 @@ func validateCategoryInput(category *models.Category) error {
 	if category == nil {
 		return fmt.Errorf("%w: category is required", ErrInvalidCategoryInput)
 	}
-	if category.RaceID == uuid.Nil {
+	if category.RaceID.IsZero() {
 		return fmt.Errorf("%w: race_id is required", ErrInvalidCategoryInput)
 	}
 	if strings.TrimSpace(category.Name) == "" {

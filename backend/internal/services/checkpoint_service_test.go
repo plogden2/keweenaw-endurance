@@ -22,7 +22,7 @@ func TestCheckpointService_CreateAndGet(t *testing.T) {
 		LocationDescription:   "Main staging area",
 	})
 	require.NoError(t, err)
-	assert.NotEqual(t, uuid.Nil, checkpoint.ID)
+	assert.False(t, checkpoint.ID.IsZero())
 	assert.True(t, checkpoint.IsActive)
 
 	fetched, err := svc.GetCheckpoint(checkpoint.ID)

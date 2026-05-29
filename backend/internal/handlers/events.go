@@ -6,9 +6,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/services"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 )
 
 func (h *Handlers) GetEvents(c *gin.Context) {
@@ -60,7 +60,7 @@ func (h *Handlers) CreateEvent(c *gin.Context) {
 }
 
 func (h *Handlers) GetEvent(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveEventID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event id"})
 		return
@@ -76,7 +76,7 @@ func (h *Handlers) GetEvent(c *gin.Context) {
 }
 
 func (h *Handlers) UpdateEvent(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveEventID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event id"})
 		return
@@ -126,7 +126,7 @@ func (h *Handlers) UpdateEvent(c *gin.Context) {
 }
 
 func (h *Handlers) DeleteEvent(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveEventID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event id"})
 		return
@@ -156,7 +156,9 @@ func respondServiceError(c *gin.Context, err error) {
 		errors.Is(err, services.ErrInvalidCheckpointInput),
 		errors.Is(err, services.ErrInvalidCategoryInput),
 		errors.Is(err, services.ErrInvalidTimingInput),
-		errors.Is(err, services.ErrInvalidRFIDInput):
+		errors.Is(err, services.ErrInvalidRFIDInput),
+		errors.Is(err, uuidutil.ErrInvalidID),
+		errors.Is(err, uuidutil.ErrAmbiguousID):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrHardwareUnavailable):
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
@@ -165,6 +167,3 @@ func respondServiceError(c *gin.Context, err error) {
 	}
 }
 
-func parseUUID(value string) (uuid.UUID, error) {
-	return uuid.Parse(value)
-}

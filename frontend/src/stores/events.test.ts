@@ -70,6 +70,7 @@ describe('useEventsStore', () => {
 
     expect(store.activeEvents).toHaveLength(1)
     expect(store.pastEvents).toHaveLength(1)
+    expect(store.upcomingEvents).toHaveLength(1)
   })
 
   it('fetches and caches a single event', async () => {

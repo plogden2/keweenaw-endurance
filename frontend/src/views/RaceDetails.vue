@@ -8,8 +8,8 @@
       <h1 class="page-title">{{ racesStore.currentRace.name }}</h1>
       <p class="meta">
         {{ racesStore.currentRace.race_type }}
-        <template v-if="racesStore.currentRace.distance_km != null">
-          · {{ formatRaceDistance(racesStore.currentRace.distance_km) }}
+        <template v-if="showRaceDistance">
+          · {{ formatRaceDistance(racesStore.currentRace.distance_km!) }}
         </template>
         ·
         <span :class="`status-${racesStore.currentRace.status}`">
@@ -204,6 +204,13 @@ const unitsStore = useUnitsStore()
 
 const eventId = computed(() => String(route.params.eventId))
 const raceId = computed(() => String(route.params.raceId))
+const showRaceDistance = computed(() => {
+  const race = racesStore.currentRace
+  return race != null
+    && race.race_type !== 'lap_based'
+    && race.distance_km != null
+    && race.distance_km > 0
+})
 const leaderboardRoute = computed(() => ({
   name: 'race-details',
   params: { eventId: eventId.value, raceId: raceId.value },

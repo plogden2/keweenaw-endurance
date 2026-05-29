@@ -83,7 +83,7 @@ func (s *RFIDService) WriteTag(participantID uuid.UUID, tagUID string) (*models.
 	}
 
 	device := rfid.NewProxmark3(s.reader)
-	if err := device.WriteTag(tagUID, participant.ID.String()); err != nil {
+	if err := device.WriteTag(tagUID, participant.ID.Short()); err != nil {
 		return nil, err
 	}
 

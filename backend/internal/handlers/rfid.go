@@ -14,7 +14,7 @@ func (h *Handlers) WriteRFIDTag(c *gin.Context) {
 		return
 	}
 
-	participantID, err := parseUUID(req.ParticipantID)
+	participantID, err := h.resolveParticipantID(req.ParticipantID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid participant_id"})
 		return
@@ -52,12 +52,12 @@ func (h *Handlers) ManualTimingEntry(c *gin.Context) {
 		return
 	}
 
-	raceID, err := parseUUID(req.RaceID)
+	raceID, err := h.resolveRaceID(req.RaceID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race_id"})
 		return
 	}
-	checkpointID, err := parseUUID(req.CheckpointID)
+	checkpointID, err := h.resolveCheckpointID(req.CheckpointID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid checkpoint_id"})
 		return

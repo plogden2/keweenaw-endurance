@@ -25,6 +25,7 @@
 
 <script setup lang="ts">
 import type { Event } from '@/types/models'
+import { formatEventDate } from '@/utils/participantResults'
 
 withDefaults(
   defineProps<{
@@ -37,8 +38,7 @@ withDefaults(
 )
 
 function formatDate(value: string | undefined): string {
-  if (!value) return ''
-  return new Date(value).toLocaleDateString()
+  return formatEventDate(value)
 }
 </script>
 
@@ -81,6 +81,12 @@ function formatDate(value: string | undefined): string {
 
 .status-active {
   color: #28a745;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.status-upcoming {
+  color: #e67e22;
   font-weight: 500;
   text-transform: capitalize;
 }

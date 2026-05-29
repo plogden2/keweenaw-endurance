@@ -140,7 +140,7 @@ func validateCheckpointInput(checkpoint *models.TimingCheckpoint) error {
 	if checkpoint == nil {
 		return fmt.Errorf("%w: checkpoint is required", ErrInvalidCheckpointInput)
 	}
-	if checkpoint.RaceID == uuid.Nil {
+	if checkpoint.RaceID.IsZero() {
 		return fmt.Errorf("%w: race_id is required", ErrInvalidCheckpointInput)
 	}
 	if strings.TrimSpace(checkpoint.Name) == "" {

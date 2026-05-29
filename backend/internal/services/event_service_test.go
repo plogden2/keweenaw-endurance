@@ -39,7 +39,7 @@ func TestEventService_CreateAndGet(t *testing.T) {
 		Status:    "upcoming",
 	})
 	require.NoError(t, err)
-	assert.NotEqual(t, uuid.Nil, event.ID)
+	assert.False(t, event.ID.IsZero())
 
 	fetched, err := svc.GetEvent(event.ID)
 	require.NoError(t, err)

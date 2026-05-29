@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 )
 
 func (h *Handlers) GetRaces(c *gin.Context) {
@@ -16,7 +17,7 @@ func (h *Handlers) GetRaces(c *gin.Context) {
 
 	var eventID *uuid.UUID
 	if eventIDStr := c.Query("event_id"); eventIDStr != "" {
-		id, err := parseUUID(eventIDStr)
+		id, err := h.resolveEventID(eventIDStr)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event_id"})
 			return
@@ -45,14 +46,14 @@ func (h *Handlers) CreateRace(c *gin.Context) {
 		return
 	}
 
-	eventID, err := parseUUID(req.EventID)
+	eventID, err := h.resolveEventID(req.EventID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event_id"})
 		return
 	}
 
 	race := &models.Race{
-		EventID:         eventID,
+		EventID:         uuidutil.NewPublicUUID(eventID),
 		Name:            req.Name,
 		RaceType:        req.RaceType,
 		DistanceKm:      req.DistanceKm,
@@ -78,7 +79,7 @@ func (h *Handlers) CreateRace(c *gin.Context) {
 }
 
 func (h *Handlers) GetRace(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveRaceID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
 		return
@@ -94,7 +95,7 @@ func (h *Handlers) GetRace(c *gin.Context) {
 }
 
 func (h *Handlers) UpdateRace(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveRaceID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
 		return
@@ -141,7 +142,7 @@ func (h *Handlers) UpdateRace(c *gin.Context) {
 }
 
 func (h *Handlers) DeleteRace(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveRaceID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
 		return

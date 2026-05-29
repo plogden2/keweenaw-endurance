@@ -102,9 +102,9 @@
                   {{ record.participant.first_name }}
                   {{ record.participant.last_name }}
                 </template>
-                <template v-else>{{ record.participant_id }}</template>
+                <template v-else>{{ formatShortId(record.participant_id) }}</template>
               </td>
-              <td>{{ record.checkpoint?.name ?? record.checkpoint_id }}</td>
+              <td>{{ record.checkpoint?.name ?? formatShortId(record.checkpoint_id) }}</td>
               <td>{{ record.sync_status }}</td>
             </tr>
           </tbody>
@@ -135,6 +135,7 @@ import type {
   TimingRecord,
 } from '@/types/models'
 import { getErrorMessage } from '@/utils/error'
+import { formatShortId } from '@/utils/id'
 
 const route = useRoute()
 const racesStore = useRacesStore()

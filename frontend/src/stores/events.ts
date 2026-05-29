@@ -30,6 +30,8 @@ export const useEventsStore = defineStore('events', {
   }),
 
   getters: {
+    upcomingEvents: (state): Event[] =>
+      state.events.filter((e) => e.status === 'upcoming'),
     activeEvents: (state): Event[] =>
       state.events.filter((e) => e.status === 'active'),
     pastEvents: (state): Event[] =>

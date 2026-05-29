@@ -49,7 +49,7 @@ func TestRFIDService_WriteTag(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "NEW-TAG-001", updated.RFIDTagUID)
 	assert.Equal(t, "NEW-TAG-001", mock.LastUID)
-	assert.Equal(t, participant.ID.String(), mock.LastData)
+	assert.Equal(t, participant.ID.Short(), mock.LastData)
 }
 
 func TestRFIDService_WriteTag_HardwareUnavailable(t *testing.T) {

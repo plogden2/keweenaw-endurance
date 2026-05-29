@@ -6,10 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 )
 
 func (h *Handlers) GetLiveTiming(c *gin.Context) {
-	raceID, err := parseUUID(c.Param("raceId"))
+	raceID, err := h.resolveRaceID(c.Param("raceId"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
 		return
@@ -31,12 +32,12 @@ func (h *Handlers) CreateTimingRecord(c *gin.Context) {
 		return
 	}
 
-	participantID, err := parseUUID(req.ParticipantID)
+	participantID, err := h.resolveParticipantID(req.ParticipantID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid participant_id"})
 		return
 	}
-	checkpointID, err := parseUUID(req.CheckpointID)
+	checkpointID, err := h.resolveCheckpointID(req.CheckpointID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid checkpoint_id"})
 		return
@@ -48,8 +49,8 @@ func (h *Handlers) CreateTimingRecord(c *gin.Context) {
 	}
 
 	record := &models.TimingRecord{
-		ParticipantID: participantID,
-		CheckpointID:  checkpointID,
+		ParticipantID: uuidutil.NewPublicUUID(participantID),
+		CheckpointID:  uuidutil.NewPublicUUID(checkpointID),
 		Timestamp:     timestamp,
 		DeviceID:      req.DeviceID,
 		SyncStatus:    req.SyncStatus,
@@ -73,7 +74,7 @@ func (h *Handlers) CreateTimingRecord(c *gin.Context) {
 }
 
 func (h *Handlers) UpdateTimingRecord(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveTimingRecordID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid timing record id"})
 		return
@@ -119,7 +120,7 @@ func (h *Handlers) UpdateTimingRecord(c *gin.Context) {
 }
 
 func (h *Handlers) GetRaceResults(c *gin.Context) {
-	raceID, err := parseUUID(c.Param("raceId"))
+	raceID, err := h.resolveRaceID(c.Param("raceId"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
 		return
@@ -135,7 +136,7 @@ func (h *Handlers) GetRaceResults(c *gin.Context) {
 }
 
 func (h *Handlers) GetLeaderboard(c *gin.Context) {
-	raceID, err := parseUUID(c.Param("raceId"))
+	raceID, err := h.resolveRaceID(c.Param("raceId"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
 		return
@@ -143,7 +144,7 @@ func (h *Handlers) GetLeaderboard(c *gin.Context) {
 
 	var categoryID *uuid.UUID
 	if categoryIDStr := c.Query("category_id"); categoryIDStr != "" {
-		id, err := parseUUID(categoryIDStr)
+		id, err := h.resolveCategoryID(categoryIDStr)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category_id"})
 			return

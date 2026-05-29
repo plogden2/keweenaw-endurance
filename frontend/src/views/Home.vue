@@ -13,17 +13,34 @@
     <section class="featured-event" aria-labelledby="featured-event">
       <h2 id="featured-event">Featured Event</h2>
       <div class="featured-content">
-        <a
-          href="https://www.copperharbortrails.org/bluffet"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="featured-link"
-          data-testid="bluffet-link"
-        >
-          All You Can East Bluffet
-        </a>
+        <img
+          src="/images/bluffet-2026-logo.png"
+          alt="All You Can East Bluffet"
+          class="featured-logo"
+        />
+        <p class="featured-date">Saturday, August 1, 2026 · East Bluff Bike Park, Copper Harbor, MI</p>
+        <div class="featured-actions">
+          <router-link
+            v-if="bluffetEventId"
+            :to="`/timing/${bluffetEventId}`"
+            class="featured-timing-link"
+            data-testid="bluffet-timing-link"
+          >
+            View Event
+          </router-link>
+          <a
+            href="https://www.copperharbortrails.org/bluffet"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="featured-link"
+            data-testid="bluffet-link"
+          >
+            Register at copperharbortrails.org
+          </a>
+        </div>
         <p class="featured-description">
-          Experience the ultimate trail running adventure in the beautiful Keweenaw Peninsula.
+          Feast on the Copper Harbor Trails Club's newest event. A brand new endurance enduro — spin
+          the wheel, shred the trails, and push your limits all day long!
         </p>
       </div>
     </section>
@@ -44,7 +61,25 @@
 </template>
 
 <script setup lang="ts">
+import { computed, onMounted } from 'vue'
 import RaceCard from '@/components/RaceCard.vue'
+import { useEventsStore } from '@/stores/events'
+
+const BLUFFET_EVENT_NAME = 'All You Can East Bluffet'
+const eventsStore = useEventsStore()
+
+const bluffetEventId = computed(() => {
+  const event =
+    eventsStore.events.find((e) => e.name === BLUFFET_EVENT_NAME) ??
+    (eventsStore.currentEvent?.name === BLUFFET_EVENT_NAME
+      ? eventsStore.currentEvent
+      : undefined)
+  return event?.id
+})
+
+onMounted(() => {
+  void eventsStore.fetchEvents({ limit: 100 })
+})
 
 interface TeaserRace {
   name: string
@@ -128,18 +163,59 @@ const teaserRaces: TeaserRace[] = [
   color: #2c3e50;
 }
 
+.featured-logo {
+  max-width: 480px;
+  width: 100%;
+  height: auto;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+}
+
+.featured-date {
+  color: #2c3e50;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.featured-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.featured-timing-link {
+  display: inline-block;
+  font-size: 1.1rem;
+  color: white;
+  background: #e67e22;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: background-color 0.3s;
+}
+
+.featured-timing-link:hover {
+  background: #d35400;
+}
+
 .featured-link {
   display: inline-block;
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   color: #e74c3c;
   text-decoration: none;
   font-weight: 600;
-  margin-bottom: 1rem;
-  transition: color 0.3s;
+  padding: 0.75rem 1.5rem;
+  border: 2px solid #e74c3c;
+  border-radius: 8px;
+  transition: color 0.3s, background-color 0.3s;
 }
 
 .featured-link:hover {
-  color: #c0392b;
+  color: white;
+  background: #e74c3c;
 }
 
 .featured-description {

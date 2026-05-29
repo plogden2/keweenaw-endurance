@@ -6,10 +6,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 )
 
 func (h *Handlers) GetCheckpointsByRace(c *gin.Context) {
-	raceID, err := parseUUID(c.Param("id"))
+	raceID, err := h.resolveRaceID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
 		return
@@ -33,7 +34,7 @@ func (h *Handlers) GetCheckpointsByRace(c *gin.Context) {
 }
 
 func (h *Handlers) CreateCheckpoint(c *gin.Context) {
-	raceID, err := parseUUID(c.Param("id"))
+	raceID, err := h.resolveRaceID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
 		return
@@ -46,7 +47,7 @@ func (h *Handlers) CreateCheckpoint(c *gin.Context) {
 	}
 
 	checkpoint := &models.TimingCheckpoint{
-		RaceID:              raceID,
+		RaceID:              uuidutil.NewPublicUUID(raceID),
 		Name:                req.Name,
 		CheckpointType:      req.CheckpointType,
 		DistanceFromStartKm: req.DistanceFromStartKm,
@@ -67,7 +68,7 @@ func (h *Handlers) CreateCheckpoint(c *gin.Context) {
 }
 
 func (h *Handlers) GetCheckpoint(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveCheckpointID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid checkpoint id"})
 		return
@@ -83,7 +84,7 @@ func (h *Handlers) GetCheckpoint(c *gin.Context) {
 }
 
 func (h *Handlers) UpdateCheckpoint(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveCheckpointID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid checkpoint id"})
 		return
@@ -128,7 +129,7 @@ func (h *Handlers) UpdateCheckpoint(c *gin.Context) {
 }
 
 func (h *Handlers) DeleteCheckpoint(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveCheckpointID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid checkpoint id"})
 		return

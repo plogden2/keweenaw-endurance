@@ -23,7 +23,7 @@ describe('EventDetails.vue', () => {
     fetchEvent: Mock
   }
   let racesStore: {
-    races: Array<{ id: string; name: string; status: string }>
+    races: Array<{ id: string; name: string; status: string; race_type?: string; distance_km?: number }>
     loading: boolean
     fetchRaces: Mock
   }
@@ -122,5 +122,61 @@ describe('EventDetails.vue', () => {
     })
 
     expect(wrapper.find('[data-testid="event-logo"]').exists()).toBe(false)
+  })
+
+  it('formats UTC event dates as the calendar date without timezone shift', async () => {
+    eventsStore.currentEvent = {
+      id: 'evt-1',
+      name: 'All You Can East Bluffet',
+      event_date: '2026-08-01T00:00:00Z',
+      location: 'Copper Harbor, MI',
+    }
+    racesStore.races = []
+
+    const router = createTestRouter()
+    await router.push('/timing/evt-1')
+    await router.isReady()
+
+    const wrapper = mount(EventDetails, {
+      global: { plugins: [router] },
+    })
+
+    expect(wrapper.text()).toContain('08/01/2026')
+    expect(wrapper.text()).not.toContain('07/31/2026')
+  })
+
+  it('does not show distance for lap-based races', async () => {
+    eventsStore.currentEvent = {
+      id: 'evt-1',
+      name: 'All You Can East Bluffet',
+      event_date: '2026-08-01',
+    }
+    racesStore.races = [
+      {
+        id: 'race-1',
+        name: '12 Hour Expert All You Can East Bluffet',
+        status: 'scheduled',
+        race_type: 'lap_based',
+        distance_km: 0,
+      },
+      {
+        id: 'race-2',
+        name: 'Long XC Mountain Bike Race',
+        status: 'finished',
+        race_type: 'time_based',
+        distance_km: 46.67,
+      },
+    ]
+
+    const router = createTestRouter()
+    await router.push('/timing/evt-1')
+    await router.isReady()
+
+    const wrapper = mount(EventDetails, {
+      global: { plugins: [router] },
+    })
+
+    expect(wrapper.text()).not.toContain('0.00 mi')
+    expect(wrapper.text()).toContain('29.0 mi')
   })
 })

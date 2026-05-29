@@ -155,7 +155,7 @@ func validateRaceInput(race *models.Race) error {
 	if race == nil {
 		return fmt.Errorf("%w: race is required", ErrInvalidRaceInput)
 	}
-	if race.EventID == uuid.Nil {
+	if race.EventID.IsZero() {
 		return fmt.Errorf("%w: event_id is required", ErrInvalidRaceInput)
 	}
 	if strings.TrimSpace(race.Name) == "" {

@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 )
 
 func (h *Handlers) GetParticipants(c *gin.Context) {
@@ -15,7 +16,7 @@ func (h *Handlers) GetParticipants(c *gin.Context) {
 
 	var raceID *uuid.UUID
 	if raceIDStr := c.Query("race_id"); raceIDStr != "" {
-		id, err := parseUUID(raceIDStr)
+		id, err := h.resolveRaceID(raceIDStr)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race_id"})
 			return
@@ -44,14 +45,14 @@ func (h *Handlers) CreateParticipant(c *gin.Context) {
 		return
 	}
 
-	raceID, err := parseUUID(req.RaceID)
+	raceID, err := h.resolveRaceID(req.RaceID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race_id"})
 		return
 	}
 
 	participant, err := h.services.Participants.CreateParticipant(&models.Participant{
-		RaceID:     raceID,
+		RaceID:     uuidutil.NewPublicUUID(raceID),
 		BibNumber:  req.BibNumber,
 		FirstName:  req.FirstName,
 		LastName:   req.LastName,
@@ -70,7 +71,7 @@ func (h *Handlers) CreateParticipant(c *gin.Context) {
 }
 
 func (h *Handlers) GetParticipant(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveParticipantID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid participant id"})
 		return
@@ -86,7 +87,7 @@ func (h *Handlers) GetParticipant(c *gin.Context) {
 }
 
 func (h *Handlers) UpdateParticipant(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveParticipantID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid participant id"})
 		return
@@ -134,7 +135,7 @@ func (h *Handlers) UpdateParticipant(c *gin.Context) {
 }
 
 func (h *Handlers) DeleteParticipant(c *gin.Context) {
-	id, err := parseUUID(c.Param("id"))
+	id, err := h.resolveParticipantID(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid participant id"})
 		return

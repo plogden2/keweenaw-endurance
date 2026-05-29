@@ -155,7 +155,7 @@ func TestEventHandlers_CRUD(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
 	assert.Equal(t, "Keweenaw Trail Fest", created.Name)
 
-	req = httptest.NewRequest(http.MethodGet, "/api/events/"+created.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/events/"+created.ID.Short(), nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -167,7 +167,7 @@ func TestEventHandlers_CRUD(t *testing.T) {
 
 	updateBody := map[string]string{"name": "Updated Fest"}
 	payload, _ = json.Marshal(updateBody)
-	req = httptest.NewRequest(http.MethodPut, "/api/events/"+created.ID.String(), bytes.NewReader(payload))
+	req = httptest.NewRequest(http.MethodPut, "/api/events/"+created.ID.Short(), bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", auth)
 	w = httptest.NewRecorder()
@@ -179,13 +179,13 @@ func TestEventHandlers_CRUD(t *testing.T) {
 	assert.Equal(t, "Updated Fest", updated.Name)
 	assert.Equal(t, "Houghton, MI", updated.Location)
 
-	req = httptest.NewRequest(http.MethodDelete, "/api/events/"+created.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodDelete, "/api/events/"+created.ID.Short(), nil)
 	req.Header.Set("Authorization", auth)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	req = httptest.NewRequest(http.MethodGet, "/api/events/"+created.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/events/"+created.ID.Short(), nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
@@ -214,7 +214,7 @@ func TestEventHandlers_PartialUpdate(t *testing.T) {
 
 	statusOnly := map[string]string{"status": "active"}
 	payload, _ = json.Marshal(statusOnly)
-	req = httptest.NewRequest(http.MethodPut, "/api/events/"+created.ID.String(), bytes.NewReader(payload))
+	req = httptest.NewRequest(http.MethodPut, "/api/events/"+created.ID.Short(), bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", auth)
 	w = httptest.NewRecorder()
@@ -253,7 +253,7 @@ func TestRaceHandlers_CRUD(t *testing.T) {
 	require.NoError(t, err)
 
 	body := map[string]interface{}{
-		"event_id":    event.ID.String(),
+		"event_id":    event.ID.Short(),
 		"name":        "Marathon",
 		"race_type":   "time_based",
 		"distance_km": 42.195,
@@ -270,7 +270,7 @@ func TestRaceHandlers_CRUD(t *testing.T) {
 	var created models.Race
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
 
-	req = httptest.NewRequest(http.MethodGet, "/api/races?event_id="+event.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/races?event_id="+event.ID.Short(), nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -289,7 +289,7 @@ func TestParticipantHandlers_CRUD(t *testing.T) {
 	require.NoError(t, err)
 
 	body := map[string]string{
-		"race_id":    race.ID.String(),
+		"race_id":    race.ID.Short(),
 		"bib_number": "007",
 		"first_name": "James",
 		"last_name":  "Bond",
@@ -307,7 +307,7 @@ func TestParticipantHandlers_CRUD(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
 	assert.Equal(t, "007", created.BibNumber)
 
-	req = httptest.NewRequest(http.MethodGet, "/api/participants/"+created.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/participants/"+created.ID.Short(), nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -334,17 +334,17 @@ func TestTimingHandlers_Results(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/timing/results/"+race.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/timing/results/"+race.ID.Short(), nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	req = httptest.NewRequest(http.MethodGet, "/api/timing/live/"+race.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/timing/live/"+race.ID.Short(), nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	req = httptest.NewRequest(http.MethodGet, "/api/timing/leaderboard/"+race.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/timing/leaderboard/"+race.ID.Short(), nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -372,8 +372,8 @@ func TestTimingHandlers_CreateRecord(t *testing.T) {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	body := map[string]string{
-		"participant_id": participant.ID.String(),
-		"checkpoint_id":  checkpoint.ID.String(),
+		"participant_id": participant.ID.Short(),
+		"checkpoint_id":  checkpoint.ID.Short(),
 		"timestamp":      now,
 	}
 	payload, _ := json.Marshal(body)
@@ -404,7 +404,7 @@ func TestCheckpointHandlers_CRUD(t *testing.T) {
 	}
 	payload, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/races/"+race.ID.String()+"/checkpoints", bytes.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPost, "/api/races/"+race.ID.Short()+"/checkpoints", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w := httptest.NewRecorder()
@@ -415,26 +415,26 @@ func TestCheckpointHandlers_CRUD(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
 	assert.Equal(t, "Start", created.Name)
 
-	req = httptest.NewRequest(http.MethodGet, "/api/races/"+race.ID.String()+"/checkpoints", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/races/"+race.ID.Short()+"/checkpoints", nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	req = httptest.NewRequest(http.MethodGet, "/api/checkpoints/"+created.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/checkpoints/"+created.ID.Short(), nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
 	updateBody := map[string]interface{}{"name": "Start Line", "distance_from_start_km": 0.0}
 	payload, _ = json.Marshal(updateBody)
-	req = httptest.NewRequest(http.MethodPut, "/api/checkpoints/"+created.ID.String(), bytes.NewReader(payload))
+	req = httptest.NewRequest(http.MethodPut, "/api/checkpoints/"+created.ID.Short(), bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	req = httptest.NewRequest(http.MethodDelete, "/api/checkpoints/"+created.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodDelete, "/api/checkpoints/"+created.ID.Short(), nil)
 	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -459,7 +459,7 @@ func TestCategoryHandlers_CRUD(t *testing.T) {
 	}
 	payload, _ := json.Marshal(body)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/races/"+race.ID.String()+"/categories", bytes.NewReader(payload))
+	req := httptest.NewRequest(http.MethodPost, "/api/races/"+race.ID.Short()+"/categories", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w := httptest.NewRecorder()
@@ -470,17 +470,17 @@ func TestCategoryHandlers_CRUD(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
 	assert.Equal(t, "Overall", created.Name)
 
-	req = httptest.NewRequest(http.MethodGet, "/api/races/"+race.ID.String()+"/categories", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/races/"+race.ID.Short()+"/categories", nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	req = httptest.NewRequest(http.MethodGet, "/api/categories/"+created.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/categories/"+created.ID.Short(), nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	req = httptest.NewRequest(http.MethodDelete, "/api/categories/"+created.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodDelete, "/api/categories/"+created.ID.Short(), nil)
 	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -560,8 +560,8 @@ func TestRFIDHandlers_ManualEntry(t *testing.T) {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	body := map[string]string{
-		"race_id":       race.ID.String(),
-		"checkpoint_id": checkpoint.ID.String(),
+		"race_id":       race.ID.Short(),
+		"checkpoint_id": checkpoint.ID.Short(),
 		"bib_number":    "99",
 		"timestamp":     now,
 	}
@@ -643,7 +643,7 @@ func TestRFIDHandlers_WriteTag(t *testing.T) {
 	require.NoError(t, err)
 
 	body := map[string]string{
-		"participant_id": participant.ID.String(),
+		"participant_id": participant.ID.Short(),
 		"tag_uid":        "NEW-HW-TAG",
 	}
 	payload, _ := json.Marshal(body)

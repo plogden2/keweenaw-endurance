@@ -15,6 +15,7 @@ vi.mock('@/stores/events', async () => {
 describe('Timing.vue', () => {
   let eventsStore: {
     events: unknown[]
+    upcomingEvents: Array<{ id: string; name: string; event_date: string; status: string }>
     activeEvents: Array<{ id: string; name: string; event_date: string; status: string }>
     pastEvents: Array<{ id: string; name: string; event_date: string; status: string }>
     loading: boolean
@@ -26,6 +27,7 @@ describe('Timing.vue', () => {
     setupPinia()
     eventsStore = {
       events: [],
+      upcomingEvents: [],
       activeEvents: [],
       pastEvents: [],
       loading: false,
@@ -44,7 +46,10 @@ describe('Timing.vue', () => {
     expect(eventsStore.fetchEvents).toHaveBeenCalledWith({ limit: 100 })
   })
 
-  it('renders active and past event tables', async () => {
+  it('renders upcoming, active, and past event tables', async () => {
+    eventsStore.upcomingEvents = [
+      { id: '3', name: 'Fall Enduro', event_date: '2024-09-15', status: 'upcoming' },
+    ]
     eventsStore.activeEvents = [
       { id: '1', name: 'Summer Run', event_date: '2024-06-15', status: 'active' },
     ]
@@ -57,8 +62,10 @@ describe('Timing.vue', () => {
       global: { plugins: [router] },
     })
 
+    expect(wrapper.text()).toContain('Upcoming Events')
     expect(wrapper.text()).toContain('Active Events')
     expect(wrapper.text()).toContain('Past Events')
+    expect(wrapper.text()).toContain('Fall Enduro')
     expect(wrapper.text()).toContain('Summer Run')
     expect(wrapper.text()).toContain('Spring Run')
   })

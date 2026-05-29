@@ -133,10 +133,10 @@ func validateTimingInput(record *models.TimingRecord) error {
 	if record == nil {
 		return fmt.Errorf("%w: timing record is required", ErrInvalidTimingInput)
 	}
-	if record.ParticipantID == uuid.Nil {
+	if record.ParticipantID.IsZero() {
 		return fmt.Errorf("%w: participant_id is required", ErrInvalidTimingInput)
 	}
-	if record.CheckpointID == uuid.Nil {
+	if record.CheckpointID.IsZero() {
 		return fmt.Errorf("%w: checkpoint_id is required", ErrInvalidTimingInput)
 	}
 	if record.Timestamp.IsZero() {
