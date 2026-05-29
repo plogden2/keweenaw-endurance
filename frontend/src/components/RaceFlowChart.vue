@@ -306,11 +306,15 @@ Chart.register(
   currentTimeLinePlugin,
 )
 
+const HIGHLIGHT_COLOR = '#e67e22'
+const DIMMED_OPACITY = 0.2
+
 const props = defineProps<{
   raceId: string
   raceStatus?: RaceStatus
   raceStartTime?: string
   raceType?: RaceType
+  highlightParticipantId?: string
 }>()
 
 const unitsStore = useUnitsStore()
@@ -620,8 +624,21 @@ function destroyChart(): void {
   chartInstance.value = null
 }
 
+function withAlpha(color: string, alpha: number): string {
+  if (color.startsWith('hsl(')) {
+    return color.replace(')', `, ${alpha})`).replace('hsl(', 'hsla(')
+  }
+
+  return color
+}
+
 function buildDataset(flow: (typeof flows.value)[number]): FlowLineDataset {
-  const color = getParticipantColor(flow.participantId)
+  const isHighlighted = props.highlightParticipantId === flow.participantId
+  const isDimmed =
+    props.highlightParticipantId != null &&
+    props.highlightParticipantId !== flow.participantId
+  const baseColor = isHighlighted ? HIGHLIGHT_COLOR : getParticipantColor(flow.participantId)
+  const color = isDimmed ? withAlpha(baseColor, DIMMED_OPACITY) : baseColor
   const showCurrentTime = currentElapsedMinutes.value != null
   const extrapolation = showCurrentTime
     ? buildExtrapolationPoint(flow, currentElapsedMinutes.value!)
@@ -647,7 +664,7 @@ function buildDataset(flow: (typeof flows.value)[number]): FlowLineDataset {
     backgroundColor: color,
     pointBackgroundColor: color,
     pointBorderColor: color,
-    borderWidth: 2,
+    borderWidth: isHighlighted ? 4 : isDimmed ? 1 : 2,
     tension: 0.2,
     hasExtrapolation: extrapolation != null,
   }
@@ -680,10 +697,21 @@ function renderChart(): void {
     return Math.max(max, lastElapsed)
   }, 0)
 
+  const orderedFlows = props.highlightParticipantId
+    ? [
+        ...visibleFlows.value.filter(
+          (flow) => flow.participantId !== props.highlightParticipantId,
+        ),
+        ...visibleFlows.value.filter(
+          (flow) => flow.participantId === props.highlightParticipantId,
+        ),
+      ]
+    : visibleFlows.value
+
   chartInstance.value = new Chart(canvasRef.value, {
     type: 'line',
     data: {
-      datasets: visibleFlows.value.map((flow) => buildDataset(flow)),
+      datasets: orderedFlows.map((flow) => buildDataset(flow)),
     },
     options: {
       responsive: true,
@@ -741,13 +769,34 @@ watch(flows, () => {
 })
 
 watch(
-  [visibleFlows, loading, currentElapsedMinutes, chartRaceType, () => unitsStore.unitSystem],
+  [
+    visibleFlows,
+    loading,
+    currentElapsedMinutes,
+    chartRaceType,
+    () => unitsStore.unitSystem,
+    () => props.highlightParticipantId,
+  ],
   async () => {
     if (!loading.value) {
       await nextTick()
       renderChart()
     }
   },
+)
+
+watch(
+  () => props.highlightParticipantId,
+  (participantId) => {
+    if (!participantId) {
+      return
+    }
+
+    const nextVisibleIds = new Set(visibleParticipantIds.value)
+    nextVisibleIds.add(participantId)
+    visibleParticipantIds.value = nextVisibleIds
+  },
+  { immediate: true },
 )
 
 onBeforeUnmount(() => {

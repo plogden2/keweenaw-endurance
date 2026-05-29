@@ -45,29 +45,78 @@
       </div>
 
       <section v-if="activeTab === 'leaderboard'" class="leaderboard">
-        <div v-if="leaderboardLoading" class="status">Loading leaderboard…</div>
-        <div v-else-if="leaderboardError" class="status error">{{ leaderboardError }}</div>
-        <table v-else-if="leaderboard.length" class="leaderboard-table">
-          <thead>
-            <tr>
-              <th>Pos</th>
-              <th>Bib</th>
-              <th>Name</th>
-              <th>Result</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="entry in leaderboard" :key="entry.participant_id">
-              <td>{{ entry.position }}</td>
-              <td>{{ entry.bib_number }}</td>
-              <td>{{ entry.first_name }} {{ entry.last_name }}</td>
-              <td>{{ formatResult(entry) }}</td>
-              <td>{{ entry.status }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else class="empty">No results yet.</p>
+        <div v-if="selectedEntry" class="participant-detail">
+          <div class="participant-detail-header">
+            <button type="button" class="back-to-leaderboard" @click="clearSelectedParticipant">
+              ← Back to leaderboard
+            </button>
+          </div>
+
+          <ResultCertificate
+            v-if="certificateData"
+            :event-title="certificateData.eventTitle"
+            :event-name="certificateData.eventName"
+            :event-date="certificateData.eventDate"
+            :participant-name="certificateData.participantName"
+            :location="certificateData.location"
+            :bib-number="certificateData.bibNumber"
+            :race-name="certificateData.raceName"
+            :category-label="certificateData.categoryLabel"
+            :finish-time="certificateData.finishTime"
+            :mph="certificateData.mph"
+            :overall-rank="certificateData.overallRank"
+            :gender-rank="certificateData.genderRank"
+            :category-rank="certificateData.categoryRank"
+            :gender-rank-label="certificateData.genderRankLabel"
+            :category-rank-label="certificateData.categoryRankLabel"
+            :website-url="certificateData.websiteUrl"
+          />
+
+          <ParticipantFlowChart
+            :race-id="raceId"
+            :participant-id="selectedEntry.participant_id"
+            :race-status="racesStore.currentRace.status"
+            :race-start-time="racesStore.currentRace.start_time"
+            :race-type="racesStore.currentRace.race_type"
+          />
+
+          <div class="participant-actions">
+            <button type="button" class="compare-btn" @click="compareInRaceFlow">
+              Compare in Race Flow
+            </button>
+          </div>
+        </div>
+
+        <template v-else>
+          <div v-if="leaderboardLoading" class="status">Loading leaderboard…</div>
+          <div v-else-if="leaderboardError" class="status error">{{ leaderboardError }}</div>
+          <table v-else-if="leaderboard.length" class="leaderboard-table">
+            <thead>
+              <tr>
+                <th>Pos</th>
+                <th>Bib</th>
+                <th>Name</th>
+                <th>Result</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="entry in leaderboard"
+                :key="entry.participant_id"
+                :class="{ clickable: entry.status === 'finished' }"
+                @click="selectParticipant(entry)"
+              >
+                <td>{{ entry.position }}</td>
+                <td>{{ entry.bib_number }}</td>
+                <td>{{ entry.first_name }} {{ entry.last_name }}</td>
+                <td>{{ formatResult(entry) }}</td>
+                <td>{{ entry.status }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-else class="empty">No results yet.</p>
+        </template>
       </section>
 
       <section v-else-if="activeTab === 'race-flow'" class="race-flow">
@@ -76,6 +125,7 @@
           :race-status="racesStore.currentRace.status"
           :race-start-time="racesStore.currentRace.start_time"
           :race-type="racesStore.currentRace.race_type"
+          :highlight-participant-id="highlightParticipantId"
         />
       </section>
 
@@ -116,22 +166,37 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import ParticipantFlowChart from '@/components/ParticipantFlowChart.vue'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
+import ResultCertificate from '@/components/ResultCertificate.vue'
+import { useEventsStore } from '@/stores/events'
 import { useRacesStore } from '@/stores/races'
 import { useUnitsStore } from '@/stores/units'
-import { timingApi } from '@/services/api'
-import type { LeaderboardEntry, TimingRecord } from '@/types/models'
+import { participantsApi, timingApi } from '@/services/api'
+import type { LeaderboardEntry, Participant, TimingRecord } from '@/types/models'
 import {
   buildRaceStatistics,
   formatAverageResult,
   getAverageResultLabel,
   type RaceStatistics,
 } from '@/utils/raceFlowData'
+import {
+  buildParticipantDetailsMap,
+  computeParticipantRanks,
+  formatAverageSpeedMph,
+  formatCategoryLabel,
+  formatCertificateFinishTime,
+  formatEventDate,
+  getCategoryRankLabel,
+  getGenderRankLabel,
+  type ParticipantResultRanks,
+} from '@/utils/participantResults'
 import { getErrorMessage } from '@/utils/error'
 import { formatDistance } from '@/utils/units'
 
 const route = useRoute()
 const racesStore = useRacesStore()
+const eventsStore = useEventsStore()
 const unitsStore = useUnitsStore()
 
 const eventId = computed(() => String(route.params.eventId))
@@ -142,6 +207,10 @@ const leaderboardLoading = ref(false)
 const leaderboardError = ref<string | null>(null)
 const statsLoading = ref(false)
 const statsError = ref<string | null>(null)
+const selectedEntry = ref<LeaderboardEntry | null>(null)
+const selectedParticipant = ref<Participant | null>(null)
+const participantDetails = ref<Map<string, Pick<Participant, 'gender' | 'age'>>>(new Map())
+const highlightParticipantId = ref<string | undefined>(undefined)
 const statistics = ref<RaceStatistics>({
   totalParticipants: 0,
   finished: 0,
@@ -150,6 +219,53 @@ const statistics = ref<RaceStatistics>({
   dnf: 0,
   averageFinishSeconds: null,
   averageLaps: null,
+})
+
+const finishedEntries = computed(() =>
+  leaderboard.value.filter((entry) => entry.status === 'finished'),
+)
+
+const participantRanks = computed<ParticipantResultRanks | null>(() => {
+  if (!selectedEntry.value) {
+    return null
+  }
+
+  return computeParticipantRanks(
+    selectedEntry.value,
+    finishedEntries.value,
+    participantDetails.value,
+  )
+})
+
+const certificateData = computed(() => {
+  if (!selectedEntry.value || !racesStore.currentRace || !participantRanks.value) {
+    return null
+  }
+
+  const entry = selectedEntry.value
+  const event = eventsStore.currentEvent
+  const participant = selectedParticipant.value
+  const eventName = event?.name ?? 'Race Event'
+  const raceName = racesStore.currentRace.name
+
+  return {
+    eventTitle: event ? `${eventName} - ${raceName}` : raceName,
+    eventName,
+    eventDate: formatEventDate(event?.event_date ?? racesStore.currentRace.start_time),
+    participantName: `${entry.first_name} ${entry.last_name}`.trim(),
+    location: event?.location,
+    bibNumber: entry.bib_number,
+    raceName,
+    categoryLabel: participant ? formatCategoryLabel(participant) : '—',
+    finishTime: formatCertificateFinishTime(entry.total_time_seconds),
+    mph: formatAverageSpeedMph(racesStore.currentRace.distance_km, entry.total_time_seconds),
+    overallRank: participantRanks.value.overall,
+    genderRank: participantRanks.value.gender,
+    categoryRank: participantRanks.value.category,
+    genderRankLabel: participant ? getGenderRankLabel(participant.gender) : 'Gender Rank',
+    categoryRankLabel: participant ? getCategoryRankLabel(participant) : 'Category Rank',
+    websiteUrl: event?.website_url,
+  }
 })
 
 const averageResultLabel = computed(() =>
@@ -177,8 +293,56 @@ function formatResult(entry: LeaderboardEntry): string {
   return '—'
 }
 
+function clearSelectedParticipant(): void {
+  selectedEntry.value = null
+  selectedParticipant.value = null
+}
+
+async function selectParticipant(entry: LeaderboardEntry): Promise<void> {
+  if (entry.status !== 'finished') {
+    return
+  }
+
+  selectedEntry.value = entry
+  selectedParticipant.value = null
+
+  try {
+    const { data } = await participantsApi.get(entry.participant_id)
+    selectedParticipant.value = data
+  } catch {
+    selectedParticipant.value = null
+  }
+}
+
+function compareInRaceFlow(): void {
+  if (!selectedEntry.value) {
+    return
+  }
+
+  highlightParticipantId.value = selectedEntry.value.participant_id
+  clearSelectedParticipant()
+  activeTab.value = 'race-flow'
+}
+
+function buildDetailsFromRecords(records: TimingRecord[]): void {
+  const participants = records
+    .map((record) => record.participant)
+    .filter((participant): participant is Participant => participant != null)
+    .map((participant) => ({
+      id: participant.id,
+      gender: participant.gender,
+      age: participant.age,
+    }))
+
+  participantDetails.value = buildParticipantDetailsMap(participants)
+}
+
 async function loadRace(): Promise<void> {
   await racesStore.fetchRace(raceId.value)
+}
+
+async function loadEvent(): Promise<void> {
+  await eventsStore.fetchEvent(eventId.value)
 }
 
 async function loadLeaderboard(): Promise<void> {
@@ -199,8 +363,10 @@ async function loadStatistics(): Promise<void> {
   statsError.value = null
   try {
     const { data } = await timingApi.getLive(raceId.value)
+    const records = (data.records ?? []) as TimingRecord[]
+    buildDetailsFromRecords(records)
     statistics.value = buildRaceStatistics(
-      (data.records ?? []) as TimingRecord[],
+      records,
       racesStore.currentRace?.start_time,
       racesStore.currentRace?.race_type,
     )
@@ -212,13 +378,15 @@ async function loadStatistics(): Promise<void> {
 }
 
 onMounted(async () => {
-  await loadRace()
+  await Promise.all([loadRace(), loadEvent()])
   await loadLeaderboard()
   await loadStatistics()
 })
 
 watch(raceId, async () => {
-  await loadRace()
+  clearSelectedParticipant()
+  highlightParticipantId.value = undefined
+  await Promise.all([loadRace(), loadEvent()])
   await loadLeaderboard()
   await loadStatistics()
 })
@@ -293,6 +461,59 @@ watch(activeTab, async (tab) => {
 .leaderboard-table th {
   background: #f8f9fa;
   font-weight: 600;
+}
+
+.leaderboard-table tr.clickable {
+  cursor: pointer;
+}
+
+.leaderboard-table tr.clickable:hover {
+  background: #f1f7ff;
+}
+
+.participant-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.participant-detail-header {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.back-to-leaderboard {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: white;
+  color: #2c3e50;
+  cursor: pointer;
+  font: inherit;
+}
+
+.back-to-leaderboard:hover {
+  background: #f8f9fa;
+}
+
+.participant-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.compare-btn {
+  padding: 0.65rem 1.25rem;
+  border: none;
+  border-radius: 4px;
+  background: #2c3e50;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.compare-btn:hover {
+  background: #1f2d3a;
 }
 
 .status {
