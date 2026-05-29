@@ -33,9 +33,9 @@ services:
       - JWT_SECRET=test-secret-key
       - LOG_LEVEL=debug
       - TESTING=true
+      - GOFLAGS=-mod=mod
     volumes:
       - ./backend:/app
-      - /app/vendor
     depends_on:
       - postgres-test
       - redis-test

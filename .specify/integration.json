@@ -1,15 +1,20 @@
 {
-  "version": "0.8.17.dev0",
+  "version": "0.8.18.dev0",
   "integration_state_schema": 1,
   "installed_integrations": [
-    "trae"
+    "trae",
+    "cursor-agent"
   ],
   "integration_settings": {
     "trae": {
       "script": "ps",
       "invoke_separator": "-"
+    },
+    "cursor-agent": {
+      "script": "ps",
+      "invoke_separator": "-"
     }
   },
-  "integration": "trae",
-  "default_integration": "trae"
+  "integration": "cursor-agent",
+  "default_integration": "cursor-agent"
 }
