@@ -95,19 +95,61 @@ export function formatCategoryLabel(participant: Pick<Participant, 'gender' | 'a
   return `${genderPrefix}${ageGroupKey.replace('-', '–')}`
 }
 
+function parseEventDate(dateValue: string): Date | null {
+  const trimmed = dateValue.trim()
+
+  const isoDateMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoDateMatch) {
+    const year = Number(isoDateMatch[1])
+    const month = Number(isoDateMatch[2])
+    const day = Number(isoDateMatch[3])
+    const date = new Date(year, month - 1, day)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  const usDateMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (usDateMatch) {
+    const month = Number(usDateMatch[1])
+    const day = Number(usDateMatch[2])
+    const year = Number(usDateMatch[3])
+    const date = new Date(year, month - 1, day)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  const date = new Date(trimmed)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
 export function formatEventDate(dateValue: string | undefined): string {
   if (!dateValue) {
     return '—'
   }
 
-  const date = new Date(`${dateValue}T00:00:00`)
-  if (Number.isNaN(date.getTime())) {
+  const date = parseEventDate(dateValue)
+  if (!date) {
     return dateValue
   }
 
   return date.toLocaleDateString('en-US', {
     month: '2-digit',
     day: '2-digit',
+    year: 'numeric',
+  })
+}
+
+export function formatEventDateLong(dateValue: string | undefined): string {
+  if (!dateValue) {
+    return '—'
+  }
+
+  const date = parseEventDate(dateValue)
+  if (!date) {
+    return dateValue
+  }
+
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
     year: 'numeric',
   })
 }

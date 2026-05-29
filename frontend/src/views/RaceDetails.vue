@@ -190,7 +190,6 @@ import {
   formatAverageSpeedMph,
   formatCategoryLabel,
   formatCertificateFinishTime,
-  formatEventDate,
   getCategoryRankLabel,
   getGenderRankLabel,
   type ParticipantResultRanks,
@@ -259,7 +258,7 @@ const certificateData = computed(() => {
   return {
     eventTitle: event ? `${eventName} - ${raceName}` : raceName,
     eventName,
-    eventDate: formatEventDate(event?.event_date ?? racesStore.currentRace.start_time),
+    eventDate: event?.event_date ?? racesStore.currentRace.start_time ?? '',
     participantName: `${entry.first_name} ${entry.last_name}`.trim(),
     location: participant?.location ?? entry.location ?? event?.location,
     bibNumber: entry.bib_number,

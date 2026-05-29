@@ -4,19 +4,23 @@ import ResultCertificate from './ResultCertificate.vue'
 import { createTestRouter } from '@/test/helpers'
 import { saveElementAsImage } from '@/utils/saveElementAsImage'
 
-vi.mock('@/utils/saveElementAsImage', () => ({
-  buildImageFilename: vi.fn(
-    (label: string, suffix: string) => `${label}-${suffix}.png`,
-  ),
-  saveElementAsImage: vi.fn().mockResolvedValue(undefined),
-}))
+vi.mock('@/utils/saveElementAsImage', async () => {
+  const actual = await vi.importActual<typeof import('@/utils/saveElementAsImage')>(
+    '@/utils/saveElementAsImage',
+  )
+
+  return {
+    ...actual,
+    saveElementAsImage: vi.fn().mockResolvedValue(undefined),
+  }
+})
 
 const router = createTestRouter()
 
 const baseProps = {
   eventTitle: 'Copper Harbor Trails Fest - Long XC',
   eventName: 'Copper Harbor Trails Fest',
-  eventDate: 'August 30, 2025',
+  eventDate: '2025-08-30T00:00:00Z',
   participantName: 'Peter Karinen',
   location: 'Tucson AZ',
   bibNumber: '788',
@@ -37,17 +41,57 @@ describe('ResultCertificate.vue', () => {
     vi.clearAllMocks()
   })
 
-  it('renders save image button', () => {
+  it('renders save image buttons', () => {
     const wrapper = mount(ResultCertificate, {
       props: baseProps,
       global: { plugins: [router] },
     })
 
     expect(wrapper.find('[data-testid="save-certificate-image"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="save-certificate-image"]').text()).toBe('Save image')
+    expect(wrapper.find('[data-testid="save-social-square-image"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Save square image')
   })
 
-  it('captures the certificate and downloads a PNG', async () => {
+  it('formats ISO event dates for display', () => {
+    const wrapper = mount(ResultCertificate, {
+      props: baseProps,
+      global: { plugins: [router] },
+    })
+
+    expect(wrapper.find('.certificate-date').text()).toBe('08/30/2025')
+    expect(wrapper.find('.social-square-date').text()).toBe('August 30, 2025')
+  })
+
+  it('renders prominent rank placement on the social square', () => {
+    const wrapper = mount(ResultCertificate, {
+      props: baseProps,
+      global: { plugins: [router] },
+    })
+
+    const values = wrapper.findAll('.social-square-rank-value')
+    const labels = wrapper.findAll('.social-square-rank-label')
+
+    expect(values).toHaveLength(2)
+    expect(labels).toHaveLength(2)
+    expect(values[0].text()).toBe('1st')
+    expect(labels[0].text()).toBe('Overall')
+    expect(values[1].text()).toBe('1st')
+    expect(labels[1].text()).toBe('M 25-29')
+  })
+
+  it('uses a split hero layout on the social square', () => {
+    const wrapper = mount(ResultCertificate, {
+      props: baseProps,
+      global: { plugins: [router] },
+    })
+
+    expect(wrapper.find('.social-square-header').exists()).toBe(true)
+    expect(wrapper.find('.social-square-main').exists()).toBe(true)
+    expect(wrapper.find('.social-square-hero').exists()).toBe(true)
+    expect(wrapper.findAll('.social-square-rank-card')).toHaveLength(2)
+  })
+
+  it('captures the certificate with an event-first filename', async () => {
     const wrapper = mount(ResultCertificate, {
       props: baseProps,
       global: { plugins: [router] },
@@ -59,7 +103,29 @@ describe('ResultCertificate.vue', () => {
     expect(saveElementAsImage).toHaveBeenCalledTimes(1)
     expect(saveElementAsImage).toHaveBeenCalledWith(
       wrapper.find('[data-testid="result-certificate"]').element,
-      'Peter Karinen-bib-788-results.png',
+      'copper-harbor-trails-fest-peter-karinen-bib-788-results.png',
+    )
+  })
+
+  it('captures the social square card at 1080x1080', async () => {
+    const wrapper = mount(ResultCertificate, {
+      props: baseProps,
+      global: { plugins: [router] },
+    })
+
+    await wrapper.find('[data-testid="save-social-square-image"]').trigger('click')
+    await flushPromises()
+
+    expect(saveElementAsImage).toHaveBeenCalledTimes(1)
+    expect(saveElementAsImage).toHaveBeenCalledWith(
+      wrapper.find('[data-testid="social-square-card"]').element,
+      'copper-harbor-trails-fest-peter-karinen-bib-788-social.png',
+      {
+        backgroundColor: '#152536',
+        scale: 1,
+        width: 1080,
+        height: 1080,
+      },
     )
   })
 })

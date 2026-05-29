@@ -6,6 +6,8 @@ import {
   formatAverageSpeedMph,
   formatCategoryLabel,
   formatCertificateFinishTime,
+  formatEventDate,
+  formatEventDateLong,
   formatOrdinal,
   formatRankSummary,
 } from '@/utils/participantResults'
@@ -14,6 +16,12 @@ describe('participantResults', () => {
   it('formats certificate finish time with tenths', () => {
     expect(formatCertificateFinishTime(7829)).toBe('2:10:29.0')
     expect(formatCertificateFinishTime(45.7)).toBe('0:45.7')
+  })
+
+  it('formats event dates from date-only and ISO timestamps', () => {
+    expect(formatEventDate('2025-08-30')).toBe('08/30/2025')
+    expect(formatEventDate('2025-08-30T00:00:00Z')).toBe('08/30/2025')
+    expect(formatEventDateLong('2025-08-30T00:00:00Z')).toBe('August 30, 2025')
   })
 
   it('formats ordinals and rank summaries', () => {
