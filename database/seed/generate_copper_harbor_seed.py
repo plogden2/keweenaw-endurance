@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import uuid
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -17,31 +18,11 @@ BASE_URL = f"https://my.raceresult.com/{EVENT_ID}"
 SOURCE_DIR = Path(__file__).parent / "source" / "copper-harbor-trails-fest-2025"
 OUTPUT_SQL = Path(__file__).parent / "02-example-data.sql"
 
-EVENT_UUID = "11111111-1111-4111-8111-111111111101"
-RACE_UUIDS = {
-    1: "11111111-1111-4111-8111-111111111102",  # Long XC
-    2: "11111111-1111-4111-8111-111111111103",  # Medium XC
-    3: "11111111-1111-4111-8111-111111111104",  # Short XC
-}
-CHECKPOINT_UUIDS = {
-    (1, "start"): "11111111-1111-4111-8111-111111111201",
-    (1, "finish"): "11111111-1111-4111-8111-111111111202",
-    (2, "start"): "11111111-1111-4111-8111-111111111203",
-    (2, "finish"): "11111111-1111-4111-8111-111111111204",
-    (3, "start"): "11111111-1111-4111-8111-111111111205",
-    (3, "finish"): "11111111-1111-4111-8111-111111111206",
-}
-CATEGORY_UUIDS = {
-    (1, "overall"): "11111111-1111-4111-8111-111111111301",
-    (1, "male"): "11111111-1111-4111-8111-111111111302",
-    (1, "female"): "11111111-1111-4111-8111-111111111303",
-    (2, "overall"): "11111111-1111-4111-8111-111111111304",
-    (2, "male"): "11111111-1111-4111-8111-111111111305",
-    (2, "female"): "11111111-1111-4111-8111-111111111306",
-    (3, "overall"): "11111111-1111-4111-8111-111111111307",
-    (3, "male"): "11111111-1111-4111-8111-111111111308",
-    (3, "female"): "11111111-1111-4111-8111-111111111309",
-}
+EVENT_NAME = "2025 Copper Harbor Trails Fest - XC MTB"
+
+
+def new_uuid() -> str:
+    return str(uuid.uuid4())
 
 RACE_META = {
     1: {
@@ -137,12 +118,17 @@ def sql_str(value: str | None) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def participant_uuid(index: int) -> str:
-    return f"11111111-1111-4111-8111-111111111{400 + index}"
-
-
-def timing_uuid(index: int) -> str:
-    return f"11111111-1111-4111-8111-111111111{500 + index}"
+def seed_ids() -> tuple[str, dict[int, str], dict[tuple[int, str], str], dict[tuple[int, str], str]]:
+    event_id = new_uuid()
+    race_ids = {contest: new_uuid() for contest in (1, 2, 3)}
+    checkpoint_ids = {}
+    category_ids = {}
+    for contest in (1, 2, 3):
+        checkpoint_ids[(contest, "start")] = new_uuid()
+        checkpoint_ids[(contest, "finish")] = new_uuid()
+        for kind in ("overall", "male", "female"):
+            category_ids[(contest, kind)] = new_uuid()
+    return event_id, race_ids, checkpoint_ids, category_ids
 
 
 def load_or_fetch_results() -> tuple[dict, dict[int, list[ParticipantRow]]]:
@@ -204,9 +190,41 @@ def load_or_fetch_results() -> tuple[dict, dict[int, list[ParticipantRow]]]:
     return config, participants_by_contest
 
 
+def delete_event_by_name_sql(event_name: str) -> list[str]:
+    event_filter = f"e.name = {sql_str(event_name)}"
+    return [
+        "DELETE FROM timing_records WHERE participant_id IN (",
+        "    SELECT p.id FROM participants p",
+        "    JOIN races r ON p.race_id = r.id",
+        "    JOIN events e ON r.event_id = e.id",
+        f"    WHERE {event_filter}",
+        ");",
+        "DELETE FROM categories WHERE race_id IN (",
+        "    SELECT r.id FROM races r",
+        "    JOIN events e ON r.event_id = e.id",
+        f"    WHERE {event_filter}",
+        ");",
+        "DELETE FROM timing_checkpoints WHERE race_id IN (",
+        "    SELECT r.id FROM races r",
+        "    JOIN events e ON r.event_id = e.id",
+        f"    WHERE {event_filter}",
+        ");",
+        "DELETE FROM participants WHERE race_id IN (",
+        "    SELECT r.id FROM races r",
+        "    JOIN events e ON r.event_id = e.id",
+        f"    WHERE {event_filter}",
+        ");",
+        "DELETE FROM races WHERE event_id IN (",
+        "    SELECT e.id FROM events e",
+        f"    WHERE {event_filter}",
+        ");",
+        "DELETE FROM events",
+        f"WHERE name = {sql_str(event_name)};",
+    ]
+
+
 def build_sql(participants_by_contest: dict[int, list[ParticipantRow]]) -> str:
-    race_ids = list(RACE_UUIDS.values())
-    race_id_sql = ",\n        ".join(f"'{race_id}'" for race_id in race_ids)
+    event_id, race_uuids, checkpoint_uuids, category_uuids = seed_ids()
 
     lines: list[str] = [
         "-- Real race results seeded from RaceResult event 356809.",
@@ -216,33 +234,14 @@ def build_sql(participants_by_contest: dict[int, list[ParticipantRow]]) -> str:
         "",
         "BEGIN;",
         "",
-        "-- Seed entity IDs (fixed for repeatable runs)",
-        f"-- Event:  {EVENT_UUID}",
-        "-- Races:  ...102 (long), ...103 (medium), ...104 (short)",
+        f"-- Event id: {event_id}",
         "",
-        "DELETE FROM timing_records WHERE participant_id IN (",
-        "    SELECT id FROM participants WHERE race_id IN (",
-        f"        {race_id_sql}",
-        "    )",
-        ");",
-        "DELETE FROM categories WHERE race_id IN (",
-        f"    {race_id_sql}",
-        ");",
-        "DELETE FROM timing_checkpoints WHERE race_id IN (",
-        f"    {race_id_sql}",
-        ");",
-        "DELETE FROM participants WHERE race_id IN (",
-        f"    {race_id_sql}",
-        ");",
-        "DELETE FROM races WHERE id IN (",
-        f"    {race_id_sql}",
-        ");",
-        f"DELETE FROM events WHERE id = '{EVENT_UUID}';",
+        *delete_event_by_name_sql(EVENT_NAME),
         "",
         "INSERT INTO events (id, name, description, event_date, location, website_url, status)",
         "VALUES (",
-        f"    '{EVENT_UUID}',",
-        "    '2025 Copper Harbor Trails Fest - XC MTB',",
+        f"    '{event_id}',",
+        f"    {sql_str(EVENT_NAME)},",
         "    'Cross-country mountain bike races at the Copper Harbor Trails Fest (Superior Timing).',",
         "    '2025-08-30',",
         "    'Copper Harbor, MI',",
@@ -255,12 +254,12 @@ def build_sql(participants_by_contest: dict[int, list[ParticipantRow]]) -> str:
     ]
 
     race_values = []
-    for contest, race_id in RACE_UUIDS.items():
+    for contest, race_id in race_uuids.items():
         meta = RACE_META[contest]
         race_values.append(
             "    (\n"
             f"        '{race_id}',\n"
-            f"        '{EVENT_UUID}',\n"
+            f"        '{event_id}',\n"
             f"        {sql_str(meta['name'])},\n"
             "        'time_based',\n"
             f"        {meta['distance_km']:.2f},\n"
@@ -278,13 +277,13 @@ def build_sql(participants_by_contest: dict[int, list[ParticipantRow]]) -> str:
 
     checkpoint_values = []
     for contest in (1, 2, 3):
-        race_id = RACE_UUIDS[contest]
+        race_id = race_uuids[contest]
         distance = RACE_META[contest]["distance_km"]
         checkpoint_values.append(
-            f"    ('{CHECKPOINT_UUIDS[(contest, 'start')]}', '{race_id}', 'Start Line', 'start', 0.00, 'Downtown Copper Harbor', true)"
+            f"    ('{checkpoint_uuids[(contest, 'start')]}', '{race_id}', 'Start Line', 'start', 0.00, 'Downtown Copper Harbor', true)"
         )
         checkpoint_values.append(
-            f"    ('{CHECKPOINT_UUIDS[(contest, 'finish')]}', '{race_id}', 'Finish Line', 'finish', {distance:.2f}, 'Downtown Copper Harbor', true)"
+            f"    ('{checkpoint_uuids[(contest, 'finish')]}', '{race_id}', 'Finish Line', 'finish', {distance:.2f}, 'Downtown Copper Harbor', true)"
         )
     lines.append(",\n".join(checkpoint_values) + ";")
     lines.append("")
@@ -295,15 +294,15 @@ def build_sql(participants_by_contest: dict[int, list[ParticipantRow]]) -> str:
 
     category_values = []
     for contest in (1, 2, 3):
-        race_id = RACE_UUIDS[contest]
+        race_id = race_uuids[contest]
         category_values.append(
-            f"    ('{CATEGORY_UUIDS[(contest, 'overall')]}', '{race_id}', 'Overall', 'overall', NULL, NULL, NULL, 0)"
+            f"    ('{category_uuids[(contest, 'overall')]}', '{race_id}', 'Overall', 'overall', NULL, NULL, NULL, 0)"
         )
         category_values.append(
-            f"    ('{CATEGORY_UUIDS[(contest, 'male')]}', '{race_id}', 'Men', 'male', NULL, NULL, 'male', 1)"
+            f"    ('{category_uuids[(contest, 'male')]}', '{race_id}', 'Men', 'male', NULL, NULL, 'male', 1)"
         )
         category_values.append(
-            f"    ('{CATEGORY_UUIDS[(contest, 'female')]}', '{race_id}', 'Women', 'female', NULL, NULL, 'female', 2)"
+            f"    ('{category_uuids[(contest, 'female')]}', '{race_id}', 'Women', 'female', NULL, NULL, 'female', 2)"
         )
     lines.append(",\n".join(category_values) + ";")
     lines.append("")
@@ -317,9 +316,9 @@ def build_sql(participants_by_contest: dict[int, list[ParticipantRow]]) -> str:
     participant_ids: list[tuple[ParticipantRow, str]] = []
 
     for contest in (1, 2, 3):
-        race_id = RACE_UUIDS[contest]
+        race_id = race_uuids[contest]
         for row in participants_by_contest[contest]:
-            pid = participant_uuid(participant_index)
+            pid = new_uuid()
             participant_ids.append((row, pid))
             participant_values.append(
                 "    ("
@@ -349,14 +348,14 @@ def build_sql(participants_by_contest: dict[int, list[ParticipantRow]]) -> str:
 
     for row, participant_id in participant_ids:
         contest = row.contest
-        start_checkpoint = CHECKPOINT_UUIDS[(contest, "start")]
-        finish_checkpoint = CHECKPOINT_UUIDS[(contest, "finish")]
+        start_checkpoint = checkpoint_uuids[(contest, "start")]
+        finish_checkpoint = checkpoint_uuids[(contest, "finish")]
         start_dt = datetime.strptime(RACE_META[contest]["start"], "%Y-%m-%d %H:%M:%S")
         start_ts = start_dt.strftime("%Y-%m-%d %H:%M:%S")
 
         timing_values.append(
             "    ("
-            f"'{timing_uuid(timing_index)}', '{participant_id}', '{start_checkpoint}', "
+            f"'{new_uuid()}', '{participant_id}', '{start_checkpoint}', "
             f"'{start_ts}', '{start_ts}', 'RR-START', 'synced'"
             ")"
         )
@@ -368,7 +367,7 @@ def build_sql(participants_by_contest: dict[int, list[ParticipantRow]]) -> str:
             finish_ts = finish_dt.strftime("%Y-%m-%d %H:%M:%S")
             timing_values.append(
                 "    ("
-                f"'{timing_uuid(timing_index)}', '{participant_id}', '{finish_checkpoint}', "
+                f"'{new_uuid()}', '{participant_id}', '{finish_checkpoint}', "
                 f"'{finish_ts}', '{finish_ts}', 'RR-FINISH', 'synced'"
                 ")"
             )
