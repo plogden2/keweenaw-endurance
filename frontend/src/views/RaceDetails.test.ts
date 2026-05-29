@@ -64,6 +64,9 @@ describe('RaceDetails.vue', () => {
         ],
       },
     })
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: [] },
+    })
 
     const router = createTestRouter()
     await router.push('/timing/evt-1/race/race-1')
@@ -100,6 +103,9 @@ describe('RaceDetails.vue', () => {
         ],
       },
     })
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: [] },
+    })
 
     const router = createTestRouter()
     await router.push('/timing/evt-1/race/race-1')
@@ -111,6 +117,8 @@ describe('RaceDetails.vue', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('Leaderboard')
+    expect(wrapper.text()).toContain('Race Flow')
+    expect(wrapper.text()).toContain('Statistics')
     expect(wrapper.text()).toContain('Alex')
     expect(wrapper.text()).toContain('7')
   })

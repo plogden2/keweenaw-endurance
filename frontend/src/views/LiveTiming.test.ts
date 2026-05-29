@@ -6,6 +6,14 @@ import { useRacesStore } from '@/stores/races'
 import { checkpointsApi, rfidApi, timingApi } from '@/services/api'
 import { participantsApi } from '@/services/api'
 
+vi.mock('@/services/offlineQueue', () => ({
+  enqueue: vi.fn().mockResolvedValue('synced'),
+  getLocalPendingCount: vi.fn().mockResolvedValue(0),
+  syncAll: vi.fn().mockResolvedValue({ synced: 0, failed: 0 }),
+  onOnline: vi.fn(() => () => {}),
+  initOfflineQueue: vi.fn(),
+}))
+
 vi.mock('@/stores/races', async () => {
   const actual = await vi.importActual<typeof import('@/stores/races')>('@/stores/races')
   return { ...actual, useRacesStore: vi.fn() }

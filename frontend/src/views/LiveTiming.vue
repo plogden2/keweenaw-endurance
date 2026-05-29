@@ -130,6 +130,7 @@ import {
   rfidApi,
   timingApi,
 } from '@/services/api'
+import { enqueue } from '@/services/offlineQueue'
 import type {
   Checkpoint,
   ManualTimingEntryPayload,
@@ -231,11 +232,16 @@ async function onManualSubmit(payload: ManualTimingEntryPayload): Promise<void> 
   submitting.value = true
   lookupError.value = null
   try {
-    await rfidApi.manualEntry(payload)
+    const result = await enqueue(payload)
+    if (result === 'queued') {
+      lookupError.value = 'Recorded locally — will sync when online.'
+    }
     bibLookup.value = ''
     rfidLookup.value = ''
     selectedParticipant.value = null
-    await refreshLive()
+    if (result === 'synced') {
+      await refreshLive()
+    }
     await syncStatusRef.value?.loadStatus()
   } catch (err) {
     lookupError.value = getErrorMessage(err, 'Failed to record timing')

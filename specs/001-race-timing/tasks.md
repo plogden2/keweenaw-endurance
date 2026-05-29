@@ -291,15 +291,15 @@
 
 ### Tests for User Story 11
 
-- [ ] T071 [P] [US11] Offline queue unit tests in `frontend/src/services/offlineQueue.test.ts`
-- [ ] T072 [P] [US11] IndexedDB storage tests in `frontend/src/services/timingStorage.test.ts`
+- [X] T071 [P] [US11] Offline queue unit tests in `frontend/src/services/offlineQueue.test.ts`
+- [X] T072 [P] [US11] IndexedDB storage tests in `frontend/src/services/timingStorage.test.ts`
 
 ### Implementation for User Story 11
 
-- [ ] T073 [US11] Configure Vite PWA plugin and manifest in `frontend/vite.config.ts` and `frontend/public/manifest.json`
-- [ ] T074 [US11] Implement offline timing queue in `frontend/src/services/offlineQueue.ts`
-- [ ] T075 [US11] Implement IndexedDB timing storage in `frontend/src/services/timingStorage.ts`
-- [ ] T076 [US11] Register service worker in `frontend/src/main.ts`
+- [X] T073 [US11] Configure Vite PWA plugin and manifest in `frontend/vite.config.ts` and `frontend/public/manifest.json`
+- [X] T074 [US11] Implement offline timing queue in `frontend/src/services/offlineQueue.ts`
+- [X] T075 [US11] Implement IndexedDB timing storage in `frontend/src/services/timingStorage.ts`
+- [X] T076 [US11] Register service worker in `frontend/src/main.ts`
 
 **Checkpoint**: Timing station works without network connectivity
 
@@ -313,13 +313,13 @@
 
 ### Tests for User Story 12
 
-- [ ] T077 [P] [US12] RaceFlowChart component tests in `frontend/src/components/RaceFlowChart.test.ts`
+- [X] T077 [P] [US12] RaceFlowChart component tests in `frontend/src/components/RaceFlowChart.test.ts`
 
 ### Implementation for User Story 12
 
-- [ ] T078 [US12] Add chart library dependency in `frontend/package.json`
-- [ ] T079 [US12] Implement `RaceFlowChart.vue` in `frontend/src/components/RaceFlowChart.vue`
-- [ ] T080 [US12] Add Race Flow and Statistics tabs to `frontend/src/views/RaceDetails.vue`
+- [X] T078 [US12] Add chart library dependency in `frontend/package.json`
+- [X] T079 [US12] Implement `RaceFlowChart.vue` in `frontend/src/components/RaceFlowChart.vue`
+- [X] T080 [US12] Add Race Flow and Statistics tabs to `frontend/src/views/RaceDetails.vue`
 
 **Checkpoint**: Race analytics visualizations available on race detail pages
 

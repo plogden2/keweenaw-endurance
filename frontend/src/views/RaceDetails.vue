@@ -24,6 +24,22 @@
         >
           Leaderboard
         </button>
+        <button
+          type="button"
+          class="tab"
+          :class="{ active: activeTab === 'race-flow' }"
+          @click="activeTab = 'race-flow'"
+        >
+          Race Flow
+        </button>
+        <button
+          type="button"
+          class="tab"
+          :class="{ active: activeTab === 'statistics' }"
+          @click="activeTab = 'statistics'"
+        >
+          Statistics
+        </button>
       </div>
 
       <section v-if="activeTab === 'leaderboard'" class="leaderboard">
@@ -51,6 +67,43 @@
         </table>
         <p v-else class="empty">No results yet.</p>
       </section>
+
+      <section v-else-if="activeTab === 'race-flow'" class="race-flow">
+        <RaceFlowChart :race-id="raceId" />
+      </section>
+
+      <section v-else-if="activeTab === 'statistics'" class="statistics">
+        <div v-if="statsLoading" class="status">Loading statistics…</div>
+        <div v-else-if="statsError" class="status error">{{ statsError }}</div>
+        <ul v-else class="stats-grid">
+          <li>
+            <span class="label">Participants</span>
+            <span class="value">{{ statistics.totalParticipants }}</span>
+          </li>
+          <li>
+            <span class="label">Finished</span>
+            <span class="value">{{ statistics.finished }}</span>
+          </li>
+          <li>
+            <span class="label">Started</span>
+            <span class="value">{{ statistics.started }}</span>
+          </li>
+          <li>
+            <span class="label">Registered</span>
+            <span class="value">{{ statistics.registered }}</span>
+          </li>
+          <li>
+            <span class="label">DNF</span>
+            <span class="value">{{ statistics.dnf }}</span>
+          </li>
+          <li>
+            <span class="label">Avg finish (min)</span>
+            <span class="value">
+              {{ statistics.averageFinishMinutes?.toFixed(1) ?? '—' }}
+            </span>
+          </li>
+        </ul>
+      </section>
     </template>
   </div>
 </template>
@@ -59,9 +112,11 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
+import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import { useRacesStore } from '@/stores/races'
 import { timingApi } from '@/services/api'
-import type { LeaderboardEntry } from '@/types/models'
+import type { LeaderboardEntry, TimingRecord } from '@/types/models'
+import { buildRaceStatistics, type RaceStatistics } from '@/utils/raceFlowData'
 import { getErrorMessage } from '@/utils/error'
 
 const route = useRoute()
@@ -73,6 +128,16 @@ const activeTab = ref('leaderboard')
 const leaderboard = ref<LeaderboardEntry[]>([])
 const leaderboardLoading = ref(false)
 const leaderboardError = ref<string | null>(null)
+const statsLoading = ref(false)
+const statsError = ref<string | null>(null)
+const statistics = ref<RaceStatistics>({
+  totalParticipants: 0,
+  finished: 0,
+  started: 0,
+  registered: 0,
+  dnf: 0,
+  averageFinishMinutes: null,
+})
 
 function formatResult(entry: LeaderboardEntry): string {
   if (entry.laps) {
@@ -105,14 +170,35 @@ async function loadLeaderboard(): Promise<void> {
   }
 }
 
+async function loadStatistics(): Promise<void> {
+  statsLoading.value = true
+  statsError.value = null
+  try {
+    const { data } = await timingApi.getLive(raceId.value)
+    statistics.value = buildRaceStatistics((data.records ?? []) as TimingRecord[])
+  } catch (err) {
+    statsError.value = getErrorMessage(err, 'Failed to load statistics')
+  } finally {
+    statsLoading.value = false
+  }
+}
+
 onMounted(async () => {
   await loadRace()
   await loadLeaderboard()
+  await loadStatistics()
 })
 
 watch(raceId, async () => {
   await loadRace()
   await loadLeaderboard()
+  await loadStatistics()
+})
+
+watch(activeTab, async (tab) => {
+  if (tab === 'statistics') {
+    await loadStatistics()
+  }
 })
 </script>
 
@@ -191,5 +277,32 @@ watch(raceId, async () => {
 
 .empty {
   color: #6c757d;
+}
+
+.stats-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1rem;
+}
+
+.stats-grid li {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.stats-grid .label {
+  display: block;
+  font-size: 0.85rem;
+  color: #6c757d;
+}
+
+.stats-grid .value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2c3e50;
 }
 </style>
