@@ -1,17 +1,17 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import RaceDetails from './RaceDetails.vue'
-import { setupPinia, createTestRouter } from '../test/helpers.js'
-import { useRacesStore } from '../stores/races.js'
-import { timingApi } from '../services/api.js'
+import { setupPinia, createTestRouter } from '@/test/helpers'
+import { useRacesStore } from '@/stores/races'
+import { timingApi } from '@/services/api'
 
-vi.mock('../stores/races.js', async () => {
-  const actual = await vi.importActual('../stores/races.js')
+vi.mock('@/stores/races', async () => {
+  const actual = await vi.importActual<typeof import('@/stores/races')>('@/stores/races')
   return { ...actual, useRacesStore: vi.fn() }
 })
 
-vi.mock('../services/api.js', async () => {
-  const actual = await vi.importActual('../services/api.js')
+vi.mock('@/services/api', async () => {
+  const actual = await vi.importActual<typeof import('@/services/api')>('@/services/api')
   return {
     ...actual,
     timingApi: {
@@ -23,7 +23,12 @@ vi.mock('../services/api.js', async () => {
 })
 
 describe('RaceDetails.vue', () => {
-  let racesStore
+  let racesStore: {
+    currentRace: Record<string, unknown> | null
+    loading: boolean
+    error: string | null
+    fetchRace: Mock
+  }
 
   beforeEach(() => {
     setupPinia()
@@ -33,7 +38,7 @@ describe('RaceDetails.vue', () => {
       error: null,
       fetchRace: vi.fn(),
     }
-    useRacesStore.mockReturnValue(racesStore)
+    ;(useRacesStore as unknown as Mock).mockReturnValue(racesStore)
     vi.clearAllMocks()
   })
 
@@ -44,7 +49,7 @@ describe('RaceDetails.vue', () => {
       race_type: 'time_based',
       status: 'active',
     }
-    timingApi.getLeaderboard.mockResolvedValue({
+    ;(timingApi.getLeaderboard as Mock).mockResolvedValue({
       data: {
         data: [
           {
@@ -80,7 +85,7 @@ describe('RaceDetails.vue', () => {
       race_type: 'time_based',
       status: 'finished',
     }
-    timingApi.getLeaderboard.mockResolvedValue({
+    ;(timingApi.getLeaderboard as Mock).mockResolvedValue({
       data: {
         data: [
           {

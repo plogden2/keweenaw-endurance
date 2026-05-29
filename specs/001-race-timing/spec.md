@@ -6,7 +6,7 @@ A comprehensive web application for managing endurance races in the Keweenaw are
 
 ## Technology Stack
 
-- **Frontend**: Vue.js 3 with Composition API
+- **Frontend**: Vue.js 3 with Composition API and TypeScript
 - **Backend**: Go (Golang) with Gin framework
 - **Database**: PostgreSQL 14+
 - **Containerization**: Docker and Docker Compose
@@ -16,7 +16,7 @@ A comprehensive web application for managing endurance races in the Keweenaw are
 ## System Architecture
 
 ### Container Services
-1. **Frontend Service** (Vue.js application)
+1. **Frontend Service** (Vue.js + TypeScript application)
 2. **Backend API Service** (Go REST API)
 3. **PostgreSQL Database Service**
 4. **Redis Cache Service** (for session management and caching)
@@ -170,6 +170,8 @@ POST   /api/rfid/sync-pending          - Sync pending records
 ```
 
 ## Frontend Components
+
+All Vue single-file components use `<script setup lang="ts">`. Non-Vue modules (services, stores, router, tests, config) use TypeScript (`.ts`). Shared API and domain types live in `frontend/src/types/`.
 
 ### Landing Page (`/`)
 - Hero section with upcoming races highlight reel
@@ -334,6 +336,7 @@ POST   /api/rfid/sync-pending          - Sync pending records
 - Race data integrity checks
 - Timing record validation
 - Participant data consistency verification
+- Frontend TypeScript types aligned with API contracts for compile-time validation
 
 ### Performance Optimization
 - Database indexing on frequently queried fields

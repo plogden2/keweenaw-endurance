@@ -1,8 +1,25 @@
 import { defineStore } from 'pinia'
-import { racesApi } from '../services/api.js'
+import { racesApi } from '@/services/api'
+import type {
+  CreateRacePayload,
+  ListParams,
+  Race,
+  UpdateRacePayload,
+} from '@/types/models'
+import { getErrorMessage } from '@/utils/error'
+
+interface RacesState {
+  races: Race[]
+  currentRace: Race | null
+  total: number
+  page: number
+  limit: number
+  loading: boolean
+  error: string | null
+}
 
 export const useRacesStore = defineStore('races', {
-  state: () => ({
+  state: (): RacesState => ({
     races: [],
     currentRace: null,
     total: 0,
@@ -13,7 +30,7 @@ export const useRacesStore = defineStore('races', {
   }),
 
   actions: {
-    async fetchRaces(params = {}) {
+    async fetchRaces(params: ListParams = {}) {
       this.loading = true
       this.error = null
       try {
@@ -23,33 +40,33 @@ export const useRacesStore = defineStore('races', {
         this.page = data.page ?? this.page
         this.limit = data.limit ?? this.limit
       } catch (err) {
-        this.error = err.message ?? 'Failed to fetch races'
+        this.error = getErrorMessage(err, 'Failed to fetch races')
       } finally {
         this.loading = false
       }
     },
 
-    async fetchRace(id) {
+    async fetchRace(id: string) {
       this.loading = true
       this.error = null
       try {
         const { data } = await racesApi.get(id)
         this.currentRace = data
       } catch (err) {
-        this.error = err.message ?? 'Failed to fetch race'
+        this.error = getErrorMessage(err, 'Failed to fetch race')
       } finally {
         this.loading = false
       }
     },
 
-    async createRace(payload) {
+    async createRace(payload: CreateRacePayload) {
       const { data } = await racesApi.create(payload)
       this.races.push(data)
       this.total += 1
       return data
     },
 
-    async updateRace(id, payload) {
+    async updateRace(id: string, payload: UpdateRacePayload) {
       const { data } = await racesApi.update(id, payload)
       const index = this.races.findIndex((r) => r.id === id)
       if (index !== -1) {
@@ -61,7 +78,7 @@ export const useRacesStore = defineStore('races', {
       return data
     },
 
-    async deleteRace(id) {
+    async deleteRace(id: string) {
       await racesApi.remove(id)
       this.races = this.races.filter((r) => r.id !== id)
       this.total = Math.max(0, this.total - 1)

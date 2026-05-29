@@ -38,25 +38,25 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import AppHeader from '../components/AppHeader.vue'
-import { useEventsStore } from '../stores/events.js'
-import { useRacesStore } from '../stores/races.js'
+import AppHeader from '@/components/AppHeader.vue'
+import { useEventsStore } from '@/stores/events'
+import { useRacesStore } from '@/stores/races'
 
 const route = useRoute()
 const eventsStore = useEventsStore()
 const racesStore = useRacesStore()
 
-const eventId = computed(() => route.params.eventId)
+const eventId = computed(() => String(route.params.eventId))
 
-function formatDate(value) {
+function formatDate(value: string | undefined): string {
   if (!value) return ''
   return new Date(value).toLocaleDateString()
 }
 
-async function loadEvent() {
+async function loadEvent(): Promise<void> {
   await eventsStore.fetchEvent(eventId.value)
   await racesStore.fetchRaces({ event_id: eventId.value })
 }

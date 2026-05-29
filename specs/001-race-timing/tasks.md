@@ -22,7 +22,7 @@
 
 - [X] T001 Create Docker Compose development environment in `docker-compose.yml`
 - [X] T002 Initialize Go backend project in `backend/` with Gin framework
-- [X] T003 [P] Initialize Vue.js frontend project in `frontend/` with Vite
+- [X] T003 [P] Initialize Vue.js + TypeScript frontend project in `frontend/` with Vite
 - [X] T004 [P] Configure PostgreSQL schema in `database/init/01-init.sql`
 - [X] T005 [P] Configure test infrastructure in `docker-compose.test.yml`
 
@@ -189,15 +189,15 @@
 
 ### Tests for User Story 7
 
-- [X] T049 [P] [US7] API client unit tests in `frontend/src/services/api.test.js`
-- [X] T050 [P] [US7] Pinia store tests in `frontend/src/stores/events.test.js`
+- [X] T049 [P] [US7] API client unit tests in `frontend/src/services/api.test.ts`
+- [X] T050 [P] [US7] Pinia store tests in `frontend/src/stores/events.test.ts`
 
 ### Implementation for User Story 7
 
-- [X] T051 [P] [US7] Create Axios API client in `frontend/src/services/api.js`
-- [X] T052 [P] [US7] Create Pinia stores for events, races, and participants in `frontend/src/stores/events.js`, `frontend/src/stores/races.js`, and `frontend/src/stores/participants.js`
-- [X] T053 [US7] Register Pinia in `frontend/src/main.js`
-- [X] T054 [P] [US7] Configure Vitest in `frontend/vitest.config.js`
+- [X] T051 [P] [US7] Create Axios API client in `frontend/src/services/api.ts`
+- [X] T052 [P] [US7] Create Pinia stores for events, races, and participants in `frontend/src/stores/events.ts`, `frontend/src/stores/races.ts`, and `frontend/src/stores/participants.ts`
+- [X] T053 [US7] Register Pinia in `frontend/src/main.ts`
+- [X] T054 [P] [US7] Configure Vitest in `frontend/vitest.config.ts`
 
 **Checkpoint**: Frontend can fetch and hold race data from the backend API
 
@@ -211,9 +211,9 @@
 
 ### Tests for User Story 8
 
-- [X] T055 [P] [US8] Timing page component tests in `frontend/src/views/Timing.test.js`
-- [X] T056 [P] [US8] EventDetails component tests in `frontend/src/views/EventDetails.test.js`
-- [X] T057 [P] [US8] RaceDetails component tests in `frontend/src/views/RaceDetails.test.js`
+- [X] T055 [P] [US8] Timing page component tests in `frontend/src/views/Timing.test.ts`
+- [X] T056 [P] [US8] EventDetails component tests in `frontend/src/views/EventDetails.test.ts`
+- [X] T057 [P] [US8] RaceDetails component tests in `frontend/src/views/RaceDetails.test.ts`
 
 ### Implementation for User Story 8
 
@@ -226,6 +226,22 @@
 
 ---
 
+## Phase 11b: Frontend TypeScript Migration (Priority: P2)
+
+**Goal**: Align the frontend codebase and toolchain with the TypeScript specification
+
+**Independent Test**: `npm run typecheck` and `npm run test:ci` pass with all modules using `.ts` extensions and Vue SFCs using `<script setup lang="ts">`
+
+- [X] T091 [P] Add TypeScript toolchain in `frontend/tsconfig.json`, `frontend/tsconfig.node.json`, and `frontend/tsconfig.vitest.json`
+- [X] T092 [P] Add shared API/domain types in `frontend/src/types/models.ts` aligned with backend JSON shapes
+- [X] T093 [P] Convert build and test configs plus entrypoint: `frontend/vite.config.ts`, `frontend/vitest.config.ts`, `frontend/src/main.ts`, `frontend/src/router/index.ts`
+- [X] T094 [P] Migrate services, stores, tests, and helpers from `.js` to `.ts` under `frontend/src/services/`, `frontend/src/stores/`, `frontend/src/test/`, and `frontend/src/views/*.test.ts`
+- [X] T095 Add `vue-tsc --noEmit` typecheck script to `frontend/package.json` and wire into `docker-compose.test.yml` frontend-test command
+
+**Checkpoint**: No remaining frontend `.js` source files except generated assets; typecheck enforced in CI
+
+---
+
 ## Phase 12: User Story 9 - Live Timing Station UI (Priority: P2)
 
 **Goal**: Real-time timing station interface with bib/RFID lookup and manual entry
@@ -234,8 +250,8 @@
 
 ### Tests for User Story 9
 
-- [ ] T062 [P] [US9] LiveTiming component tests in `frontend/src/views/LiveTiming.test.js`
-- [ ] T063 [P] [US9] ManualTimingForm component tests in `frontend/src/components/ManualTimingForm.test.js`
+- [ ] T062 [P] [US9] LiveTiming component tests in `frontend/src/views/LiveTiming.test.ts`
+- [ ] T063 [P] [US9] ManualTimingForm component tests in `frontend/src/components/ManualTimingForm.test.ts`
 
 ### Implementation for User Story 9
 
@@ -255,7 +271,7 @@
 
 ### Tests for User Story 10
 
-- [ ] T067 [P] [US10] Home page component tests in `frontend/src/views/Home.test.js`
+- [ ] T067 [P] [US10] Home page component tests in `frontend/src/views/Home.test.ts`
 
 ### Implementation for User Story 10
 
@@ -275,15 +291,15 @@
 
 ### Tests for User Story 11
 
-- [ ] T071 [P] [US11] Offline queue unit tests in `frontend/src/services/offlineQueue.test.js`
-- [ ] T072 [P] [US11] IndexedDB storage tests in `frontend/src/services/timingStorage.test.js`
+- [ ] T071 [P] [US11] Offline queue unit tests in `frontend/src/services/offlineQueue.test.ts`
+- [ ] T072 [P] [US11] IndexedDB storage tests in `frontend/src/services/timingStorage.test.ts`
 
 ### Implementation for User Story 11
 
-- [ ] T073 [US11] Configure Vite PWA plugin and manifest in `frontend/vite.config.js` and `frontend/public/manifest.json`
-- [ ] T074 [US11] Implement offline timing queue in `frontend/src/services/offlineQueue.js`
-- [ ] T075 [US11] Implement IndexedDB timing storage in `frontend/src/services/timingStorage.js`
-- [ ] T076 [US11] Register service worker in `frontend/src/main.js`
+- [ ] T073 [US11] Configure Vite PWA plugin and manifest in `frontend/vite.config.ts` and `frontend/public/manifest.json`
+- [ ] T074 [US11] Implement offline timing queue in `frontend/src/services/offlineQueue.ts`
+- [ ] T075 [US11] Implement IndexedDB timing storage in `frontend/src/services/timingStorage.ts`
+- [ ] T076 [US11] Register service worker in `frontend/src/main.ts`
 
 **Checkpoint**: Timing station works without network connectivity
 
@@ -297,7 +313,7 @@
 
 ### Tests for User Story 12
 
-- [ ] T077 [P] [US12] RaceFlowChart component tests in `frontend/src/components/RaceFlowChart.test.js`
+- [ ] T077 [P] [US12] RaceFlowChart component tests in `frontend/src/components/RaceFlowChart.test.ts`
 
 ### Implementation for User Story 12
 
@@ -352,8 +368,9 @@
 - **Phase 9 (US6)**: Depends on US5 (manual entry creates timing records)
 - **Phase 10 (US7)**: Depends on Phases 3–5 API — blocks US8, US9, US10 frontend
 - **Phase 11 (US8)**: Depends on US7 and US5 (leaderboard data)
+- **Phase 11b (TypeScript)**: Depends on US7–US8; blocks US9–US12 frontend work
 - **Phase 12 (US9)**: Depends on US8 and US6 (RFID/manual entry APIs)
-- **Phase 13 (US10)**: Can start after US7; HTML prototype (T068) before Vue refinement (T069)
+- **Phase 13 (US10)**: Depends on US7 and Phase 11b; HTML prototype (T068) before Vue refinement (T069)
 - **Phase 14 (US11)**: Depends on US9 (offline queue for timing station)
 - **Phase 15 (US12)**: Depends on US8 (RaceDetails page exists)
 - **Phase 16 (US13)**: Can start after Phase 2; should complete before production deploy
@@ -368,8 +385,9 @@
 | US6 RFID API | US5 | US9 |
 | US7 Frontend State | US1–US3 API | US8, US9, US10 |
 | US8 Timing UI | US5, US7 | US9, US12 |
-| US9 Live Timing UI | US6, US8 | US11 |
-| US10 Landing Page | US7 | — |
+| TS Migration | US7, US8 | US9, US10, US11, US12 |
+| US9 Live Timing UI | US6, US8, TS Migration | US11 |
+| US10 Landing Page | US7, TS Migration | — |
 | US11 PWA Offline | US9 | — |
 | US12 Visualization | US8 | — |
 | US13 Auth | Foundation | Production deploy |
@@ -388,6 +406,7 @@
 - T036–T038 (US5 tests) can run in parallel
 - T049–T050, T051–T052, T054 (US7) can run in parallel
 - T055–T057 (US8 tests) and T059–T061 (US8 components) can run in parallel
+- T091–T094 (TypeScript migration) can run in parallel after toolchain (T091) is in place
 - T086–T088 (Polish) can run in parallel
 
 ---
@@ -425,10 +444,11 @@ Backend CRUD for events, races, and participants is done and tested. Timing and 
 
 1. US6 RFID API → field-ready tag lookup and manual entry
 2. US7 + US8 → browser-based timing index and detail pages
-3. US9 → live timing station for race day operators
-4. US10 → landing page (HTML prototype first per constitution)
-5. US13 → secure admin write operations
-6. US11 + US12 → offline resilience and analytics (P3)
+3. Phase 11b → migrate frontend to TypeScript before new UI work
+4. US9 → live timing station for race day operators
+5. US10 → landing page (HTML prototype first per constitution)
+6. US13 → secure admin write operations
+7. US11 + US12 → offline resilience and analytics (P3)
 
 ### Parallel Team Strategy
 
@@ -450,4 +470,6 @@ Stories integrate at API boundaries without blocking each other once US5 and US7
 - Verify tests fail before implementing
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
-- Frontend views referenced in `frontend/src/router/index.js` (`EventDetails.vue`, `RaceDetails.vue`, `LiveTiming.vue`) do not exist yet — created in US8/US9
+- Frontend modules use TypeScript (`.ts` for services, stores, router, tests; `<script setup lang="ts">` in Vue SFCs)
+- US7–US8 were initially implemented in JavaScript; Phase 11b migrates those files to TypeScript before new frontend stories
+- Frontend views referenced in `frontend/src/router/index.ts`: `LiveTiming.vue` is created in US9; `EventDetails.vue` and `RaceDetails.vue` exist from US8

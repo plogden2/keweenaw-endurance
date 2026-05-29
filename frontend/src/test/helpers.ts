@@ -1,13 +1,18 @@
-import { createPinia, setActivePinia } from 'pinia'
-import { createRouter, createWebHistory } from 'vue-router'
+import { createPinia, setActivePinia, type Pinia } from 'pinia'
+import {
+  createRouter,
+  createWebHistory,
+  type RouteRecordRaw,
+  type Router,
+} from 'vue-router'
 
-export function setupPinia() {
+export function setupPinia(): Pinia {
   const pinia = createPinia()
   setActivePinia(pinia)
   return pinia
 }
 
-export function createTestRouter(routes = []) {
+export function createTestRouter(routes: RouteRecordRaw[] = []): Router {
   return createRouter({
     history: createWebHistory(),
     routes: [

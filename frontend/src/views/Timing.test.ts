@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import Timing from './Timing.vue'
-import { setupPinia, createTestRouter } from '../test/helpers.js'
-import { useEventsStore } from '../stores/events.js'
+import { setupPinia, createTestRouter } from '@/test/helpers'
+import { useEventsStore } from '@/stores/events'
 
-vi.mock('../stores/events.js', async () => {
-  const actual = await vi.importActual('../stores/events.js')
+vi.mock('@/stores/events', async () => {
+  const actual = await vi.importActual<typeof import('@/stores/events')>('@/stores/events')
   return {
     ...actual,
     useEventsStore: vi.fn(),
@@ -13,7 +13,14 @@ vi.mock('../stores/events.js', async () => {
 })
 
 describe('Timing.vue', () => {
-  let eventsStore
+  let eventsStore: {
+    events: unknown[]
+    activeEvents: Array<{ id: string; name: string; event_date: string; status: string }>
+    pastEvents: Array<{ id: string; name: string; event_date: string; status: string }>
+    loading: boolean
+    error: string | null
+    fetchEvents: Mock
+  }
 
   beforeEach(() => {
     setupPinia()
@@ -25,7 +32,7 @@ describe('Timing.vue', () => {
       error: null,
       fetchEvents: vi.fn(),
     }
-    useEventsStore.mockReturnValue(eventsStore)
+    ;(useEventsStore as unknown as Mock).mockReturnValue(eventsStore)
   })
 
   it('fetches events on mount', async () => {

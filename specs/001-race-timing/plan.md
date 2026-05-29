@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-A comprehensive race timing and indexing system for endurance events in the Keweenaw area, built with Vue.js frontend, Go backend, PostgreSQL database, and Google Cloud Platform deployment. The system features RFID integration, offline functionality, and real-time race tracking capabilities.
+A comprehensive race timing and indexing system for endurance events in the Keweenaw area, built with a Vue.js + TypeScript frontend, Go backend, PostgreSQL database, and Google Cloud Platform deployment. The system features RFID integration, offline functionality, and real-time race tracking capabilities.
 
 ## Development Philosophy
 
@@ -23,12 +23,12 @@ This project strictly follows the **Test-Driven Development (TDD)** methodology 
 - **Day 1-2**: Docker development environment setup
   - Create Docker Compose configuration for local development
   - Set up PostgreSQL, Redis, and development containers
-  - Configure hot-reload for Vue.js development
+  - Configure hot-reload for Vue.js + TypeScript development
   - Set up Go development environment with live reload
 
 - **Day 3-4**: Testing framework establishment
   - Set up Go testing framework (Testify, Ginkgo/Gomega)
-  - Configure Vue.js testing (Vitest, Vue Test Utils)
+  - Configure Vue.js testing with TypeScript (Vitest, Vue Test Utils, vue-tsc)
   - Set up integration testing framework
   - Create testing utilities and helpers
 
@@ -53,8 +53,8 @@ This project strictly follows the **Test-Driven Development (TDD)** methodology 
 
 - **Day 5**: Frontend foundation
   - Write component tests for core Vue.js components
-  - Set up Vue.js 3 with Composition API
-  - Configure routing and state management
+  - Set up Vue.js 3 with Composition API and TypeScript
+  - Configure `tsconfig.json`, routing, and Pinia state management
   - Implement responsive design system
 
 ### Phase 2: Core Race Management (Weeks 3-4)
@@ -231,7 +231,7 @@ This project strictly follows the **Test-Driven Development (TDD)** methodology 
   - Add "All You Can East Bluffet" featured section
   - Create user feedback collection mechanism
 
-- **Day 3-4**: Vue.js landing page implementation
+- **Day 3-4**: Vue.js + TypeScript landing page implementation
   - Write tests for landing page components
   - Implement responsive race card layout
   - Create image optimization and loading
@@ -269,7 +269,7 @@ This project strictly follows the **Test-Driven Development (TDD)** methodology 
 
 ### Unit Testing
 - **Coverage Requirement**: 100% code coverage for all new code
-- **Framework**: Go testing with Testify, Vue.js testing with Vitest
+- **Framework**: Go testing with Testify, Vue.js + TypeScript testing with Vitest
 - **Focus**: Individual functions, components, and business logic
 - **Frequency**: Continuous during development
 
@@ -343,7 +343,7 @@ This project strictly follows the **Test-Driven Development (TDD)** methodology 
 
 ### Required Skills
 - **Backend**: Go programming, REST API development, PostgreSQL
-- **Frontend**: Vue.js 3, modern JavaScript, responsive design
+- **Frontend**: Vue.js 3, TypeScript, responsive design
 - **DevOps**: Docker, Google Cloud Platform, CI/CD pipelines
 - **Hardware**: RFID integration, serial communication, embedded systems
 
@@ -571,6 +571,7 @@ type LogEntry struct {
 - **Read Replicas**: For reporting and analytics queries
 
 #### Frontend Performance
+- **TypeScript**: Strict type checking via `vue-tsc`; shared types for API responses
 - **Code Splitting**: Route-based lazy loading
 - **Image Optimization**: WebP format, responsive images
 - **Bundle Size**: < 500KB initial load

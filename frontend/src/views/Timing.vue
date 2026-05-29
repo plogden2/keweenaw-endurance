@@ -20,11 +20,11 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted } from 'vue'
-import AppHeader from '../components/AppHeader.vue'
-import EventsTable from '../components/EventsTable.vue'
-import { useEventsStore } from '../stores/events.js'
+import AppHeader from '@/components/AppHeader.vue'
+import EventsTable from '@/components/EventsTable.vue'
+import { useEventsStore } from '@/stores/events'
 
 const eventsStore = useEventsStore()
 

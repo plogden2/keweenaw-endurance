@@ -23,13 +23,20 @@
   </div>
 </template>
 
-<script setup>
-defineProps({
-  events: { type: Array, required: true },
-  emptyLabel: { type: String, default: 'No events' },
-})
+<script setup lang="ts">
+import type { Event } from '@/types/models'
 
-function formatDate(value) {
+withDefaults(
+  defineProps<{
+    events: Event[]
+    emptyLabel?: string
+  }>(),
+  {
+    emptyLabel: 'No events',
+  },
+)
+
+function formatDate(value: string | undefined): string {
   if (!value) return ''
   return new Date(value).toLocaleDateString()
 }

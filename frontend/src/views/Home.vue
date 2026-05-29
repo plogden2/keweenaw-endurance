@@ -86,7 +86,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 // Home component - minimal teaser approach as specified
 </script>
 

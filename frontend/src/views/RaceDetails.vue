@@ -55,24 +55,26 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import AppHeader from '../components/AppHeader.vue'
-import { useRacesStore } from '../stores/races.js'
-import { timingApi } from '../services/api.js'
+import AppHeader from '@/components/AppHeader.vue'
+import { useRacesStore } from '@/stores/races'
+import { timingApi } from '@/services/api'
+import type { LeaderboardEntry } from '@/types/models'
+import { getErrorMessage } from '@/utils/error'
 
 const route = useRoute()
 const racesStore = useRacesStore()
 
-const eventId = computed(() => route.params.eventId)
-const raceId = computed(() => route.params.raceId)
+const eventId = computed(() => String(route.params.eventId))
+const raceId = computed(() => String(route.params.raceId))
 const activeTab = ref('leaderboard')
-const leaderboard = ref([])
+const leaderboard = ref<LeaderboardEntry[]>([])
 const leaderboardLoading = ref(false)
-const leaderboardError = ref(null)
+const leaderboardError = ref<string | null>(null)
 
-function formatResult(entry) {
+function formatResult(entry: LeaderboardEntry): string {
   if (entry.laps) {
     return `${entry.laps} laps`
   }
@@ -86,18 +88,18 @@ function formatResult(entry) {
   return '—'
 }
 
-async function loadRace() {
+async function loadRace(): Promise<void> {
   await racesStore.fetchRace(raceId.value)
 }
 
-async function loadLeaderboard() {
+async function loadLeaderboard(): Promise<void> {
   leaderboardLoading.value = true
   leaderboardError.value = null
   try {
     const { data } = await timingApi.getLeaderboard(raceId.value)
     leaderboard.value = data.data ?? []
   } catch (err) {
-    leaderboardError.value = err.message ?? 'Failed to load leaderboard'
+    leaderboardError.value = getErrorMessage(err, 'Failed to load leaderboard')
   } finally {
     leaderboardLoading.value = false
   }

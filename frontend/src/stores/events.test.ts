@@ -1,11 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useEventsStore } from './events.js'
-import { useRacesStore } from './races.js'
-import { useParticipantsStore } from './participants.js'
-import { eventsApi, racesApi, participantsApi } from '../services/api.js'
+import { useEventsStore } from './events'
+import { useRacesStore } from './races'
+import { useParticipantsStore } from './participants'
+import { eventsApi, racesApi, participantsApi } from '@/services/api'
 
-vi.mock('../services/api.js', () => ({
+vi.mock('@/services/api', () => ({
   eventsApi: {
     list: vi.fn(),
     get: vi.fn(),
@@ -37,10 +37,10 @@ describe('useEventsStore', () => {
 
   it('fetches and caches paginated events', async () => {
     const events = [
-      { id: '1', name: 'Active Race', status: 'active' },
-      { id: '2', name: 'Done Race', status: 'completed' },
+      { id: '1', name: 'Active Race', status: 'active' as const, event_date: '2024-06-01' },
+      { id: '2', name: 'Done Race', status: 'completed' as const, event_date: '2024-05-01' },
     ]
-    eventsApi.list.mockResolvedValue({
+    ;(eventsApi.list as Mock).mockResolvedValue({
       data: { data: events, total: 2, page: 1, limit: 20 },
     })
 
@@ -54,12 +54,12 @@ describe('useEventsStore', () => {
   })
 
   it('exposes active and past events from cached list', async () => {
-    eventsApi.list.mockResolvedValue({
+    ;(eventsApi.list as Mock).mockResolvedValue({
       data: {
         data: [
-          { id: '1', status: 'active' },
-          { id: '2', status: 'completed' },
-          { id: '3', status: 'upcoming' },
+          { id: '1', status: 'active', name: 'A', event_date: '2024-06-01' },
+          { id: '2', status: 'completed', name: 'B', event_date: '2024-05-01' },
+          { id: '3', status: 'upcoming', name: 'C', event_date: '2024-07-01' },
         ],
         total: 3,
       },
@@ -73,8 +73,8 @@ describe('useEventsStore', () => {
   })
 
   it('fetches and caches a single event', async () => {
-    const event = { id: 'evt-1', name: 'Copper Harbor' }
-    eventsApi.get.mockResolvedValue({ data: event })
+    const event = { id: 'evt-1', name: 'Copper Harbor', status: 'active' as const, event_date: '2024-08-01' }
+    ;(eventsApi.get as Mock).mockResolvedValue({ data: event })
 
     const store = useEventsStore()
     await store.fetchEvent('evt-1')
@@ -83,7 +83,7 @@ describe('useEventsStore', () => {
   })
 
   it('records API errors', async () => {
-    eventsApi.list.mockRejectedValue(new Error('network error'))
+    ;(eventsApi.list as Mock).mockRejectedValue(new Error('network error'))
 
     const store = useEventsStore()
     await store.fetchEvents()
@@ -100,8 +100,14 @@ describe('useRacesStore', () => {
   })
 
   it('fetches and caches races for an event', async () => {
-    const races = [{ id: 'r1', name: '50K', event_id: 'evt-1' }]
-    racesApi.list.mockResolvedValue({
+    const races = [{
+      id: 'r1',
+      name: '50K',
+      event_id: 'evt-1',
+      race_type: 'time_based' as const,
+      status: 'scheduled' as const,
+    }]
+    ;(racesApi.list as Mock).mockResolvedValue({
       data: { data: races, total: 1, page: 1, limit: 20 },
     })
 
@@ -114,8 +120,14 @@ describe('useRacesStore', () => {
   })
 
   it('fetches and caches a single race', async () => {
-    const race = { id: 'r1', name: 'Marathon' }
-    racesApi.get.mockResolvedValue({ data: race })
+    const race = {
+      id: 'r1',
+      name: 'Marathon',
+      event_id: 'evt-1',
+      race_type: 'time_based' as const,
+      status: 'active' as const,
+    }
+    ;(racesApi.get as Mock).mockResolvedValue({ data: race })
 
     const store = useRacesStore()
     await store.fetchRace('r1')
@@ -132,10 +144,24 @@ describe('useParticipantsStore', () => {
 
   it('fetches and caches participants for a race', async () => {
     const participants = [
-      { id: 'p1', bib_number: '1', race_id: 'r1' },
-      { id: 'p2', bib_number: '2', race_id: 'r1' },
+      {
+        id: 'p1',
+        bib_number: '1',
+        race_id: 'r1',
+        first_name: 'A',
+        last_name: 'B',
+        status: 'registered' as const,
+      },
+      {
+        id: 'p2',
+        bib_number: '2',
+        race_id: 'r1',
+        first_name: 'C',
+        last_name: 'D',
+        status: 'registered' as const,
+      },
     ]
-    participantsApi.list.mockResolvedValue({
+    ;(participantsApi.list as Mock).mockResolvedValue({
       data: { data: participants, total: 2 },
     })
 
@@ -148,8 +174,15 @@ describe('useParticipantsStore', () => {
   })
 
   it('fetches and caches a single participant', async () => {
-    const participant = { id: 'p1', bib_number: '42' }
-    participantsApi.get.mockResolvedValue({ data: participant })
+    const participant = {
+      id: 'p1',
+      bib_number: '42',
+      race_id: 'r1',
+      first_name: 'Alex',
+      last_name: 'Runner',
+      status: 'registered' as const,
+    }
+    ;(participantsApi.get as Mock).mockResolvedValue({ data: participant })
 
     const store = useParticipantsStore()
     await store.fetchParticipant('p1')
