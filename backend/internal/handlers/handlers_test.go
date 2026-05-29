@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/config"
+	"github.com/keweenaw-endurance/backend/internal/middleware"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
 	"github.com/keweenaw-endurance/backend/internal/services"
@@ -19,6 +20,36 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+func testHandlerConfig() *config.Config {
+	return &config.Config{
+		Environment: "test",
+		JWT: config.JWTConfig{
+			Secret:          "test-secret-key",
+			AccessTokenTTL:  time.Hour,
+			RefreshTokenTTL: time.Hour * 24,
+		},
+		Auth: config.AuthConfig{
+			Users: "admin:admin123:admin,timer:timer123:timer,viewer:viewer123:viewer",
+		},
+	}
+}
+
+func bearerTokenForRole(t *testing.T, svc *services.Services, role string) string {
+	t.Helper()
+	var username, password string
+	switch role {
+	case services.RoleAdmin:
+		username, password = "admin", "admin123"
+	case services.RoleTimer:
+		username, password = "timer", "timer123"
+	default:
+		username, password = "viewer", "viewer123"
+	}
+	resp, err := svc.Auth.Login(username, password)
+	require.NoError(t, err)
+	return "Bearer " + resp.Token
+}
 
 func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 	t.Helper()
@@ -35,60 +66,75 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		&models.Category{},
 	))
 
-	svc := services.NewServicesWithReader(db, &config.Config{Environment: "test"}, rfid.NewMockReader())
+	svc := services.NewServicesWithReader(db, testHandlerConfig(), rfid.NewMockReader())
 	h := NewHandlers(svc)
+
+	auth := middleware.JWTAuth(svc.Auth)
+	adminOnly := []gin.HandlerFunc{auth, middleware.RequireRoles(services.RoleAdmin, services.RoleOwner)}
+	timerWrite := []gin.HandlerFunc{auth, middleware.RequireRoles(services.RoleAdmin, services.RoleOwner, services.RoleTimer)}
 
 	router := gin.New()
 	api := router.Group("/api")
 	{
+		api.POST("/auth/login", h.Login)
+
 		api.GET("/events", h.GetEvents)
-		api.POST("/events", h.CreateEvent)
+		api.POST("/events", append(adminOnly, h.CreateEvent)...)
 		api.GET("/events/:id", h.GetEvent)
-		api.PUT("/events/:id", h.UpdateEvent)
-		api.DELETE("/events/:id", h.DeleteEvent)
+		api.PUT("/events/:id", append(adminOnly, h.UpdateEvent)...)
+		api.DELETE("/events/:id", append(adminOnly, h.DeleteEvent)...)
 
 		api.GET("/races", h.GetRaces)
-		api.POST("/races", h.CreateRace)
+		api.POST("/races", append(adminOnly, h.CreateRace)...)
 		api.GET("/races/:id/checkpoints", h.GetCheckpointsByRace)
-		api.POST("/races/:id/checkpoints", h.CreateCheckpoint)
+		api.POST("/races/:id/checkpoints", append(adminOnly, h.CreateCheckpoint)...)
 		api.GET("/races/:id/categories", h.GetCategoriesByRace)
-		api.POST("/races/:id/categories", h.CreateCategory)
+		api.POST("/races/:id/categories", append(adminOnly, h.CreateCategory)...)
 		api.GET("/races/:id", h.GetRace)
-		api.PUT("/races/:id", h.UpdateRace)
-		api.DELETE("/races/:id", h.DeleteRace)
+		api.PUT("/races/:id", append(adminOnly, h.UpdateRace)...)
+		api.DELETE("/races/:id", append(adminOnly, h.DeleteRace)...)
 
 		api.GET("/participants", h.GetParticipants)
-		api.POST("/participants", h.CreateParticipant)
+		api.POST("/participants", append(adminOnly, h.CreateParticipant)...)
 		api.GET("/participants/:id", h.GetParticipant)
-		api.PUT("/participants/:id", h.UpdateParticipant)
-		api.DELETE("/participants/:id", h.DeleteParticipant)
+		api.PUT("/participants/:id", append(adminOnly, h.UpdateParticipant)...)
+		api.DELETE("/participants/:id", append(adminOnly, h.DeleteParticipant)...)
 
 		api.GET("/checkpoints/:id", h.GetCheckpoint)
-		api.PUT("/checkpoints/:id", h.UpdateCheckpoint)
-		api.DELETE("/checkpoints/:id", h.DeleteCheckpoint)
+		api.PUT("/checkpoints/:id", append(adminOnly, h.UpdateCheckpoint)...)
+		api.DELETE("/checkpoints/:id", append(adminOnly, h.DeleteCheckpoint)...)
 
 		api.GET("/categories/:id", h.GetCategory)
-		api.PUT("/categories/:id", h.UpdateCategory)
-		api.DELETE("/categories/:id", h.DeleteCategory)
+		api.PUT("/categories/:id", append(adminOnly, h.UpdateCategory)...)
+		api.DELETE("/categories/:id", append(adminOnly, h.DeleteCategory)...)
 
 		api.GET("/timing/live/:raceId", h.GetLiveTiming)
-		api.POST("/timing/record", h.CreateTimingRecord)
-		api.PUT("/timing/records/:id", h.UpdateTimingRecord)
+		api.POST("/timing/record", append(timerWrite, h.CreateTimingRecord)...)
+		api.PUT("/timing/records/:id", append(timerWrite, h.UpdateTimingRecord)...)
 		api.GET("/timing/results/:raceId", h.GetRaceResults)
 		api.GET("/timing/leaderboard/:raceId", h.GetLeaderboard)
 
-		api.POST("/rfid/write-tag", h.WriteRFIDTag)
+		api.POST("/rfid/write-tag", append(adminOnly, h.WriteRFIDTag)...)
 		api.GET("/rfid/scan/:uid", h.ScanRFIDTag)
-		api.POST("/rfid/manual-entry", h.ManualTimingEntry)
+		api.POST("/rfid/manual-entry", append(timerWrite, h.ManualTimingEntry)...)
 		api.GET("/rfid/sync-status", h.GetSyncStatus)
-		api.POST("/rfid/sync-pending", h.SyncPendingRecords)
+		api.POST("/rfid/sync-pending", append(timerWrite, h.SyncPendingRecords)...)
 	}
 
 	return router, svc
 }
 
+func adminAuthHeader(t *testing.T, svc *services.Services) string {
+	return bearerTokenForRole(t, svc, services.RoleAdmin)
+}
+
+func timerAuthHeader(t *testing.T, svc *services.Services) string {
+	return bearerTokenForRole(t, svc, services.RoleTimer)
+}
+
 func TestEventHandlers_CRUD(t *testing.T) {
-	router, _ := setupHandlerTest(t)
+	router, svc := setupHandlerTest(t)
+	auth := adminAuthHeader(t, svc)
 
 	body := map[string]string{
 		"name":       "Keweenaw Trail Fest",
@@ -100,6 +146,7 @@ func TestEventHandlers_CRUD(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/events", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -122,6 +169,7 @@ func TestEventHandlers_CRUD(t *testing.T) {
 	payload, _ = json.Marshal(updateBody)
 	req = httptest.NewRequest(http.MethodPut, "/api/events/"+created.ID.String(), bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -132,6 +180,7 @@ func TestEventHandlers_CRUD(t *testing.T) {
 	assert.Equal(t, "Houghton, MI", updated.Location)
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/events/"+created.ID.String(), nil)
+	req.Header.Set("Authorization", auth)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -143,7 +192,8 @@ func TestEventHandlers_CRUD(t *testing.T) {
 }
 
 func TestEventHandlers_PartialUpdate(t *testing.T) {
-	router, _ := setupHandlerTest(t)
+	router, svc := setupHandlerTest(t)
+	auth := adminAuthHeader(t, svc)
 
 	body := map[string]string{
 		"name":       "Original Name",
@@ -154,6 +204,7 @@ func TestEventHandlers_PartialUpdate(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/events", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -165,6 +216,7 @@ func TestEventHandlers_PartialUpdate(t *testing.T) {
 	payload, _ = json.Marshal(statusOnly)
 	req = httptest.NewRequest(http.MethodPut, "/api/events/"+created.ID.String(), bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -177,10 +229,11 @@ func TestEventHandlers_PartialUpdate(t *testing.T) {
 }
 
 func TestEventHandlers_InvalidInput(t *testing.T) {
-	router, _ := setupHandlerTest(t)
+	router, svc := setupHandlerTest(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/events", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -209,6 +262,7 @@ func TestRaceHandlers_CRUD(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/races", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -244,6 +298,7 @@ func TestParticipantHandlers_CRUD(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/participants", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -325,6 +380,7 @@ func TestTimingHandlers_CreateRecord(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/timing/record", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", timerAuthHeader(t, svc))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -350,6 +406,7 @@ func TestCheckpointHandlers_CRUD(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/races/"+race.ID.String()+"/checkpoints", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -372,11 +429,13 @@ func TestCheckpointHandlers_CRUD(t *testing.T) {
 	payload, _ = json.Marshal(updateBody)
 	req = httptest.NewRequest(http.MethodPut, "/api/checkpoints/"+created.ID.String(), bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/checkpoints/"+created.ID.String(), nil)
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -402,6 +461,7 @@ func TestCategoryHandlers_CRUD(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/races/"+race.ID.String()+"/categories", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -421,22 +481,26 @@ func TestCategoryHandlers_CRUD(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/categories/"+created.ID.String(), nil)
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestCheckpointHandlers_InvalidInput(t *testing.T) {
-	router, _ := setupHandlerTest(t)
+	router, svc := setupHandlerTest(t)
+	auth := adminAuthHeader(t, svc)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/races/not-a-uuid/checkpoints", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	req = httptest.NewRequest(http.MethodPost, "/api/races/"+uuid.New().String()+"/checkpoints", bytes.NewReader([]byte(`{"name":"X","checkpoint_type":"invalid"}`)))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
@@ -505,6 +569,7 @@ func TestRFIDHandlers_ManualEntry(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/rfid/manual-entry", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", timerAuthHeader(t, svc))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -551,6 +616,7 @@ func TestRFIDHandlers_SyncPending(t *testing.T) {
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/rfid/sync-pending", nil)
+	req.Header.Set("Authorization", timerAuthHeader(t, svc))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -584,6 +650,7 @@ func TestRFIDHandlers_WriteTag(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/rfid/write-tag", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)

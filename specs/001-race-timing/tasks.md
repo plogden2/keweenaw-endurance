@@ -333,14 +333,14 @@
 
 ### Tests for User Story 13
 
-- [ ] T081 [P] [US13] Auth service tests in `backend/internal/services/auth_service_test.go`
-- [ ] T082 [P] [US13] Auth middleware tests in `backend/internal/middleware/middleware_test.go`
+- [X] T081 [P] [US13] Auth service tests in `backend/internal/services/auth_service_test.go`
+- [X] T082 [P] [US13] Auth middleware tests in `backend/internal/middleware/middleware_test.go`
 
 ### Implementation for User Story 13
 
-- [ ] T083 [US13] Implement AuthService with JWT in `backend/internal/services/auth_service.go`
-- [ ] T084 [US13] Implement login handler in `backend/internal/handlers/auth.go`
-- [ ] T085 [US13] Wire JWT and RBAC middleware to write routes in `backend/internal/middleware/middleware.go` and `backend/cmd/server/main.go`
+- [X] T083 [US13] Implement AuthService with JWT in `backend/internal/services/auth_service.go`
+- [X] T084 [US13] Implement login handler in `backend/internal/handlers/auth.go`
+- [X] T085 [US13] Wire JWT and RBAC middleware to write routes in `backend/internal/middleware/middleware.go` and `backend/cmd/server/main.go`
 
 **Checkpoint**: Admin and timer endpoints secured with role-based permissions
 
@@ -350,11 +350,11 @@
 
 **Purpose**: Infrastructure, CI, and validation across all stories
 
-- [ ] T086 [P] Create `.dockerignore` in repository root
-- [ ] T087 [P] Add GitHub Actions CI workflow in `.github/workflows/ci.yml`
-- [ ] T088 [P] Add Redis caching for leaderboard queries in `backend/internal/services/results_service.go`
-- [ ] T089 Run full backend test suite via `docker-compose -f docker-compose.test.yml run backend-test`
-- [ ] T090 [P] Run frontend test suite via `docker-compose -f docker-compose.test.yml run frontend-test`
+- [X] T086 [P] Create `.dockerignore` in repository root
+- [X] T087 [P] Add GitHub Actions CI workflow in `.github/workflows/ci.yml`
+- [X] T088 [P] Add Redis caching for leaderboard queries in `backend/internal/services/results_service.go`
+- [X] T089 Run full backend test suite via `docker-compose -f docker-compose.test.yml run backend-test`
+- [X] T090 [P] Run frontend test suite via `docker-compose -f docker-compose.test.yml run frontend-test`
 
 ---
 

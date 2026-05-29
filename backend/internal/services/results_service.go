@@ -1,14 +1,19 @@
 package services
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/keweenaw-endurance/backend/internal/cache"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"gorm.io/gorm"
 )
+
+const leaderboardCacheTTL = 30 * time.Second
 
 type LeaderboardEntry struct {
 	Position         int       `json:"position"`
@@ -27,11 +32,12 @@ type LiveTimingData struct {
 }
 
 type ResultsService struct {
-	db *gorm.DB
+	db    *gorm.DB
+	cache cache.LeaderboardCache
 }
 
-func NewResultsService(db *gorm.DB) *ResultsService {
-	return &ResultsService{db: db}
+func NewResultsService(db *gorm.DB, leaderboardCache cache.LeaderboardCache) *ResultsService {
+	return &ResultsService{db: db, cache: leaderboardCache}
 }
 
 func (s *ResultsService) GetRaceResults(raceID uuid.UUID) ([]LeaderboardEntry, error) {
@@ -49,6 +55,40 @@ func (s *ResultsService) GetRaceResults(raceID uuid.UUID) ([]LeaderboardEntry, e
 }
 
 func (s *ResultsService) GetLeaderboard(raceID uuid.UUID, categoryID *uuid.UUID) ([]LeaderboardEntry, error) {
+	if s.cache != nil {
+		cacheKey := leaderboardCacheKey(raceID, categoryID)
+		ctx := context.Background()
+		if cached, ok := s.cache.Get(ctx, cacheKey); ok {
+			var entries []LeaderboardEntry
+			if err := cache.UnmarshalJSON(cached, &entries); err == nil {
+				return entries, nil
+			}
+		}
+	}
+
+	entries, err := s.computeLeaderboard(raceID, categoryID)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.cache != nil {
+		cacheKey := leaderboardCacheKey(raceID, categoryID)
+		if payload, err := cache.MarshalJSON(entries); err == nil {
+			_ = s.cache.Set(context.Background(), cacheKey, payload, leaderboardCacheTTL)
+		}
+	}
+
+	return entries, nil
+}
+
+func leaderboardCacheKey(raceID uuid.UUID, categoryID *uuid.UUID) string {
+	if categoryID == nil {
+		return fmt.Sprintf("leaderboard:%s:all", raceID)
+	}
+	return fmt.Sprintf("leaderboard:%s:%s", raceID, *categoryID)
+}
+
+func (s *ResultsService) computeLeaderboard(raceID uuid.UUID, categoryID *uuid.UUID) ([]LeaderboardEntry, error) {
 	results, err := s.GetRaceResults(raceID)
 	if err != nil {
 		return nil, err

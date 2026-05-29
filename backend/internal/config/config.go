@@ -12,7 +12,12 @@ type Config struct {
 	Database    DatabaseConfig
 	Redis       RedisConfig
 	JWT         JWTConfig
+	Auth        AuthConfig
 	Security    SecurityConfig
+}
+
+type AuthConfig struct {
+	Users string
 }
 
 type DatabaseConfig struct {
@@ -69,6 +74,9 @@ func Load() (*Config, error) {
 			Secret:           getEnv("JWT_SECRET", "change-this-secret-in-production"),
 			AccessTokenTTL: getEnvAsDuration("JWT_ACCESS_TOKEN_TTL", time.Hour*24),
 			RefreshTokenTTL: getEnvAsDuration("JWT_REFRESH_TOKEN_TTL", time.Hour*24*7),
+		},
+		Auth: AuthConfig{
+			Users: getEnv("AUTH_USERS", "admin:admin:admin,timer:timer:timer,viewer:viewer:viewer"),
 		},
 		Security: SecurityConfig{
 			RateLimitRequests: getEnvAsInt("RATE_LIMIT_REQUESTS", 100),

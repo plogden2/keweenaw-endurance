@@ -1,16 +1,24 @@
 package middleware
 
 import (
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/keweenaw-endurance/backend/internal/services"
+)
+
+const (
+	ContextUserID   = "user_id"
+	ContextUsername = "username"
+	ContextRole     = "role"
 )
 
 // CORS middleware for handling cross-origin requests
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		
+
 		// Allow all origins in development, configure for production
 		allowedOrigins := []string{
 			"http://localhost:3000",
@@ -18,7 +26,7 @@ func CORS() gin.HandlerFunc {
 			"https://localhost:3000",
 			"https://localhost:3001",
 		}
-		
+
 		// Check if origin is allowed
 		isAllowed := false
 		for _, allowed := range allowedOrigins {
@@ -27,20 +35,20 @@ func CORS() gin.HandlerFunc {
 				break
 			}
 		}
-		
+
 		if isAllowed || origin == "" {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 		}
-		
+
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
-		
+
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
 		}
-		
+
 		c.Next()
 	}
 }
@@ -48,13 +56,12 @@ func CORS() gin.HandlerFunc {
 // Security middleware for adding security headers
 func Security() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Security headers
 		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
 		c.Writer.Header().Set("X-Frame-Options", "DENY")
 		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
 		c.Writer.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		c.Writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'")
-		
+
 		c.Next()
 	}
 }
@@ -63,25 +70,67 @@ func Security() gin.HandlerFunc {
 func RateLimit(requests int, window int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Simple rate limiting - in production, use Redis or similar
-		// For now, this is a placeholder that allows all requests
 		c.Next()
 	}
 }
 
-// Auth middleware for JWT authentication
-func Auth() gin.HandlerFunc {
+func bearerToken(c *gin.Context) string {
+	auth := c.GetHeader("Authorization")
+	if auth == "" {
+		return ""
+	}
+	const prefix = "Bearer "
+	if !strings.HasPrefix(auth, prefix) {
+		return ""
+	}
+	return strings.TrimSpace(auth[len(prefix):])
+}
+
+// JWTAuth validates JWT tokens and stores claims on the request context.
+func JWTAuth(auth *services.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Placeholder for JWT authentication
-		// In production, validate JWT token here
+		token := bearerToken(c)
+		if token == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+
+		claims, err := auth.ValidateToken(token)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			return
+		}
+
+		c.Set(ContextUserID, claims.UserID)
+		c.Set(ContextUsername, claims.Username)
+		c.Set(ContextRole, claims.Role)
 		c.Next()
 	}
 }
 
-// AdminAuth middleware for admin-only endpoints
+// RequireRoles ensures the authenticated user has one of the allowed roles.
+func RequireRoles(roles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get(ContextRole)
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		roleStr, ok := role.(string)
+		if !ok || !services.HasRole(roleStr, roles...) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// Auth is an alias for JWTAuth for backward compatibility in tests.
+func Auth(auth *services.AuthService) gin.HandlerFunc {
+	return JWTAuth(auth)
+}
+
+// AdminAuth requires an admin role after JWTAuth.
 func AdminAuth() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// Placeholder for admin authentication
-		// In production, check user role here
-		c.Next()
-	}
+	return RequireRoles(services.RoleAdmin, services.RoleOwner)
 }
