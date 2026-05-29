@@ -9,17 +9,6 @@ import (
 	"github.com/keweenaw-endurance/backend/internal/models"
 )
 
-type createParticipantRequest struct {
-	RaceID     string `json:"race_id" binding:"required"`
-	BibNumber  string `json:"bib_number" binding:"required"`
-	FirstName  string `json:"first_name" binding:"required"`
-	LastName   string `json:"last_name" binding:"required"`
-	Gender     string `json:"gender"`
-	Age        int    `json:"age"`
-	RFIDTagUID string `json:"rfid_tag_uid"`
-	Status     string `json:"status"`
-}
-
 func (h *Handlers) GetParticipants(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
@@ -102,21 +91,36 @@ func (h *Handlers) UpdateParticipant(c *gin.Context) {
 		return
 	}
 
-	var req createParticipantRequest
+	var req updateParticipantRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	participant, err := h.services.Participants.UpdateParticipant(id, &models.Participant{
-		BibNumber:  req.BibNumber,
-		FirstName:  req.FirstName,
-		LastName:   req.LastName,
-		Gender:     req.Gender,
-		Age:        req.Age,
-		RFIDTagUID: req.RFIDTagUID,
-		Status:     req.Status,
-	})
+	update := &models.Participant{}
+	if req.BibNumber != nil {
+		update.BibNumber = *req.BibNumber
+	}
+	if req.FirstName != nil {
+		update.FirstName = *req.FirstName
+	}
+	if req.LastName != nil {
+		update.LastName = *req.LastName
+	}
+	if req.Gender != nil {
+		update.Gender = *req.Gender
+	}
+	if req.Age != nil {
+		update.Age = *req.Age
+	}
+	if req.RFIDTagUID != nil {
+		update.RFIDTagUID = *req.RFIDTagUID
+	}
+	if req.Status != nil {
+		update.Status = *req.Status
+	}
+
+	participant, err := h.services.Participants.UpdateParticipant(id, update)
 	if err != nil {
 		respondServiceError(c, err)
 		return

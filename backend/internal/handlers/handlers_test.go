@@ -93,13 +93,18 @@ func TestEventHandlers_CRUD(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
-	updateBody := map[string]string{"name": "Updated Fest", "event_date": created.EventDate.Format("2006-01-02")}
+	updateBody := map[string]string{"name": "Updated Fest"}
 	payload, _ = json.Marshal(updateBody)
 	req = httptest.NewRequest(http.MethodPut, "/api/events/"+created.ID.String(), bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
+
+	var updated models.Event
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updated))
+	assert.Equal(t, "Updated Fest", updated.Name)
+	assert.Equal(t, "Houghton, MI", updated.Location)
 
 	req = httptest.NewRequest(http.MethodDelete, "/api/events/"+created.ID.String(), nil)
 	w = httptest.NewRecorder()
@@ -110,6 +115,40 @@ func TestEventHandlers_CRUD(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestEventHandlers_PartialUpdate(t *testing.T) {
+	router, _ := setupHandlerTest(t)
+
+	body := map[string]string{
+		"name":       "Original Name",
+		"event_date": time.Now().AddDate(0, 2, 0).Format("2006-01-02"),
+		"location":   "Calumet, MI",
+	}
+	payload, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/events", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var created models.Event
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+
+	statusOnly := map[string]string{"status": "active"}
+	payload, _ = json.Marshal(statusOnly)
+	req = httptest.NewRequest(http.MethodPut, "/api/events/"+created.ID.String(), bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var updated models.Event
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updated))
+	assert.Equal(t, "active", updated.Status)
+	assert.Equal(t, "Original Name", updated.Name)
+	assert.Equal(t, "Calumet, MI", updated.Location)
 }
 
 func TestEventHandlers_InvalidInput(t *testing.T) {

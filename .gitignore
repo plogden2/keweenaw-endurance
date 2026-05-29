@@ -42,3 +42,5 @@ frontend/coverage/
 
 # Spec Kit
 spec-kit/
+.specify/extensions/.cache/
+.specify/extensions/.backup/

@@ -11,15 +11,6 @@ import (
 	"github.com/keweenaw-endurance/backend/internal/services"
 )
 
-type createEventRequest struct {
-	Name        string `json:"name" binding:"required"`
-	Description string `json:"description"`
-	EventDate   string `json:"event_date" binding:"required"`
-	Location    string `json:"location"`
-	WebsiteURL  string `json:"website_url"`
-	Status      string `json:"status"`
-}
-
 func (h *Handlers) GetEvents(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
@@ -90,21 +81,30 @@ func (h *Handlers) UpdateEvent(c *gin.Context) {
 		return
 	}
 
-	var req createEventRequest
+	var req updateEventRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	update := &models.Event{
-		Name:        req.Name,
-		Description: req.Description,
-		Location:    req.Location,
-		WebsiteURL:  req.WebsiteURL,
-		Status:      req.Status,
+	update := &models.Event{}
+	if req.Name != nil {
+		update.Name = *req.Name
 	}
-	if req.EventDate != "" {
-		eventDate, err := parseDate(req.EventDate)
+	if req.Description != nil {
+		update.Description = *req.Description
+	}
+	if req.Location != nil {
+		update.Location = *req.Location
+	}
+	if req.WebsiteURL != nil {
+		update.WebsiteURL = *req.WebsiteURL
+	}
+	if req.Status != nil {
+		update.Status = *req.Status
+	}
+	if req.EventDate != nil {
+		eventDate, err := parseDate(*req.EventDate)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event_date format, use YYYY-MM-DD"})
 			return

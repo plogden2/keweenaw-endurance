@@ -44,9 +44,9 @@ CREATE TABLE participants (
     bib_number VARCHAR(20) NOT NULL,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
-    gender VARCHAR(10) CHECK (gender IN ('male', 'female', 'other')),
+    gender VARCHAR(10) CHECK (gender IS NULL OR gender IN ('male', 'female', 'other')),
     age INTEGER,
-    rfid_tag_uid VARCHAR(100) UNIQUE,
+    rfid_tag_uid VARCHAR(100),
     status VARCHAR(50) CHECK (status IN ('registered', 'started', 'finished', 'dnf', 'dns')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -92,6 +92,9 @@ CREATE TABLE categories (
 CREATE INDEX idx_events_status ON events(status);
 CREATE INDEX idx_races_event_id ON races(event_id);
 CREATE INDEX idx_participants_race_id ON participants(race_id);
+CREATE UNIQUE INDEX idx_participants_race_bib ON participants(race_id, bib_number);
+CREATE UNIQUE INDEX idx_participants_rfid_tag_uid ON participants(rfid_tag_uid)
+    WHERE rfid_tag_uid IS NOT NULL AND rfid_tag_uid <> '';
 CREATE INDEX idx_timing_checkpoints_race_id ON timing_checkpoints(race_id);
 CREATE INDEX idx_timing_records_participant_id ON timing_records(participant_id);
 CREATE INDEX idx_timing_records_checkpoint_id ON timing_records(checkpoint_id);

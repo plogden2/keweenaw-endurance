@@ -98,16 +98,8 @@ func (s *ParticipantService) CreateParticipant(input *models.Participant) (*mode
 		return nil, fmt.Errorf("%w: bib_number must be unique within race", ErrInvalidParticipantInput)
 	}
 
-	if input.RFIDTagUID != "" {
-		var rfidCount int64
-		if err := s.db.Model(&models.Participant{}).
-			Where("rf_id_tag_uid = ?", input.RFIDTagUID).
-			Count(&rfidCount).Error; err != nil {
-			return nil, err
-		}
-		if rfidCount > 0 {
-			return nil, fmt.Errorf("%w: rfid_tag_uid must be unique", ErrInvalidParticipantInput)
-		}
+	if err := s.ensureRFIDAvailable(input.RFIDTagUID, nil); err != nil {
+		return nil, err
 	}
 
 	participant := *input
@@ -155,7 +147,10 @@ func (s *ParticipantService) UpdateParticipant(id uuid.UUID, input *models.Parti
 	if input.Age > 0 {
 		participant.Age = input.Age
 	}
-	if input.RFIDTagUID != "" {
+	if input.RFIDTagUID != "" && input.RFIDTagUID != participant.RFIDTagUID {
+		if err := s.ensureRFIDAvailable(input.RFIDTagUID, &id); err != nil {
+			return nil, err
+		}
 		participant.RFIDTagUID = input.RFIDTagUID
 	}
 	if input.Status != "" {
@@ -183,6 +178,26 @@ func (s *ParticipantService) DeleteParticipant(id uuid.UUID) error {
 	}
 	if result.RowsAffected == 0 {
 		return ErrParticipantNotFound
+	}
+	return nil
+}
+
+func (s *ParticipantService) ensureRFIDAvailable(rfid string, excludeID *uuid.UUID) error {
+	if rfid == "" {
+		return nil
+	}
+
+	query := s.db.Model(&models.Participant{}).Where("rf_id_tag_uid = ?", rfid)
+	if excludeID != nil {
+		query = query.Where("id != ?", *excludeID)
+	}
+
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return fmt.Errorf("%w: rfid_tag_uid must be unique", ErrInvalidParticipantInput)
 	}
 	return nil
 }
