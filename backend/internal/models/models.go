@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,7 +10,7 @@ import (
 
 // Event represents a race event
 type Event struct {
-	ID          uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ID          uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
 	Name        string    `gorm:"type:varchar(255);not null" json:"name"`
 	Description string    `gorm:"type:text" json:"description"`
 	EventDate   time.Time `gorm:"type:date;not null" json:"event_date"`
@@ -25,7 +26,7 @@ type Event struct {
 
 // Race represents a race within an event
 type Race struct {
-	ID             uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ID             uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
 	EventID        uuid.UUID `gorm:"type:uuid;not null" json:"event_id"`
 	Name           string    `gorm:"type:varchar(255);not null" json:"name"`
 	RaceType       string    `gorm:"type:varchar(50);not null;check:race_type IN ('time_based','lap_based')" json:"race_type"`
@@ -43,14 +44,14 @@ type Race struct {
 
 // Participant represents a race participant
 type Participant struct {
-	ID         uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ID         uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
 	RaceID     uuid.UUID `gorm:"type:uuid;not null" json:"race_id"`
 	BibNumber  string    `gorm:"type:varchar(20);not null" json:"bib_number"`
 	FirstName  string    `gorm:"type:varchar(100);not null" json:"first_name"`
 	LastName   string    `gorm:"type:varchar(100);not null" json:"last_name"`
-	Gender     string    `gorm:"type:varchar(10);check:gender IN ('male','female','other')" json:"gender"`
+	Gender     string    `gorm:"type:varchar(10)" json:"gender"`
 	Age        int       `gorm:"type:integer" json:"age"`
-	RFIDTagUID string    `gorm:"type:varchar(100);unique" json:"rfid_tag_uid"`
+	RFIDTagUID string    `gorm:"type:varchar(100)" json:"rfid_tag_uid"`
 	Status     string    `gorm:"type:varchar(50);not null;check:status IN ('registered','started','finished','dnf','dns')" json:"status"`
 	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
 	
@@ -61,7 +62,7 @@ type Participant struct {
 
 // TimingCheckpoint represents a timing checkpoint in a race
 type TimingCheckpoint struct {
-	ID                uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ID                uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
 	RaceID            uuid.UUID `gorm:"type:uuid;not null" json:"race_id"`
 	Name              string    `gorm:"type:varchar(255);not null" json:"name"`
 	CheckpointType    string    `gorm:"type:varchar(50);not null;check:checkpoint_type IN ('start','finish','intermediate')" json:"checkpoint_type"`
@@ -77,7 +78,7 @@ type TimingCheckpoint struct {
 
 // TimingRecord represents a timing record for a participant at a checkpoint
 type TimingRecord struct {
-	ID              uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ID              uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
 	ParticipantID   uuid.UUID `gorm:"type:uuid;not null" json:"participant_id"`
 	CheckpointID    uuid.UUID `gorm:"type:uuid;not null" json:"checkpoint_id"`
 	Timestamp       time.Time `gorm:"type:timestamp;not null" json:"timestamp"`
@@ -93,7 +94,7 @@ type TimingRecord struct {
 
 // Category represents a participant category for race results
 type Category struct {
-	ID            uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	ID            uuid.UUID `gorm:"type:uuid;primary_key" json:"id"`
 	RaceID        uuid.UUID `gorm:"type:uuid;not null" json:"race_id"`
 	Name          string    `gorm:"type:varchar(255);not null" json:"name"`
 	CategoryType  string    `gorm:"type:varchar(50);not null;check:category_type IN ('overall','male','female','age_group','custom')" json:"category_type"`
@@ -125,6 +126,21 @@ func (r *Race) BeforeCreate(tx *gorm.DB) error {
 func (p *Participant) BeforeCreate(tx *gorm.DB) error {
 	if p.ID == uuid.Nil {
 		p.ID = uuid.New()
+	}
+	return p.validate()
+}
+
+func (p *Participant) BeforeSave(tx *gorm.DB) error {
+	return p.validate()
+}
+
+func (p *Participant) validate() error {
+	if p.Gender != "" {
+		switch p.Gender {
+		case "male", "female", "other":
+		default:
+			return errors.New("invalid gender")
+		}
 	}
 	return nil
 }

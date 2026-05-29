@@ -138,6 +138,8 @@ func split(s, separator string) []string {
 	}
 	if start < len(s) {
 		result = append(result, s[start:])
+	} else if len(s) > 0 && len(s) >= len(separator) && s[len(s)-len(separator):] == separator {
+		result = append(result, "")
 	}
 	return result
 }

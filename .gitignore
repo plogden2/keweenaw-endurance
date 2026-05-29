@@ -1,4 +1,44 @@
-uv.exe
-uvw.exe
-uvx.exe
-frontend/node_modules/**
+# Dependencies
+node_modules/
+dist/
+build/
+*.log
+.env
+.env.*
+!.env.example
+
+# Go
+backend/vendor/
+*.exe
+*.test
+*.out
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Docker
+postgres_data/
+redis_data/
+
+# IDE
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
+
+# Coverage
+coverage/
+*.coverprofile
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+
+# Spec Kit
+spec-kit/
