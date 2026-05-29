@@ -189,15 +189,15 @@
 
 ### Tests for User Story 7
 
-- [ ] T049 [P] [US7] API client unit tests in `frontend/src/services/api.test.js`
-- [ ] T050 [P] [US7] Pinia store tests in `frontend/src/stores/events.test.js`
+- [X] T049 [P] [US7] API client unit tests in `frontend/src/services/api.test.js`
+- [X] T050 [P] [US7] Pinia store tests in `frontend/src/stores/events.test.js`
 
 ### Implementation for User Story 7
 
-- [ ] T051 [P] [US7] Create Axios API client in `frontend/src/services/api.js`
-- [ ] T052 [P] [US7] Create Pinia stores for events, races, and participants in `frontend/src/stores/events.js`, `frontend/src/stores/races.js`, and `frontend/src/stores/participants.js`
-- [ ] T053 [US7] Register Pinia in `frontend/src/main.js`
-- [ ] T054 [P] [US7] Configure Vitest in `frontend/vitest.config.js`
+- [X] T051 [P] [US7] Create Axios API client in `frontend/src/services/api.js`
+- [X] T052 [P] [US7] Create Pinia stores for events, races, and participants in `frontend/src/stores/events.js`, `frontend/src/stores/races.js`, and `frontend/src/stores/participants.js`
+- [X] T053 [US7] Register Pinia in `frontend/src/main.js`
+- [X] T054 [P] [US7] Configure Vitest in `frontend/vitest.config.js`
 
 **Checkpoint**: Frontend can fetch and hold race data from the backend API
 
@@ -211,16 +211,16 @@
 
 ### Tests for User Story 8
 
-- [ ] T055 [P] [US8] Timing page component tests in `frontend/src/views/Timing.test.js`
-- [ ] T056 [P] [US8] EventDetails component tests in `frontend/src/views/EventDetails.test.js`
-- [ ] T057 [P] [US8] RaceDetails component tests in `frontend/src/views/RaceDetails.test.js`
+- [X] T055 [P] [US8] Timing page component tests in `frontend/src/views/Timing.test.js`
+- [X] T056 [P] [US8] EventDetails component tests in `frontend/src/views/EventDetails.test.js`
+- [X] T057 [P] [US8] RaceDetails component tests in `frontend/src/views/RaceDetails.test.js`
 
 ### Implementation for User Story 8
 
-- [ ] T058 [US8] Wire `Timing.vue` to events API in `frontend/src/views/Timing.vue`
-- [ ] T059 [P] [US8] Create `EventDetails.vue` in `frontend/src/views/EventDetails.vue`
-- [ ] T060 [P] [US8] Create `RaceDetails.vue` with leaderboard tab in `frontend/src/views/RaceDetails.vue`
-- [ ] T061 [P] [US8] Create shared `AppHeader.vue` with Inferior Timing logo in `frontend/src/components/AppHeader.vue`
+- [X] T058 [US8] Wire `Timing.vue` to events API in `frontend/src/views/Timing.vue`
+- [X] T059 [P] [US8] Create `EventDetails.vue` in `frontend/src/views/EventDetails.vue`
+- [X] T060 [P] [US8] Create `RaceDetails.vue` with leaderboard tab in `frontend/src/views/RaceDetails.vue`
+- [X] T061 [P] [US8] Create shared `AppHeader.vue` with Inferior Timing logo in `frontend/src/components/AppHeader.vue`
 
 **Checkpoint**: Timing index and detail pages functional end-to-end with backend
 
