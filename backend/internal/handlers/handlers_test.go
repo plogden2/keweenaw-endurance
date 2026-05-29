@@ -1,313 +1,250 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/keweenaw-endurance/backend/internal/config"
+	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/services"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
-func setupTestRouter() *gin.Engine {
+func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&models.Event{},
+		&models.Race{},
+		&models.Participant{},
+		&models.TimingCheckpoint{},
+		&models.TimingRecord{},
+		&models.Category{},
+	))
+
+	svc := services.NewServices(db, &config.Config{Environment: "test"})
+	h := NewHandlers(svc)
+
 	router := gin.New()
-	return router
+	api := router.Group("/api")
+	{
+		api.GET("/events", h.GetEvents)
+		api.POST("/events", h.CreateEvent)
+		api.GET("/events/:id", h.GetEvent)
+		api.PUT("/events/:id", h.UpdateEvent)
+		api.DELETE("/events/:id", h.DeleteEvent)
+
+		api.GET("/races", h.GetRaces)
+		api.POST("/races", h.CreateRace)
+		api.GET("/races/:id", h.GetRace)
+		api.PUT("/races/:id", h.UpdateRace)
+		api.DELETE("/races/:id", h.DeleteRace)
+
+		api.GET("/participants", h.GetParticipants)
+		api.POST("/participants", h.CreateParticipant)
+		api.GET("/participants/:id", h.GetParticipant)
+		api.PUT("/participants/:id", h.UpdateParticipant)
+		api.DELETE("/participants/:id", h.DeleteParticipant)
+	}
+
+	return router, svc
 }
 
-func TestHandlers(t *testing.T) {
-	// Create mock services (will be implemented later)
-	mockServices := &services.Services{}
-	handlers := NewHandlers(mockServices)
-	
-	t.Run("GetEvents", func(t *testing.T) {
-		router := setupTestRouter()
-		router.GET("/api/events", handlers.GetEvents)
-		
-		req := httptest.NewRequest("GET", "/api/events", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "GetEvents - Not implemented yet")
-	})
-	
-	t.Run("CreateEvent", func(t *testing.T) {
-		router := setupTestRouter()
-		router.POST("/api/events", handlers.CreateEvent)
-		
-		req := httptest.NewRequest("POST", "/api/events", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "CreateEvent - Not implemented yet")
-	})
-	
-	t.Run("GetEvent", func(t *testing.T) {
-		router := setupTestRouter()
-		router.GET("/api/events/:id", handlers.GetEvent)
-		
-		req := httptest.NewRequest("GET", "/api/events/test-id", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "GetEvent - Not implemented yet")
-	})
-	
-	t.Run("UpdateEvent", func(t *testing.T) {
-		router := setupTestRouter()
-		router.PUT("/api/events/:id", handlers.UpdateEvent)
-		
-		req := httptest.NewRequest("PUT", "/api/events/test-id", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "UpdateEvent - Not implemented yet")
-	})
-	
-	t.Run("DeleteEvent", func(t *testing.T) {
-		router := setupTestRouter()
-		router.DELETE("/api/events/:id", handlers.DeleteEvent)
-		
-		req := httptest.NewRequest("DELETE", "/api/events/test-id", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "DeleteEvent - Not implemented yet")
-	})
+func TestEventHandlers_CRUD(t *testing.T) {
+	router, _ := setupHandlerTest(t)
+
+	body := map[string]string{
+		"name":       "Keweenaw Trail Fest",
+		"event_date": time.Now().AddDate(0, 2, 0).Format("2006-01-02"),
+		"location":   "Houghton, MI",
+		"status":     "upcoming",
+	}
+	payload, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/events", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var created models.Event
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+	assert.Equal(t, "Keweenaw Trail Fest", created.Name)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/events/"+created.ID.String(), nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/events", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	updateBody := map[string]string{"name": "Updated Fest"}
+	payload, _ = json.Marshal(updateBody)
+	req = httptest.NewRequest(http.MethodPut, "/api/events/"+created.ID.String(), bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var updated models.Event
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updated))
+	assert.Equal(t, "Updated Fest", updated.Name)
+	assert.Equal(t, "Houghton, MI", updated.Location)
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/events/"+created.ID.String(), nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/events/"+created.ID.String(), nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestRaceHandlers(t *testing.T) {
-	mockServices := &services.Services{}
-	handlers := NewHandlers(mockServices)
-	
-	t.Run("GetRaces", func(t *testing.T) {
-		router := setupTestRouter()
-		router.GET("/api/races", handlers.GetRaces)
-		
-		req := httptest.NewRequest("GET", "/api/races", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "GetRaces - Not implemented yet")
-	})
-	
-	t.Run("CreateRace", func(t *testing.T) {
-		router := setupTestRouter()
-		router.POST("/api/races", handlers.CreateRace)
-		
-		req := httptest.NewRequest("POST", "/api/races", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "CreateRace - Not implemented yet")
-	})
-	
-	t.Run("GetRace", func(t *testing.T) {
-		router := setupTestRouter()
-		router.GET("/api/races/:id", handlers.GetRace)
-		
-		req := httptest.NewRequest("GET", "/api/races/test-race-id", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "GetRace - Not implemented yet")
-	})
+func TestEventHandlers_PartialUpdate(t *testing.T) {
+	router, _ := setupHandlerTest(t)
+
+	body := map[string]string{
+		"name":       "Original Name",
+		"event_date": time.Now().AddDate(0, 2, 0).Format("2006-01-02"),
+		"location":   "Calumet, MI",
+	}
+	payload, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/events", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var created models.Event
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+
+	statusOnly := map[string]string{"status": "active"}
+	payload, _ = json.Marshal(statusOnly)
+	req = httptest.NewRequest(http.MethodPut, "/api/events/"+created.ID.String(), bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var updated models.Event
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updated))
+	assert.Equal(t, "active", updated.Status)
+	assert.Equal(t, "Original Name", updated.Name)
+	assert.Equal(t, "Calumet, MI", updated.Location)
 }
 
-func TestParticipantHandlers(t *testing.T) {
-	mockServices := &services.Services{}
-	handlers := NewHandlers(mockServices)
-	
-	t.Run("GetParticipants", func(t *testing.T) {
-		router := setupTestRouter()
-		router.GET("/api/participants", handlers.GetParticipants)
-		
-		req := httptest.NewRequest("GET", "/api/participants", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "GetParticipants - Not implemented yet")
-	})
-	
-	t.Run("CreateParticipant", func(t *testing.T) {
-		router := setupTestRouter()
-		router.POST("/api/participants", handlers.CreateParticipant)
-		
-		req := httptest.NewRequest("POST", "/api/participants", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "CreateParticipant - Not implemented yet")
-	})
+func TestEventHandlers_InvalidInput(t *testing.T) {
+	router, _ := setupHandlerTest(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/events", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/events/not-a-uuid", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-func TestTimingHandlers(t *testing.T) {
-	mockServices := &services.Services{}
-	handlers := NewHandlers(mockServices)
-	
-	t.Run("GetLiveTiming", func(t *testing.T) {
-		router := setupTestRouter()
-		router.GET("/api/timing/live/:raceId", handlers.GetLiveTiming)
-		
-		req := httptest.NewRequest("GET", "/api/timing/live/test-race-id", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "GetLiveTiming - Not implemented yet")
+func TestRaceHandlers_CRUD(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Parent Event", EventDate: time.Now().AddDate(0, 1, 0),
 	})
-	
-	t.Run("CreateTimingRecord", func(t *testing.T) {
-		router := setupTestRouter()
-		router.POST("/api/timing/record", handlers.CreateTimingRecord)
-		
-		req := httptest.NewRequest("POST", "/api/timing/record", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "CreateTimingRecord - Not implemented yet")
-	})
-	
-	t.Run("GetRaceResults", func(t *testing.T) {
-		router := setupTestRouter()
-		router.GET("/api/timing/results/:raceId", handlers.GetRaceResults)
-		
-		req := httptest.NewRequest("GET", "/api/timing/results/test-race-id", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "GetRaceResults - Not implemented yet")
-	})
-	
-	t.Run("GetLeaderboard", func(t *testing.T) {
-		router := setupTestRouter()
-		router.GET("/api/timing/leaderboard/:raceId", handlers.GetLeaderboard)
-		
-		req := httptest.NewRequest("GET", "/api/timing/leaderboard/test-race-id", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "GetLeaderboard - Not implemented yet")
-	})
+	require.NoError(t, err)
+
+	body := map[string]interface{}{
+		"event_id":    event.ID.String(),
+		"name":        "Marathon",
+		"race_type":   "time_based",
+		"distance_km": 42.195,
+	}
+	payload, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/races", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var created models.Race
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+
+	req = httptest.NewRequest(http.MethodGet, "/api/races?event_id="+event.ID.String(), nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestRFIDHandlers(t *testing.T) {
-	mockServices := &services.Services{}
-	handlers := NewHandlers(mockServices)
-	
-	t.Run("WriteRFIDTag", func(t *testing.T) {
-		router := setupTestRouter()
-		router.POST("/api/rfid/write-tag", handlers.WriteRFIDTag)
-		
-		req := httptest.NewRequest("POST", "/api/rfid/write-tag", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "WriteRFIDTag - Not implemented yet")
+func TestParticipantHandlers_CRUD(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Event", EventDate: time.Now().AddDate(0, 1, 0),
 	})
-	
-	t.Run("ScanRFIDTag", func(t *testing.T) {
-		router := setupTestRouter()
-		router.GET("/api/rfid/scan/:uid", handlers.ScanRFIDTag)
-		
-		req := httptest.NewRequest("GET", "/api/rfid/scan/test-uid", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "ScanRFIDTag - Not implemented yet")
+	require.NoError(t, err)
+	race, err := svc.Races.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race", RaceType: "time_based", DistanceKm: 10,
 	})
-	
-	t.Run("ManualTimingEntry", func(t *testing.T) {
-		router := setupTestRouter()
-		router.POST("/api/rfid/manual-entry", handlers.ManualTimingEntry)
-		
-		req := httptest.NewRequest("POST", "/api/rfid/manual-entry", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "ManualTimingEntry - Not implemented yet")
-	})
-	
-	t.Run("GetSyncStatus", func(t *testing.T) {
-		router := setupTestRouter()
-		router.GET("/api/rfid/sync-status", handlers.GetSyncStatus)
-		
-		req := httptest.NewRequest("GET", "/api/rfid/sync-status", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "GetSyncStatus - Not implemented yet")
-	})
+	require.NoError(t, err)
+
+	body := map[string]string{
+		"race_id":    race.ID.String(),
+		"bib_number": "007",
+		"first_name": "James",
+		"last_name":  "Bond",
+	}
+	payload, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/participants", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var created models.Participant
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+	assert.Equal(t, "007", created.BibNumber)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/participants/"+created.ID.String(), nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
 }
 
-func TestHandlersWithMiddleware(t *testing.T) {
-	mockServices := &services.Services{}
-	handlers := NewHandlers(mockServices)
-	
-	router := gin.New()
-	
-	// Add middleware
-	router.Use(gin.Logger())
-	router.Use(gin.Recovery())
-	
-	// Add routes
-	router.GET("/api/events", handlers.GetEvents)
-	router.POST("/api/events", handlers.CreateEvent)
-	
-	// Test with middleware
-	t.Run("GetEventsWithMiddleware", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/events", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "GetEvents - Not implemented yet")
-	})
-	
-	t.Run("CreateEventWithMiddleware", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/api/events", nil)
-		w := httptest.NewRecorder()
-		
-		router.ServeHTTP(w, req)
-		
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "CreateEvent - Not implemented yet")
-	})
+func TestTimingHandlers_NotImplemented(t *testing.T) {
+	router, _ := setupHandlerTest(t)
+
+	gin.SetMode(gin.TestMode)
+	h := NewHandlers(&services.Services{})
+	r := gin.New()
+	r.GET("/api/timing/live/:raceId", h.GetLiveTiming)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/timing/live/"+uuid.New().String(), nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotImplemented, w.Code)
+
+	_ = router
 }
