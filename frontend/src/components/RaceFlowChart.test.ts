@@ -10,7 +10,12 @@ import type { TimingRecord } from '@/types/models'
 
 vi.mock('chart.js', () => ({
   Chart: Object.assign(
-    vi.fn(() => ({ destroy: vi.fn() })),
+    vi.fn((_canvas, config) => ({
+      destroy: vi.fn(),
+      update: vi.fn(),
+      data: config?.data ?? { datasets: [] },
+      options: config?.options ?? {},
+    })),
     { register: vi.fn() },
   ),
   LineController: vi.fn(),
@@ -673,5 +678,38 @@ describe('RaceFlowChart.vue', () => {
 
     expect(wrapper.find('[data-testid="race-flow-legend-tooltip"]').exists()).toBe(false)
     wrapper.unmount()
+  })
+
+  it('highlights participant line when hovering a legend item', async () => {
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: sampleRecords },
+    })
+
+    const wrapper = mount(RaceFlowChart, {
+      props: { raceId: 'race-1' },
+    })
+    await flushPromises()
+
+    const chartInstance = (Chart as unknown as Mock).mock.results.at(-1)?.value as {
+      update: Mock
+      data: { datasets: Array<{ participantId?: string; borderWidth: number }> }
+    }
+    const initialWidths = chartInstance.data.datasets.map((dataset) => dataset.borderWidth)
+    expect(initialWidths.every((width) => width === 2)).toBe(true)
+
+    await wrapper.find('.legend-item').trigger('mouseenter', { clientX: 100, clientY: 200 })
+    await flushPromises()
+
+    expect(wrapper.vm.hoveredParticipantId).toBe('p1')
+    expect(chartInstance.update).toHaveBeenCalled()
+
+    const highlightedDataset = chartInstance.data.datasets.find(
+      (dataset) => dataset.participantId === 'p1',
+    )
+    const dimmedDataset = chartInstance.data.datasets.find(
+      (dataset) => dataset.participantId === 'p2',
+    )
+    expect(highlightedDataset?.borderWidth).toBe(4)
+    expect(dimmedDataset?.borderWidth).toBe(1)
   })
 })

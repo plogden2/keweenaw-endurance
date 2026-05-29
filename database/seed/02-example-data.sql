@@ -38,7 +38,7 @@ DELETE FROM races WHERE id IN (
 );
 DELETE FROM events WHERE id = '11111111-1111-4111-8111-111111111101';
 
-INSERT INTO events (id, name, description, event_date, location, website_url, status)
+INSERT INTO events (id, name, description, event_date, location, website_url, logo_url, status)
 VALUES (
     '11111111-1111-4111-8111-111111111101',
     '2025 Copper Harbor Trails Fest - XC MTB',
@@ -46,6 +46,7 @@ VALUES (
     '2025-08-30',
     'Copper Harbor, MI',
     'https://my.raceresult.com/356809/',
+    '/images/chtf-2025-logo.png',
     'completed'
 );
 

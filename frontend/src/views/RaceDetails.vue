@@ -57,6 +57,7 @@
             :event-title="certificateData.eventTitle"
             :event-name="certificateData.eventName"
             :event-date="certificateData.eventDate"
+            :logo-url="certificateData.logoUrl"
             :participant-name="certificateData.participantName"
             :location="certificateData.location"
             :bib-number="certificateData.bibNumber"
@@ -69,7 +70,8 @@
             :category-rank="certificateData.categoryRank"
             :gender-rank-label="certificateData.genderRankLabel"
             :category-rank-label="certificateData.categoryRankLabel"
-            :website-url="certificateData.websiteUrl"
+            :leaderboard-to="leaderboardRoute"
+            @view-leaderboard="clearSelectedParticipant"
           />
 
           <ParticipantFlowChart
@@ -96,6 +98,7 @@
                 <th>Pos</th>
                 <th>Bib</th>
                 <th>Name</th>
+                <th>Location</th>
                 <th>Result</th>
                 <th>Status</th>
               </tr>
@@ -110,6 +113,7 @@
                 <td>{{ entry.position }}</td>
                 <td>{{ entry.bib_number }}</td>
                 <td>{{ entry.first_name }} {{ entry.last_name }}</td>
+                <td>{{ entry.location || '—' }}</td>
                 <td>{{ formatResult(entry) }}</td>
                 <td>{{ entry.status }}</td>
               </tr>
@@ -201,6 +205,10 @@ const unitsStore = useUnitsStore()
 
 const eventId = computed(() => String(route.params.eventId))
 const raceId = computed(() => String(route.params.raceId))
+const leaderboardRoute = computed(() => ({
+  name: 'race-details',
+  params: { eventId: eventId.value, raceId: raceId.value },
+}))
 const activeTab = ref('leaderboard')
 const leaderboard = ref<LeaderboardEntry[]>([])
 const leaderboardLoading = ref(false)
@@ -253,18 +261,18 @@ const certificateData = computed(() => {
     eventName,
     eventDate: formatEventDate(event?.event_date ?? racesStore.currentRace.start_time),
     participantName: `${entry.first_name} ${entry.last_name}`.trim(),
-    location: participant?.location ?? event?.location,
+    location: participant?.location ?? entry.location ?? event?.location,
     bibNumber: entry.bib_number,
     raceName,
     categoryLabel: participant ? formatCategoryLabel(participant) : '—',
     finishTime: formatCertificateFinishTime(entry.total_time_seconds),
     mph: formatAverageSpeedMph(racesStore.currentRace.distance_km, entry.total_time_seconds),
+    logoUrl: event?.logo_url || undefined,
     overallRank: participantRanks.value.overall,
     genderRank: participantRanks.value.gender,
     categoryRank: participantRanks.value.category,
     genderRankLabel: participant ? getGenderRankLabel(participant.gender) : 'Gender Rank',
     categoryRankLabel: participant ? getCategoryRankLabel(participant) : 'Category Rank',
-    websiteUrl: event?.website_url,
   }
 })
 

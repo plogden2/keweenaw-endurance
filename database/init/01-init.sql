@@ -10,6 +10,7 @@ CREATE TABLE events (
     event_date DATE NOT NULL,
     location VARCHAR(500),
     website_url VARCHAR(500),
+    logo_url VARCHAR(500),
     status VARCHAR(50) CHECK (status IN ('upcoming', 'active', 'completed', 'cancelled')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

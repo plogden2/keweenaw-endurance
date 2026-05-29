@@ -76,6 +76,7 @@ describe('RaceDetails.vue', () => {
             bib_number: '7',
             first_name: 'Alex',
             last_name: 'Runner',
+            location: 'Houghton MI',
             total_time_seconds: 3661,
             status: 'finished',
           },
@@ -127,6 +128,7 @@ describe('RaceDetails.vue', () => {
             bib_number: '7',
             first_name: 'Alex',
             last_name: 'Runner',
+            location: 'Houghton MI',
             total_time_seconds: 3661,
             status: 'finished',
           },
@@ -162,6 +164,7 @@ describe('RaceDetails.vue', () => {
     expect(wrapper.text()).toContain('Race Flow')
     expect(wrapper.text()).toContain('Statistics')
     expect(wrapper.text()).toContain('Alex')
+    expect(wrapper.text()).toContain('Houghton MI')
     expect(wrapper.text()).toContain('7')
   })
 
@@ -178,6 +181,7 @@ describe('RaceDetails.vue', () => {
       name: 'Copper Harbor Trails Fest',
       event_date: '2025-08-30',
       location: 'Copper Harbor, MI',
+      logo_url: '/images/chtf-2025-logo.png',
     }
     ;(timingApi.getLeaderboard as Mock).mockResolvedValue({
       data: {
@@ -188,6 +192,7 @@ describe('RaceDetails.vue', () => {
             bib_number: '788',
             first_name: 'Peter',
             last_name: 'Karinen',
+            location: 'Tucson AZ',
             total_time_seconds: 7829,
             status: 'finished',
           },
@@ -206,6 +211,7 @@ describe('RaceDetails.vue', () => {
         last_name: 'Karinen',
         gender: 'male',
         age: 27,
+        location: 'Tucson AZ',
         status: 'finished',
       },
     })
@@ -224,7 +230,11 @@ describe('RaceDetails.vue', () => {
 
     expect(wrapper.find('[data-testid="result-certificate"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Preliminary Results:')
+    expect(wrapper.text()).toContain('Tucson AZ')
+    expect(wrapper.text()).toContain('Inferior Timing')
     expect(wrapper.text()).toContain('Compare in Race Flow')
+    expect(wrapper.find('[data-testid="inferior-timing-link"]').exists()).toBe(true)
+    expect(wrapper.find('.event-logo-image').exists()).toBe(true)
     expect(participantsApi.get).toHaveBeenCalledWith('p1')
   })
 })

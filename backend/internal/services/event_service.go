@@ -103,6 +103,9 @@ func (s *EventService) UpdateEvent(id uuid.UUID, input *models.Event) (*models.E
 	if input.WebsiteURL != "" {
 		event.WebsiteURL = input.WebsiteURL
 	}
+	if input.LogoURL != "" {
+		event.LogoURL = input.LogoURL
+	}
 	if input.Status != "" {
 		if !validEventStatuses[input.Status] {
 			return nil, fmt.Errorf("%w: invalid status", ErrInvalidEventInput)

@@ -9,6 +9,7 @@ type createEventRequest struct {
 	EventDate   string `json:"event_date" binding:"required"`
 	Location    string `json:"location"`
 	WebsiteURL  string `json:"website_url"`
+	LogoURL     string `json:"logo_url"`
 	Status      string `json:"status"`
 }
 
@@ -18,6 +19,7 @@ type updateEventRequest struct {
 	EventDate   *string `json:"event_date"`
 	Location    *string `json:"location"`
 	WebsiteURL  *string `json:"website_url"`
+	LogoURL     *string `json:"logo_url"`
 	Status      *string `json:"status"`
 }
 

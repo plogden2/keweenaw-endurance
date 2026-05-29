@@ -157,10 +157,13 @@
             v-for="item in filteredLegendItems"
             :key="item.participantId"
             class="legend-item"
-            :class="{ 'legend-item-hidden': !isParticipantVisible(item.participantId) }"
-            @mouseenter="showTooltip(item, $event)"
+            :class="{
+              'legend-item-hidden': !isParticipantVisible(item.participantId),
+              'legend-item-hovered': hoveredParticipantId === item.participantId,
+            }"
+            @mouseenter="highlightParticipant(item, $event)"
             @mousemove="moveTooltip($event)"
-            @mouseleave="hideTooltip"
+            @mouseleave="unhighlightParticipant"
           >
             <input
               type="checkbox"
@@ -256,6 +259,7 @@ interface FlowLineDataset {
     borderDash: (ctx: { p1DataIndex: number }) => number[] | undefined
   }
   pointRadius?: number | number[]
+  participantId?: string
 }
 
 interface LegendItem {
@@ -332,6 +336,7 @@ const selectedGenders = ref<string[]>([])
 const selectedAgeGroups = ref<string[]>([])
 const openFilter = ref<FilterDropdownKey | null>(null)
 const visibleParticipantIds = ref<Set<string>>(new Set())
+const hoveredParticipantId = ref<string | null>(null)
 const activeTooltip = ref<ParticipantFlowTooltip | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
 let liveRefreshTimer: ReturnType<typeof setInterval> | null = null
@@ -571,6 +576,16 @@ function toggleSelectAllFiltered(): void {
   visibleParticipantIds.value = nextVisibleIds
 }
 
+function highlightParticipant(item: LegendItem, event: MouseEvent): void {
+  hoveredParticipantId.value = item.participantId
+  showTooltip(item, event)
+}
+
+function unhighlightParticipant(): void {
+  hoveredParticipantId.value = null
+  hideTooltip()
+}
+
 function showTooltip(item: LegendItem, event: MouseEvent): void {
   activeTooltip.value = item.tooltip
   moveTooltip(event)
@@ -632,13 +647,43 @@ function withAlpha(color: string, alpha: number): string {
   return color
 }
 
-function buildDataset(flow: (typeof flows.value)[number]): FlowLineDataset {
-  const isHighlighted = props.highlightParticipantId === flow.participantId
-  const isDimmed =
-    props.highlightParticipantId != null &&
-    props.highlightParticipantId !== flow.participantId
+function getEffectiveHighlightId(): string | undefined {
+  return hoveredParticipantId.value ?? props.highlightParticipantId ?? undefined
+}
+
+function getOrderedVisibleFlows(): (typeof flows.value)[number][] {
+  const highlightId = getEffectiveHighlightId()
+
+  if (!highlightId) {
+    return visibleFlows.value
+  }
+
+  return [
+    ...visibleFlows.value.filter((flow) => flow.participantId !== highlightId),
+    ...visibleFlows.value.filter((flow) => flow.participantId === highlightId),
+  ]
+}
+
+function getLineStyle(flow: (typeof flows.value)[number]): Pick<
+  FlowLineDataset,
+  'borderColor' | 'backgroundColor' | 'pointBackgroundColor' | 'pointBorderColor' | 'borderWidth'
+> {
+  const highlightId = getEffectiveHighlightId()
+  const isHighlighted = highlightId === flow.participantId
+  const isDimmed = highlightId != null && !isHighlighted
   const baseColor = isHighlighted ? HIGHLIGHT_COLOR : getParticipantColor(flow.participantId)
   const color = isDimmed ? withAlpha(baseColor, DIMMED_OPACITY) : baseColor
+
+  return {
+    borderColor: color,
+    backgroundColor: color,
+    pointBackgroundColor: color,
+    pointBorderColor: color,
+    borderWidth: isHighlighted ? 4 : isDimmed ? 1 : 2,
+  }
+}
+
+function buildDataset(flow: (typeof flows.value)[number]): FlowLineDataset {
   const showCurrentTime = currentElapsedMinutes.value != null
   const extrapolation = showCurrentTime
     ? buildExtrapolationPoint(flow, currentElapsedMinutes.value!)
@@ -660,13 +705,10 @@ function buildDataset(flow: (typeof flows.value)[number]): FlowLineDataset {
   const dataset: FlowLineDataset = {
     label: flow.label,
     data: chartPoints,
-    borderColor: color,
-    backgroundColor: color,
-    pointBackgroundColor: color,
-    pointBorderColor: color,
-    borderWidth: isHighlighted ? 4 : isDimmed ? 1 : 2,
+    ...getLineStyle(flow),
     tension: 0.2,
     hasExtrapolation: extrapolation != null,
+    participantId: flow.participantId,
   }
 
   if (extrapolation) {
@@ -680,6 +722,27 @@ function buildDataset(flow: (typeof flows.value)[number]): FlowLineDataset {
   }
 
   return dataset
+}
+
+function updateLineHighlight(): void {
+  const chart = chartInstance.value
+  if (!chart) {
+    return
+  }
+
+  for (const dataset of chart.data.datasets) {
+    const flowDataset = dataset as FlowLineDataset
+    const flow = visibleFlows.value.find(
+      (item) => item.participantId === flowDataset.participantId,
+    )
+    if (!flow) {
+      continue
+    }
+
+    Object.assign(flowDataset, getLineStyle(flow))
+  }
+
+  chart.update('none')
 }
 
 function renderChart(): void {
@@ -697,16 +760,7 @@ function renderChart(): void {
     return Math.max(max, lastElapsed)
   }, 0)
 
-  const orderedFlows = props.highlightParticipantId
-    ? [
-        ...visibleFlows.value.filter(
-          (flow) => flow.participantId !== props.highlightParticipantId,
-        ),
-        ...visibleFlows.value.filter(
-          (flow) => flow.participantId === props.highlightParticipantId,
-        ),
-      ]
-    : visibleFlows.value
+  const orderedFlows = getOrderedVisibleFlows()
 
   chartInstance.value = new Chart(canvasRef.value, {
     type: 'line',
@@ -716,6 +770,19 @@ function renderChart(): void {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: {
+        mode: 'nearest',
+        intersect: false,
+        axis: 'x',
+      },
+      onHover: (_event, elements, chart) => {
+        if (elements.length > 0) {
+          const dataset = chart.data.datasets[elements[0].datasetIndex] as FlowLineDataset
+          hoveredParticipantId.value = dataset.participantId ?? null
+        } else {
+          hoveredParticipantId.value = null
+        }
+      },
       scales: {
         x: {
           type: 'linear',
@@ -785,6 +852,12 @@ watch(
   },
 )
 
+watch(hoveredParticipantId, () => {
+  if (!loading.value && chartInstance.value) {
+    updateLineHighlight()
+  }
+})
+
 watch(
   () => props.highlightParticipantId,
   (participantId) => {
@@ -812,6 +885,7 @@ defineExpose({
   currentElapsedMinutes,
   visibleParticipantIds,
   filteredLegendItems,
+  hoveredParticipantId,
 })
 </script>
 
@@ -996,6 +1070,11 @@ canvas {
 
 .legend-item-hidden .legend-label {
   opacity: 0.55;
+}
+
+.legend-item-hovered {
+  background: #e9f2ff;
+  border-radius: 4px;
 }
 
 .color-swatch {

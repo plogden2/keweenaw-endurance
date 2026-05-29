@@ -2,8 +2,8 @@
   <article class="result-certificate" data-testid="result-certificate">
     <header class="certificate-section certificate-header">
       <h2 class="event-title">{{ eventTitle }}</h2>
-      <div class="event-logo" aria-hidden="true">
-        <span class="logo-text">{{ eventName }}</span>
+      <div v-if="logoUrl" class="event-logo">
+        <img :src="logoUrl" :alt="`${eventName} logo`" class="event-logo-image" />
       </div>
     </header>
 
@@ -70,13 +70,20 @@
 
     <footer class="certificate-section certificate-footer">
       <p class="footer-note">Official Results available at</p>
-      <p class="timing-brand">Keweenaw Endurance</p>
-      <p v-if="websiteUrl" class="website-url">{{ websiteUrl }}</p>
+      <RouterLink
+        :to="leaderboardTo"
+        class="timing-brand"
+        data-testid="inferior-timing-link"
+        @click="$emit('viewLeaderboard')"
+      >
+        Inferior Timing
+      </RouterLink>
     </footer>
   </article>
 </template>
 
 <script setup lang="ts">
+import type { RouteLocationRaw } from 'vue-router'
 import {
   formatOrdinal,
   type ParticipantRankInfo,
@@ -86,6 +93,7 @@ defineProps<{
   eventTitle: string
   eventName: string
   eventDate: string
+  logoUrl?: string
   participantName: string
   location?: string
   bibNumber: string
@@ -98,7 +106,11 @@ defineProps<{
   categoryRank?: ParticipantRankInfo | null
   genderRankLabel?: string
   categoryRankLabel?: string
-  websiteUrl?: string
+  leaderboardTo: RouteLocationRaw
+}>()
+
+defineEmits<{
+  viewLeaderboard: []
 }>()
 </script>
 
@@ -134,21 +146,16 @@ defineProps<{
 }
 
 .event-logo {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 220px;
-  min-height: 72px;
-  padding: 0.75rem 1rem;
-  background: #f4c430;
-  border: 1px solid #222;
 }
 
-.logo-text {
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.event-logo-image {
+  max-width: 220px;
+  max-height: 220px;
+  width: auto;
+  height: auto;
 }
 
 .certificate-date p {
@@ -211,16 +218,16 @@ defineProps<{
 }
 
 .timing-brand {
+  display: inline-block;
   margin: 0;
   font-size: 1.1rem;
   font-style: italic;
   font-weight: 700;
   color: #1f4f82;
+  text-decoration: none;
 }
 
-.website-url {
-  margin: 0.35rem 0 0;
-  font-size: 0.9rem;
-  font-weight: 700;
+.timing-brand:hover {
+  text-decoration: underline;
 }
 </style>

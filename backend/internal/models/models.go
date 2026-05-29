@@ -16,6 +16,7 @@ type Event struct {
 	EventDate   time.Time `gorm:"type:date;not null" json:"event_date"`
 	Location    string    `gorm:"type:varchar(500)" json:"location"`
 	WebsiteURL  string    `gorm:"type:varchar(500)" json:"website_url"`
+	LogoURL     string    `gorm:"type:varchar(500)" json:"logo_url"`
 	Status      string    `gorm:"type:varchar(50);not null;check:status IN ('upcoming','active','completed','cancelled')" json:"status"`
 	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`

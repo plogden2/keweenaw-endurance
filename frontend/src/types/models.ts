@@ -10,6 +10,7 @@ export interface Event {
   event_date: string
   location?: string
   website_url?: string
+  logo_url?: string
   status: EventStatus
   created_at?: string
   updated_at?: string
@@ -47,6 +48,7 @@ export interface LeaderboardEntry {
   bib_number: string
   first_name: string
   last_name: string
+  location?: string
   total_time_seconds: number
   laps?: number
   status: string
@@ -65,7 +67,7 @@ export interface LeaderboardResponse {
 
 export type CreateEventPayload = Pick<
   Event,
-  'name' | 'description' | 'event_date' | 'location' | 'website_url' | 'status'
+  'name' | 'description' | 'event_date' | 'location' | 'website_url' | 'logo_url' | 'status'
 >
 
 export type UpdateEventPayload = Partial<CreateEventPayload>

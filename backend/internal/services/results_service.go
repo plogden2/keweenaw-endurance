@@ -21,6 +21,7 @@ type LeaderboardEntry struct {
 	BibNumber        string    `json:"bib_number"`
 	FirstName        string    `json:"first_name"`
 	LastName         string    `json:"last_name"`
+	Location         string    `json:"location"`
 	TotalTimeSeconds float64   `json:"total_time_seconds"`
 	Laps             int       `json:"laps,omitempty"`
 	Status           string    `json:"status"`
@@ -173,6 +174,7 @@ func (s *ResultsService) calculateTimeBasedResults(raceID uuid.UUID) ([]Leaderbo
 			BibNumber:     participant.BibNumber,
 			FirstName:     participant.FirstName,
 			LastName:      participant.LastName,
+			Location:      participant.Location,
 			Status:        participant.Status,
 		}
 

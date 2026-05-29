@@ -48,6 +48,7 @@ func (h *Handlers) CreateEvent(c *gin.Context) {
 		EventDate:   eventDate,
 		Location:    req.Location,
 		WebsiteURL:  req.WebsiteURL,
+		LogoURL:     req.LogoURL,
 		Status:      req.Status,
 	})
 	if err != nil {
@@ -99,6 +100,9 @@ func (h *Handlers) UpdateEvent(c *gin.Context) {
 	}
 	if req.WebsiteURL != nil {
 		update.WebsiteURL = *req.WebsiteURL
+	}
+	if req.LogoURL != nil {
+		update.LogoURL = *req.LogoURL
 	}
 	if req.Status != nil {
 		update.Status = *req.Status
