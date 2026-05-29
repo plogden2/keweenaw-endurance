@@ -1,51 +1,36 @@
 <template>
   <div class="timing">
+    <AppHeader />
     <h1 class="page-title">Race Timing</h1>
-    
-    <section class="timing-section">
-      <h2>Active Events</h2>
-      <div class="events-table">
-        <div class="table-header">
-          <span>Event Name</span>
-          <span>Date</span>
-          <span>Participants</span>
-          <span>Status</span>
-        </div>
-        <div class="table-body">
-          <div class="table-row">
-            <span>Sample Active Event</span>
-            <span>2024-06-15</span>
-            <span>45</span>
-            <span class="status-active">Active</span>
-          </div>
-        </div>
-      </div>
-    </section>
 
-    <section class="timing-section">
-      <h2>Past Events</h2>
-      <div class="events-table">
-        <div class="table-header">
-          <span>Event Name</span>
-          <span>Date</span>
-          <span>Participants</span>
-          <span>Status</span>
-        </div>
-        <div class="table-body">
-          <div class="table-row">
-            <span>Sample Completed Event</span>
-            <span>2024-05-20</span>
-            <span>32</span>
-            <span class="status-completed">Completed</span>
-          </div>
-        </div>
-      </div>
-    </section>
+    <div v-if="eventsStore.loading" class="status">Loading events…</div>
+    <div v-else-if="eventsStore.error" class="status error">{{ eventsStore.error }}</div>
+
+    <template v-else>
+      <section class="timing-section">
+        <h2>Active Events</h2>
+        <EventsTable :events="eventsStore.activeEvents" empty-label="No active events" />
+      </section>
+
+      <section class="timing-section">
+        <h2>Past Events</h2>
+        <EventsTable :events="eventsStore.pastEvents" empty-label="No past events" />
+      </section>
+    </template>
   </div>
 </template>
 
-<script setup>
-// Timing component - placeholder for actual implementation
+<script setup lang="ts">
+import { onMounted } from 'vue'
+import AppHeader from '@/components/AppHeader.vue'
+import EventsTable from '@/components/EventsTable.vue'
+import { useEventsStore } from '@/stores/events'
+
+const eventsStore = useEventsStore()
+
+onMounted(() => {
+  eventsStore.fetchEvents({ limit: 100 })
+})
 </script>
 
 <style scoped>
@@ -70,64 +55,18 @@
   color: #2c3e50;
 }
 
-.events-table {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-.table-header {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
-  gap: 1rem;
-  padding: 1rem;
-  background: #f8f9fa;
-  font-weight: 600;
-  color: #2c3e50;
-}
-
-.table-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
-  gap: 1rem;
-  padding: 1rem;
-  border-bottom: 1px solid #e9ecef;
-  transition: background-color 0.3s;
-}
-
-.table-row:hover {
-  background: #f8f9fa;
-}
-
-.table-row:last-child {
-  border-bottom: none;
-}
-
-.status-active {
-  color: #28a745;
-  font-weight: 500;
-}
-
-.status-completed {
+.status {
+  text-align: center;
   color: #6c757d;
-  font-weight: 500;
+}
+
+.status.error {
+  color: #dc3545;
 }
 
 @media (max-width: 768px) {
   .timing {
     padding: 0 1rem;
-  }
-  
-  .table-header,
-  .table-row {
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
-  }
-  
-  .table-header span,
-  .table-row span {
-    text-align: left;
   }
 }
 </style>

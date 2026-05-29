@@ -60,3 +60,68 @@ type updateParticipantRequest struct {
 	RFIDTagUID *string `json:"rfid_tag_uid"`
 	Status     *string `json:"status"`
 }
+
+type createCheckpointRequest struct {
+	Name                  string  `json:"name" binding:"required"`
+	CheckpointType        string  `json:"checkpoint_type" binding:"required"`
+	DistanceFromStartKm   float64 `json:"distance_from_start_km"`
+	LocationDescription   string  `json:"location_description"`
+	IsActive              *bool   `json:"is_active"`
+}
+
+type updateCheckpointRequest struct {
+	Name                *string  `json:"name"`
+	CheckpointType      *string  `json:"checkpoint_type"`
+	DistanceFromStartKm *float64 `json:"distance_from_start_km"`
+	LocationDescription *string  `json:"location_description"`
+	IsActive            *bool    `json:"is_active"`
+}
+
+type createCategoryRequest struct {
+	Name         string `json:"name" binding:"required"`
+	CategoryType string `json:"category_type" binding:"required"`
+	AgeMin       int    `json:"age_min"`
+	AgeMax       int    `json:"age_max"`
+	GenderFilter string `json:"gender_filter"`
+	DisplayOrder int    `json:"display_order"`
+}
+
+type updateCategoryRequest struct {
+	Name         *string `json:"name"`
+	CategoryType *string `json:"category_type"`
+	AgeMin       *int    `json:"age_min"`
+	AgeMax       *int    `json:"age_max"`
+	GenderFilter *string `json:"gender_filter"`
+	DisplayOrder *int    `json:"display_order"`
+}
+
+type createTimingRecordRequest struct {
+	ParticipantID  string `json:"participant_id" binding:"required"`
+	CheckpointID   string `json:"checkpoint_id" binding:"required"`
+	Timestamp      string `json:"timestamp" binding:"required"`
+	LocalTimestamp string `json:"local_timestamp"`
+	DeviceID       string `json:"device_id"`
+	SyncStatus     string `json:"sync_status"`
+}
+
+type updateTimingRecordRequest struct {
+	Timestamp      *string `json:"timestamp"`
+	LocalTimestamp *string `json:"local_timestamp"`
+	DeviceID       *string `json:"device_id"`
+	SyncStatus     *string `json:"sync_status"`
+}
+
+type writeRFIDTagRequest struct {
+	ParticipantID string `json:"participant_id" binding:"required"`
+	TagUID        string `json:"tag_uid" binding:"required"`
+}
+
+type manualTimingEntryRequest struct {
+	RaceID       string `json:"race_id" binding:"required"`
+	CheckpointID string `json:"checkpoint_id" binding:"required"`
+	BibNumber    string `json:"bib_number"`
+	RFIDTagUID   string `json:"rfid_tag_uid"`
+	Timestamp    string `json:"timestamp" binding:"required"`
+	DeviceID     string `json:"device_id"`
+	SyncStatus   string `json:"sync_status"`
+}

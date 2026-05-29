@@ -15,12 +15,13 @@ services:
       - backend-test
     networks:
       - keweenaw-test-network
-    command: npm run test:ci
+    command: sh -c "npm ci && npm run test:ci"
 
   backend-test:
     build:
       context: ./backend
       dockerfile: Dockerfile.test
+    user: root
     environment:
       - GO_ENV=test
       - DB_HOST=postgres-test
