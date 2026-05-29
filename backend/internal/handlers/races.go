@@ -10,16 +10,6 @@ import (
 	"github.com/keweenaw-endurance/backend/internal/models"
 )
 
-type createRaceRequest struct {
-	EventID         string  `json:"event_id" binding:"required"`
-	Name            string  `json:"name" binding:"required"`
-	RaceType        string  `json:"race_type" binding:"required"`
-	DistanceKm      float64 `json:"distance_km"`
-	DurationMinutes int     `json:"duration_minutes"`
-	StartTime       string  `json:"start_time"`
-	Status          string  `json:"status"`
-}
-
 func (h *Handlers) GetRaces(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
@@ -110,21 +100,30 @@ func (h *Handlers) UpdateRace(c *gin.Context) {
 		return
 	}
 
-	var req createRaceRequest
+	var req updateRaceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	update := &models.Race{
-		Name:            req.Name,
-		RaceType:        req.RaceType,
-		DistanceKm:      req.DistanceKm,
-		DurationMinutes: req.DurationMinutes,
-		Status:          req.Status,
+	update := &models.Race{}
+	if req.Name != nil {
+		update.Name = *req.Name
 	}
-	if req.StartTime != "" {
-		startTime, err := parseTimestamp(req.StartTime)
+	if req.RaceType != nil {
+		update.RaceType = *req.RaceType
+	}
+	if req.DistanceKm != nil {
+		update.DistanceKm = *req.DistanceKm
+	}
+	if req.DurationMinutes != nil {
+		update.DurationMinutes = *req.DurationMinutes
+	}
+	if req.Status != nil {
+		update.Status = *req.Status
+	}
+	if req.StartTime != nil {
+		startTime, err := parseTimestamp(*req.StartTime)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time format, use RFC3339"})
 			return

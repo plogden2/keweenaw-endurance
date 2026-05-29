@@ -80,6 +80,31 @@ func TestParticipantService_DuplicateRFID(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidParticipantInput)
 }
 
+func TestParticipantService_DuplicateRFIDOnUpdate(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	svc := NewParticipantService(db)
+
+	first, err := svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "201", FirstName: "A", LastName: "One",
+		RFIDTagUID: "RFID-A",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "202", FirstName: "B", LastName: "Two",
+		RFIDTagUID: "RFID-B",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.UpdateParticipant(first.ID, &models.Participant{RFIDTagUID: "RFID-B"})
+	assert.ErrorIs(t, err, ErrInvalidParticipantInput)
+
+	updated, err := svc.UpdateParticipant(first.ID, &models.Participant{RFIDTagUID: "RFID-A"})
+	require.NoError(t, err)
+	assert.Equal(t, "RFID-A", updated.RFIDTagUID)
+}
+
 func TestParticipantService_ListByRace(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)
