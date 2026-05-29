@@ -1,0 +1,376 @@
+{
+  "key": "70d35b726e83bfe0a1452b6a2eb4d3a2",
+  "contests": {
+    "1": "Long XC Mountain Bike Race",
+    "2": "Medium XC Mountain Bike Race",
+    "3": "Short XC Mountain Bike Race",
+    "4": "USAC XC MTB Category A",
+    "5": "USAC XC MTB Category B",
+    "6": "USAC XC MTB Category C",
+    "7": "USAC XC"
+  },
+  "splits": [
+    {
+      "ID": 1,
+      "Name": "Finish",
+      "Label": "",
+      "SplitType": 0,
+      "Contest": 1,
+      "TypeOfSport": 11
+    },
+    {
+      "ID": 2,
+      "Name": "Finish",
+      "Label": "",
+      "SplitType": 0,
+      "Contest": 2,
+      "TypeOfSport": 11
+    },
+    {
+      "ID": 5,
+      "Name": "Finish",
+      "Label": "",
+      "SplitType": 0,
+      "Contest": 4,
+      "TypeOfSport": 11
+    },
+    {
+      "ID": 6,
+      "Name": "Finish",
+      "Label": "",
+      "SplitType": 0,
+      "Contest": 5,
+      "TypeOfSport": 11
+    },
+    {
+      "ID": 4,
+      "Name": "Finish",
+      "Label": "",
+      "SplitType": 0,
+      "Contest": 3,
+      "TypeOfSport": 11
+    },
+    {
+      "ID": 7,
+      "Name": "Finish",
+      "Label": "",
+      "SplitType": 0,
+      "Contest": 6,
+      "TypeOfSport": 11
+    }
+  ],
+  "eventname": "2025 Copper Harbor Trails Fest - XC MTB",
+  "TimerLogo": "SuperiorTimingNew.png",
+  "TimerURL": "http://www.superiortiming.com",
+  "EventOver": true,
+  "Time": 39937,
+  "server": "my-us-1.raceresult.com",
+  "BrandColorDark": "",
+  "ListCommentsEnabled": {
+    "details": true
+  },
+  "Tab": {
+    "Label": "",
+    "URLName": "results",
+    "Enabled": true,
+    "ShowInMenu": false,
+    "ShowInMenu2": "always",
+    "ActiveFrom": "1900-01-01T00:00:00-05:00",
+    "ActiveUntil": "2100-12-31T23:59:59-05:00",
+    "Type": "lists",
+    "Config": {
+      "InfoText": "",
+      "Subtype": "boxes",
+      "StandardDetails": "details",
+      "Lists": [
+        {
+          "Name": "Result Lists|Overall Results",
+          "Mode": "",
+          "Contest": "1",
+          "ShowAs": "Overall Results",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 0,
+          "ID": "7AAEAD"
+        },
+        {
+          "Name": "Result Lists|Gender Results",
+          "Mode": "",
+          "Contest": "1",
+          "ShowAs": "Gender Results",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 0,
+          "ID": "5C651A"
+        },
+        {
+          "Name": "Result Lists|Category Results",
+          "Mode": "",
+          "Contest": "1",
+          "ShowAs": "Category Results",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 0,
+          "ID": "83769B"
+        },
+        {
+          "Name": "Result Lists|Overall Results",
+          "Mode": "",
+          "Contest": "2",
+          "ShowAs": "Overall Results",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 0,
+          "ID": "50D290"
+        },
+        {
+          "Name": "Result Lists|Gender Results",
+          "Mode": "",
+          "Contest": "2",
+          "ShowAs": "Gender Results",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 0,
+          "ID": "26303C"
+        },
+        {
+          "Name": "Result Lists|Category Results",
+          "Mode": "",
+          "Contest": "2",
+          "ShowAs": "Category Results",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 0,
+          "ID": "AF6A20"
+        },
+        {
+          "Name": "Result Lists|Overall Results",
+          "Mode": "",
+          "Contest": "3",
+          "ShowAs": "Overall Results",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 0,
+          "ID": "44CF8A"
+        },
+        {
+          "Name": "Result Lists|Gender Results",
+          "Mode": "",
+          "Contest": "3",
+          "ShowAs": "Gender Results",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 0,
+          "ID": "0E6344"
+        },
+        {
+          "Name": "Result Lists|Category Results",
+          "Mode": "",
+          "Contest": "3",
+          "ShowAs": "Category Results",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 0,
+          "ID": "6CFD3C"
+        },
+        {
+          "Name": "Result Lists|Gender Results",
+          "Mode": "",
+          "Contest": "4",
+          "ShowAs": "",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 10,
+          "ID": "0A182D"
+        },
+        {
+          "Name": "Result Lists|Gender Results",
+          "Mode": "",
+          "Contest": "5",
+          "ShowAs": "",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 10,
+          "ID": "C9A788"
+        },
+        {
+          "Name": "Result Lists|Gender Results",
+          "Mode": "",
+          "Contest": "6",
+          "ShowAs": "",
+          "Format": "VP",
+          "Live": 1,
+          "Sortable": 1,
+          "Leader": 10,
+          "ID": "645244"
+        }
+      ],
+      "LeaderboardHideCount": false,
+      "ShowCommentIcon": true
+    }
+  },
+  "TabConfig": {
+    "InfoText": "",
+    "Subtype": "boxes",
+    "StandardDetails": "details",
+    "Lists": [
+      {
+        "Name": "Result Lists|Overall Results",
+        "Mode": "",
+        "Contest": "1",
+        "ShowAs": "Overall Results",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 0,
+        "Details": "details",
+        "ID": "7AAEAD"
+      },
+      {
+        "Name": "Result Lists|Gender Results",
+        "Mode": "",
+        "Contest": "1",
+        "ShowAs": "Gender Results",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 0,
+        "Details": "details",
+        "ID": "5C651A"
+      },
+      {
+        "Name": "Result Lists|Category Results",
+        "Mode": "",
+        "Contest": "1",
+        "ShowAs": "Category Results",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 0,
+        "Details": "details",
+        "ID": "83769B"
+      },
+      {
+        "Name": "Result Lists|Overall Results",
+        "Mode": "",
+        "Contest": "2",
+        "ShowAs": "Overall Results",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 0,
+        "Details": "details",
+        "ID": "50D290"
+      },
+      {
+        "Name": "Result Lists|Gender Results",
+        "Mode": "",
+        "Contest": "2",
+        "ShowAs": "Gender Results",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 0,
+        "Details": "details",
+        "ID": "26303C"
+      },
+      {
+        "Name": "Result Lists|Category Results",
+        "Mode": "",
+        "Contest": "2",
+        "ShowAs": "Category Results",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 0,
+        "Details": "details",
+        "ID": "AF6A20"
+      },
+      {
+        "Name": "Result Lists|Overall Results",
+        "Mode": "",
+        "Contest": "3",
+        "ShowAs": "Overall Results",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 0,
+        "Details": "details",
+        "ID": "44CF8A"
+      },
+      {
+        "Name": "Result Lists|Gender Results",
+        "Mode": "",
+        "Contest": "3",
+        "ShowAs": "Gender Results",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 0,
+        "Details": "details",
+        "ID": "0E6344"
+      },
+      {
+        "Name": "Result Lists|Category Results",
+        "Mode": "",
+        "Contest": "3",
+        "ShowAs": "Category Results",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 0,
+        "Details": "details",
+        "ID": "6CFD3C"
+      },
+      {
+        "Name": "Result Lists|Gender Results",
+        "Mode": "",
+        "Contest": "4",
+        "ShowAs": "",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 10,
+        "Details": "details",
+        "ID": "0A182D"
+      },
+      {
+        "Name": "Result Lists|Gender Results",
+        "Mode": "",
+        "Contest": "5",
+        "ShowAs": "",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 10,
+        "Details": "details",
+        "ID": "C9A788"
+      },
+      {
+        "Name": "Result Lists|Gender Results",
+        "Mode": "",
+        "Contest": "6",
+        "ShowAs": "",
+        "Format": "VP",
+        "Live": 1,
+        "Sortable": 1,
+        "Leader": 10,
+        "Details": "details",
+        "ID": "645244"
+      }
+    ],
+    "LeaderboardHideCount": false,
+    "ShowCommentIcon": true
+  }
+}
