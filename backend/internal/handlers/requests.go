@@ -110,3 +110,18 @@ type updateTimingRecordRequest struct {
 	DeviceID       *string `json:"device_id"`
 	SyncStatus     *string `json:"sync_status"`
 }
+
+type writeRFIDTagRequest struct {
+	ParticipantID string `json:"participant_id" binding:"required"`
+	TagUID        string `json:"tag_uid" binding:"required"`
+}
+
+type manualTimingEntryRequest struct {
+	RaceID       string `json:"race_id" binding:"required"`
+	CheckpointID string `json:"checkpoint_id" binding:"required"`
+	BibNumber    string `json:"bib_number"`
+	RFIDTagUID   string `json:"rfid_tag_uid"`
+	Timestamp    string `json:"timestamp" binding:"required"`
+	DeviceID     string `json:"device_id"`
+	SyncStatus   string `json:"sync_status"`
+}

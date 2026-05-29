@@ -126,6 +126,7 @@ func main() {
 			rfid.GET("/scan/:uid", handlers.ScanRFIDTag)
 			rfid.POST("/manual-entry", handlers.ManualTimingEntry)
 			rfid.GET("/sync-status", handlers.GetSyncStatus)
+			rfid.POST("/sync-pending", handlers.SyncPendingRecords)
 		}
 	}
 

@@ -187,7 +187,7 @@ func (s *ParticipantService) ensureRFIDAvailable(rfid string, excludeID *uuid.UU
 		return nil
 	}
 
-	query := s.db.Model(&models.Participant{}).Where("rf_id_tag_uid = ?", rfid)
+	query := s.db.Model(&models.Participant{}).Where(&models.Participant{RFIDTagUID: rfid})
 	if excludeID != nil {
 		query = query.Where("id != ?", *excludeID)
 	}

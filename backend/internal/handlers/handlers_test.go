@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/config"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/rfid"
 	"github.com/keweenaw-endurance/backend/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,7 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		&models.Category{},
 	))
 
-	svc := services.NewServices(db, &config.Config{Environment: "test"})
+	svc := services.NewServicesWithReader(db, &config.Config{Environment: "test"}, rfid.NewMockReader())
 	h := NewHandlers(svc)
 
 	router := gin.New()
@@ -75,6 +76,12 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		api.PUT("/timing/records/:id", h.UpdateTimingRecord)
 		api.GET("/timing/results/:raceId", h.GetRaceResults)
 		api.GET("/timing/leaderboard/:raceId", h.GetLeaderboard)
+
+		api.POST("/rfid/write-tag", h.WriteRFIDTag)
+		api.GET("/rfid/scan/:uid", h.ScanRFIDTag)
+		api.POST("/rfid/manual-entry", h.ManualTimingEntry)
+		api.GET("/rfid/sync-status", h.GetSyncStatus)
+		api.POST("/rfid/sync-pending", h.SyncPendingRecords)
 	}
 
 	return router, svc
@@ -433,4 +440,155 @@ func TestCheckpointHandlers_InvalidInput(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestRFIDHandlers_Scan(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Event", EventDate: time.Now().AddDate(0, 1, 0),
+	})
+	require.NoError(t, err)
+	race, err := svc.Races.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	participant, err := svc.Participants.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "42", FirstName: "Scan", LastName: "Test",
+		RFIDTagUID: "TAG-SCAN-001",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/rfid/scan/TAG-SCAN-001", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var found models.Participant
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &found))
+	assert.Equal(t, participant.ID, found.ID)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/rfid/scan/UNKNOWN", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestRFIDHandlers_ManualEntry(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Event", EventDate: time.Now().AddDate(0, 1, 0),
+	})
+	require.NoError(t, err)
+	race, err := svc.Races.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	checkpoint, err := svc.Checkpoints.CreateCheckpoint(&models.TimingCheckpoint{
+		RaceID: race.ID, Name: "Start", CheckpointType: "start",
+	})
+	require.NoError(t, err)
+	_, err = svc.Participants.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "99", FirstName: "Manual", LastName: "Entry",
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	body := map[string]string{
+		"race_id":       race.ID.String(),
+		"checkpoint_id": checkpoint.ID.String(),
+		"bib_number":    "99",
+		"timestamp":     now,
+	}
+	payload, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/rfid/manual-entry", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+}
+
+func TestRFIDHandlers_GetSyncStatus(t *testing.T) {
+	router, _ := setupHandlerTest(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/rfid/sync-status", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var status map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &status))
+	assert.Contains(t, status, "pending_count")
+}
+
+func TestRFIDHandlers_SyncPending(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Event", EventDate: time.Now().AddDate(0, 1, 0),
+	})
+	require.NoError(t, err)
+	race, err := svc.Races.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	checkpoint, err := svc.Checkpoints.CreateCheckpoint(&models.TimingCheckpoint{
+		RaceID: race.ID, Name: "Start", CheckpointType: "start",
+	})
+	require.NoError(t, err)
+	participant, err := svc.Participants.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "1", FirstName: "A", LastName: "B",
+	})
+	require.NoError(t, err)
+
+	now := time.Now().UTC()
+	_, err = svc.Timing.CreateRecord(&models.TimingRecord{
+		ParticipantID: participant.ID, CheckpointID: checkpoint.ID,
+		Timestamp: now, LocalTimestamp: now, SyncStatus: "pending_sync",
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/rfid/sync-pending", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var result map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	assert.Equal(t, float64(1), result["synced_count"])
+}
+
+func TestRFIDHandlers_WriteTag(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Event", EventDate: time.Now().AddDate(0, 1, 0),
+	})
+	require.NoError(t, err)
+	race, err := svc.Races.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	participant, err := svc.Participants.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "10", FirstName: "Write", LastName: "Tag",
+	})
+	require.NoError(t, err)
+
+	body := map[string]string{
+		"participant_id": participant.ID.String(),
+		"tag_uid":        "NEW-HW-TAG",
+	}
+	payload, _ := json.Marshal(body)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/rfid/write-tag", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var updated models.Participant
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updated))
+	assert.Equal(t, "NEW-HW-TAG", updated.RFIDTagUID)
 }

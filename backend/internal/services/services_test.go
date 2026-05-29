@@ -37,4 +37,5 @@ func TestNewServices(t *testing.T) {
 	assert.NotNil(t, services.Categories)
 	assert.NotNil(t, services.Timing)
 	assert.NotNil(t, services.Results)
+	assert.NotNil(t, services.RFID)
 }
