@@ -9,35 +9,145 @@
       <canvas ref="canvasRef" data-testid="race-flow-canvas" />
       <div class="legend-panel" data-testid="race-flow-legend">
         <div class="legend-controls">
-          <input
-            v-model="searchQuery"
-            type="search"
-            class="legend-search"
-            placeholder="Search by bib or name…"
-            data-testid="race-flow-legend-search"
-          />
-          <div class="status-filters" data-testid="race-flow-status-filters">
-            <label
-              v-for="status in availableStatuses"
-              :key="status"
-              class="status-filter"
+          <div class="legend-controls-row">
+            <input
+              v-model="searchQuery"
+              type="search"
+              class="legend-search"
+              placeholder="Search by bib or name…"
+              data-testid="race-flow-legend-search"
+            />
+            <button
+              type="button"
+              class="select-all-btn"
+              data-testid="race-flow-select-all"
+              @click="toggleSelectAllFiltered"
             >
-              <input
-                v-model="selectedStatuses"
-                type="checkbox"
-                :value="status"
-              />
-              {{ getParticipantStatusLabel(status) }}
-            </label>
+              {{ allFilteredSelected ? 'Deselect all' : 'Select all' }}
+            </button>
           </div>
-          <button
-            type="button"
-            class="select-all-btn"
-            data-testid="race-flow-select-all"
-            @click="toggleSelectAllFiltered"
-          >
-            {{ allFilteredSelected ? 'Deselect all' : 'Select all' }}
-          </button>
+          <div class="legend-filters" data-testid="race-flow-filters">
+            <div
+              v-if="availableStatuses.length"
+              class="filter-dropdown"
+              data-testid="race-flow-status-filters"
+              @click.stop
+            >
+              <button
+                type="button"
+                class="filter-dropdown-trigger"
+                :aria-expanded="openFilter === 'status'"
+                @click="toggleFilterDropdown('status')"
+              >
+                <span class="filter-dropdown-label">Status</span>
+                <span class="filter-dropdown-value">
+                  {{ formatFilterSummary(selectedStatuses, availableStatuses, getParticipantStatusLabel) }}
+                </span>
+              </button>
+              <ul
+                v-if="openFilter === 'status'"
+                class="filter-dropdown-menu"
+                role="listbox"
+                aria-multiselectable="true"
+              >
+                <li
+                  v-for="status in availableStatuses"
+                  :key="status"
+                  role="option"
+                  :aria-selected="selectedStatuses.includes(status)"
+                >
+                  <button
+                    type="button"
+                    class="filter-dropdown-option"
+                    :class="{ selected: selectedStatuses.includes(status) }"
+                    @click="toggleStatusFilter(status)"
+                  >
+                    {{ getParticipantStatusLabel(status) }}
+                  </button>
+                </li>
+              </ul>
+            </div>
+            <div
+              v-if="availableGenders.length"
+              class="filter-dropdown"
+              data-testid="race-flow-gender-filters"
+              @click.stop
+            >
+              <button
+                type="button"
+                class="filter-dropdown-trigger"
+                :aria-expanded="openFilter === 'gender'"
+                @click="toggleFilterDropdown('gender')"
+              >
+                <span class="filter-dropdown-label">Gender</span>
+                <span class="filter-dropdown-value">
+                  {{ formatFilterSummary(selectedGenders, availableGenders, getParticipantGenderLabel) }}
+                </span>
+              </button>
+              <ul
+                v-if="openFilter === 'gender'"
+                class="filter-dropdown-menu"
+                role="listbox"
+                aria-multiselectable="true"
+              >
+                <li
+                  v-for="genderKey in availableGenders"
+                  :key="genderKey"
+                  role="option"
+                  :aria-selected="selectedGenders.includes(genderKey)"
+                >
+                  <button
+                    type="button"
+                    class="filter-dropdown-option"
+                    :class="{ selected: selectedGenders.includes(genderKey) }"
+                    @click="toggleGenderFilter(genderKey)"
+                  >
+                    {{ getParticipantGenderLabel(genderKey) }}
+                  </button>
+                </li>
+              </ul>
+            </div>
+            <div
+              v-if="availableAgeGroups.length"
+              class="filter-dropdown"
+              data-testid="race-flow-age-group-filters"
+              @click.stop
+            >
+              <button
+                type="button"
+                class="filter-dropdown-trigger"
+                :aria-expanded="openFilter === 'ageGroup'"
+                @click="toggleFilterDropdown('ageGroup')"
+              >
+                <span class="filter-dropdown-label">Age group</span>
+                <span class="filter-dropdown-value">
+                  {{ formatFilterSummary(selectedAgeGroups, availableAgeGroups, getParticipantAgeGroupLabel) }}
+                </span>
+              </button>
+              <ul
+                v-if="openFilter === 'ageGroup'"
+                class="filter-dropdown-menu"
+                role="listbox"
+                aria-multiselectable="true"
+              >
+                <li
+                  v-for="ageGroup in availableAgeGroups"
+                  :key="ageGroup"
+                  role="option"
+                  :aria-selected="selectedAgeGroups.includes(ageGroup)"
+                >
+                  <button
+                    type="button"
+                    class="filter-dropdown-option"
+                    :class="{ selected: selectedAgeGroups.includes(ageGroup) }"
+                    @click="toggleAgeGroupFilter(ageGroup)"
+                  >
+                    {{ getParticipantAgeGroupLabel(ageGroup) }}
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
         <p v-if="filteredLegendItems.length === 0" class="legend-empty">
           No participants match the current search or filters.
@@ -76,8 +186,9 @@
         <strong class="tooltip-name">{{ activeTooltip.fullName }}</strong>
         <span>Bib {{ activeTooltip.bibNumber }}</span>
         <span>Status: {{ getParticipantStatusLabel(activeTooltip.status) }}</span>
-        <span v-if="activeTooltip.gender">Gender: {{ activeTooltip.gender }}</span>
-        <span v-if="activeTooltip.age != null">Age: {{ activeTooltip.age }}</span>
+        <span v-if="activeTooltip.gender">Gender: {{ getParticipantGenderLabel(activeTooltip.gender) }}</span>
+        <span v-if="activeTooltip.ageGroup">Age group: {{ getParticipantAgeGroupLabel(activeTooltip.ageGroup) }}</span>
+        <span v-else-if="activeTooltip.age != null">Age: {{ activeTooltip.age }}</span>
         <span>{{ activeTooltip.progress }}</span>
       </div>
     </div>
@@ -96,7 +207,7 @@ import {
   Tooltip,
   type Plugin,
 } from 'chart.js'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import { timingApi } from '@/services/api'
 import { useUnitsStore } from '@/stores/units'
 import type { ParticipantStatus, RaceStatus, RaceType, TimingRecord } from '@/types/models'
@@ -105,10 +216,14 @@ import {
   buildExtrapolationPoint,
   buildParticipantFlowTooltip,
   buildParticipantFlows,
+  compareAgeGroupKeys,
+  compareGenderKeys,
   getCurrentElapsedMinutes,
   getFlowChartTitle,
   getFlowLineColor,
   getFlowYAxisLabel,
+  getParticipantAgeGroupLabel,
+  getParticipantGenderLabel,
   getParticipantStatusLabel,
   resolveRaceStartMs,
   type ParticipantFlowTooltip,
@@ -124,6 +239,8 @@ const STATUS_ORDER: ParticipantStatus[] = [
   'dnf',
   'dns',
 ]
+
+type FilterDropdownKey = 'status' | 'gender' | 'ageGroup'
 
 interface FlowLineDataset {
   label: string
@@ -146,6 +263,8 @@ interface LegendItem {
   label: string
   color: string
   status: ParticipantStatus
+  genderKey: string
+  ageGroup: string
   bibNumber: string
   tooltip: ParticipantFlowTooltip
 }
@@ -204,7 +323,10 @@ const records = ref<TimingRecord[]>([])
 const chartInstance = ref<Chart | null>(null)
 const nowMs = ref(Date.now())
 const searchQuery = ref('')
-const selectedStatuses = ref<ParticipantStatus[]>([...STATUS_ORDER])
+const selectedStatuses = ref<ParticipantStatus[]>([])
+const selectedGenders = ref<string[]>([])
+const selectedAgeGroups = ref<string[]>([])
+const openFilter = ref<FilterDropdownKey | null>(null)
 const visibleParticipantIds = ref<Set<string>>(new Set())
 const activeTooltip = ref<ParticipantFlowTooltip | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
@@ -239,8 +361,43 @@ const availableStatuses = computed(() =>
   STATUS_ORDER.filter((status) => flows.value.some((flow) => flow.status === status)),
 )
 
+const availableGenders = computed(() =>
+  [...new Set(flows.value.map((flow) => flow.genderKey))].sort(compareGenderKeys),
+)
+
+const availableAgeGroups = computed(() =>
+  [...new Set(flows.value.map((flow) => flow.ageGroup))].sort(compareAgeGroupKeys),
+)
+
+const filteredFlows = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+
+  return flows.value.filter((flow) => {
+    if (!selectedStatuses.value.includes(flow.status)) {
+      return false
+    }
+
+    if (!selectedGenders.value.includes(flow.genderKey)) {
+      return false
+    }
+
+    if (!selectedAgeGroups.value.includes(flow.ageGroup)) {
+      return false
+    }
+
+    if (!query) {
+      return true
+    }
+
+    return (
+      flow.label.toLowerCase().includes(query) ||
+      flow.bibNumber.toLowerCase().includes(query)
+    )
+  })
+})
+
 const visibleFlows = computed(() =>
-  flows.value.filter((flow) => visibleParticipantIds.value.has(flow.participantId)),
+  filteredFlows.value.filter((flow) => visibleParticipantIds.value.has(flow.participantId)),
 )
 
 const visibleFlowColors = computed(() =>
@@ -254,40 +411,25 @@ function getParticipantColor(participantId: string): string {
   )
 }
 
-const legendItems = computed<LegendItem[]>(() =>
-  flows.value.map((flow) => ({
+function buildLegendItem(flow: (typeof flows.value)[number]): LegendItem {
+  return {
     participantId: flow.participantId,
     label: flow.label,
     color: getParticipantColor(flow.participantId),
     status: flow.status,
+    genderKey: flow.genderKey,
+    ageGroup: flow.ageGroup,
     bibNumber: flow.bibNumber,
     tooltip: buildParticipantFlowTooltip(flow, chartRaceType.value, unitsStore.unitSystem),
-  })),
-)
+  }
+}
+
+const filteredLegendItems = computed(() => filteredFlows.value.map(buildLegendItem))
 
 const tooltipStyle = computed(() => ({
   top: `${tooltipPosition.value.y}px`,
   left: `${tooltipPosition.value.x}px`,
 }))
-
-const filteredLegendItems = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase()
-
-  return legendItems.value.filter((item) => {
-    if (!selectedStatuses.value.includes(item.status)) {
-      return false
-    }
-
-    if (!query) {
-      return true
-    }
-
-    return (
-      item.label.toLowerCase().includes(query) ||
-      item.bibNumber.toLowerCase().includes(query)
-    )
-  })
-})
 
 const allFilteredSelected = computed(() =>
   filteredLegendItems.value.length > 0 &&
@@ -295,6 +437,89 @@ const allFilteredSelected = computed(() =>
     visibleParticipantIds.value.has(item.participantId),
   ),
 )
+
+function syncFilterSelections(): void {
+  selectedStatuses.value = mergeFilterSelections(
+    selectedStatuses.value,
+    availableStatuses.value,
+  )
+  selectedGenders.value = mergeFilterSelections(
+    selectedGenders.value,
+    availableGenders.value,
+  )
+  selectedAgeGroups.value = mergeFilterSelections(
+    selectedAgeGroups.value,
+    availableAgeGroups.value,
+  )
+}
+
+function mergeFilterSelections(current: string[], available: string[]): string[] {
+  if (available.length === 0) {
+    return []
+  }
+
+  if (current.length === 0) {
+    return [...available]
+  }
+
+  const preserved = current.filter((value) => available.includes(value))
+  const added = available.filter((value) => !current.includes(value))
+  return [...preserved, ...added]
+}
+
+function toggleFilterDropdown(key: FilterDropdownKey): void {
+  openFilter.value = openFilter.value === key ? null : key
+}
+
+function toggleFilterValue<T>(selectedRef: Ref<T[]>, value: T): void {
+  if (selectedRef.value.includes(value)) {
+    selectedRef.value = selectedRef.value.filter((item) => item !== value)
+    return
+  }
+
+  selectedRef.value = [...selectedRef.value, value]
+}
+
+function toggleStatusFilter(status: ParticipantStatus): void {
+  toggleFilterValue(selectedStatuses, status)
+}
+
+function toggleGenderFilter(genderKey: string): void {
+  toggleFilterValue(selectedGenders, genderKey)
+}
+
+function toggleAgeGroupFilter(ageGroup: string): void {
+  toggleFilterValue(selectedAgeGroups, ageGroup)
+}
+
+function formatFilterSummary<T extends string>(
+  selected: T[],
+  available: T[],
+  labelFn: (value: T) => string,
+): string {
+  const activeSelected = selected.filter((value) => available.includes(value))
+
+  if (activeSelected.length === 0) {
+    return 'None'
+  }
+
+  if (activeSelected.length === available.length) {
+    return 'All'
+  }
+
+  if (activeSelected.length <= 2) {
+    return activeSelected.map(labelFn).join(', ')
+  }
+
+  return `${activeSelected.length} selected`
+}
+
+function handleDocumentClick(event: MouseEvent): void {
+  const target = event.target
+  if (!(target instanceof Element) || !target.closest('.filter-dropdown')) {
+    openFilter.value = null
+  }
+}
 
 function syncVisibleParticipants(): void {
   const nextVisibleIds = new Set(visibleParticipantIds.value)
@@ -490,6 +715,7 @@ function renderChart(): void {
 }
 
 onMounted(async () => {
+  document.addEventListener('click', handleDocumentClick)
   await loadRecords()
   startLiveRefreshTimer()
 })
@@ -510,6 +736,7 @@ watch(
 )
 
 watch(flows, () => {
+  syncFilterSelections()
   syncVisibleParticipants()
 })
 
@@ -524,6 +751,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  document.removeEventListener('click', handleDocumentClick)
   clearLiveRefreshTimer()
   destroyChart()
 })
@@ -562,10 +790,16 @@ canvas {
 
 .legend-controls {
   display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.legend-controls-row {
+  display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 1rem;
   align-items: center;
-  margin-bottom: 0.75rem;
 }
 
 .legend-search {
@@ -577,20 +811,101 @@ canvas {
   font: inherit;
 }
 
-.status-filters {
+.legend-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
+  gap: 0.75rem;
 }
 
-.status-filter {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.85rem;
-  color: #495057;
+.filter-dropdown {
+  position: relative;
+  min-width: 160px;
+}
+
+.filter-dropdown-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.45rem 2rem 0.45rem 0.65rem;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: white;
+  color: #2c3e50;
   cursor: pointer;
-  text-transform: capitalize;
+  font: inherit;
+  text-align: left;
+}
+
+.filter-dropdown-trigger::after {
+  content: '▾';
+  position: absolute;
+  right: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c757d;
+  pointer-events: none;
+}
+
+.filter-dropdown-trigger:hover {
+  background: #f8f9fa;
+}
+
+.filter-dropdown-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.filter-dropdown-value {
+  font-size: 0.85rem;
+  color: #2c3e50;
+}
+
+.filter-dropdown-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  min-width: 100%;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.filter-dropdown-option {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  border: none;
+  background: transparent;
+  color: #2c3e50;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.filter-dropdown-option:hover {
+  background: #f8f9fa;
+}
+
+.filter-dropdown-option.selected {
+  background: #e9f2ff;
+  color: #1f4f82;
+  font-weight: 600;
+}
+
+.filter-dropdown-option.selected::before {
+  content: '✓ ';
 }
 
 .select-all-btn {

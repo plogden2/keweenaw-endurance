@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { Chart } from 'chart.js'
 import RaceFlowChart from './RaceFlowChart.vue'
 import { timingApi } from '@/services/api'
-import { assignContrastFlowColors, buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, resolveRaceStartMs } from '@/utils/raceFlowData'
+import { assignContrastFlowColors, buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, resolveRaceStartMs } from '@/utils/raceFlowData'
 import { convertDistanceFromKm, KM_TO_MILES } from '@/utils/units'
 import { setupPinia } from '@/test/helpers'
 import type { TimingRecord } from '@/types/models'
@@ -49,6 +49,8 @@ const sampleRecords: TimingRecord[] = [
       bib_number: '7',
       first_name: 'Alex',
       last_name: 'Runner',
+      gender: 'male',
+      age: 32,
       status: 'finished',
     },
     checkpoint: {
@@ -73,6 +75,8 @@ const sampleRecords: TimingRecord[] = [
       bib_number: '12',
       first_name: 'Sam',
       last_name: 'Trail',
+      gender: 'female',
+      age: 28,
       status: 'finished',
     },
     checkpoint: {
@@ -420,6 +424,14 @@ describe('raceFlowData', () => {
     expect(colors.get('p-beta')).toBe('hsl(180, 70%, 45%)')
     expect(colors.get('p-alpha')).not.toBe(colors.get('p-beta'))
   })
+
+  it('derives gender and age group filter keys from participant data', () => {
+    expect(getParticipantGenderKey('female')).toBe('female')
+    expect(getParticipantGenderKey(undefined)).toBe('unknown')
+    expect(getParticipantAgeGroupKey(32)).toBe('30-34')
+    expect(getParticipantAgeGroupKey(17)).toBe('under-20')
+    expect(getParticipantAgeGroupLabel('30-34')).toBe('30–34')
+  })
 })
 
 describe('RaceFlowChart.vue', () => {
@@ -539,10 +551,60 @@ describe('RaceFlowChart.vue', () => {
 
     expect(wrapper.find('[data-testid="race-flow-legend"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="race-flow-legend-search"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="race-flow-filters"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="race-flow-status-filters"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="race-flow-gender-filters"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="race-flow-age-group-filters"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="race-flow-select-all"]').exists()).toBe(true)
+    expect(wrapper.find('.filter-dropdown-trigger').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Gender')
+    expect(wrapper.text()).toContain('Age group')
     expect(wrapper.text()).toContain('#7 Alex')
     expect(wrapper.text()).toContain('#12 Sam')
+  })
+
+  it('shows All for status when every available status is selected', async () => {
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: sampleRecords },
+    })
+
+    const wrapper = mount(RaceFlowChart, {
+      props: { raceId: 'race-1' },
+    })
+    await flushPromises()
+
+    expect(
+      wrapper.find('[data-testid="race-flow-status-filters"] .filter-dropdown-value').text(),
+    ).toBe('All')
+  })
+
+  it('filters legend items by gender', async () => {
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: sampleRecords },
+    })
+
+    const wrapper = mount(RaceFlowChart, {
+      props: { raceId: 'race-1' },
+    })
+    await flushPromises()
+
+    const genderDropdown = wrapper.find('[data-testid="race-flow-gender-filters"]')
+    await genderDropdown.find('.filter-dropdown-trigger').trigger('click')
+    const femaleOption = genderDropdown
+      .findAll('.filter-dropdown-option')
+      .find((option) => option.text().includes('Female'))
+    await femaleOption?.trigger('click')
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('#7 Alex')
+    expect(wrapper.text()).not.toContain('#12 Sam')
+
+    const chartConfig = (Chart as unknown as Mock).mock.calls.at(-1)?.[1] as {
+      data: { datasets: Array<{ label: string }> }
+    }
+    expect(chartConfig.data.datasets).toHaveLength(1)
+    expect(chartConfig.data.datasets[0].label).toContain('Alex')
   })
 
   it('filters legend items by search query', async () => {

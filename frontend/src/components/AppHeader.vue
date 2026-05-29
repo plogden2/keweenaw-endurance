@@ -7,15 +7,10 @@
       <div class="nav-links">
         <router-link to="/" class="nav-link">Home</router-link>
         <router-link to="/timing" class="nav-link">Timing</router-link>
-        <UnitToggle />
       </div>
     </nav>
   </header>
 </template>
-
-<script setup lang="ts">
-import UnitToggle from '@/components/UnitToggle.vue'
-</script>
 
 <style scoped>
 .header {

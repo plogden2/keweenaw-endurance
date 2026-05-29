@@ -18,7 +18,9 @@ export interface ParticipantFlow {
   firstName: string
   lastName: string
   gender?: string
+  genderKey: string
   age?: number
+  ageGroup: string
   status: ParticipantStatus
   points: FlowPoint[]
 }
@@ -29,6 +31,7 @@ export interface ParticipantFlowTooltip {
   status: ParticipantStatus
   gender?: string
   age?: number
+  ageGroup?: string
   progress: string
 }
 
@@ -67,6 +70,89 @@ export function getParticipantStatusLabel(status: ParticipantStatus): string {
   return status.toUpperCase()
 }
 
+const GENDER_ORDER = ['male', 'female', 'other', 'unknown']
+
+export function getParticipantGenderKey(gender?: string): string {
+  if (!gender) {
+    return 'unknown'
+  }
+
+  return gender.toLowerCase()
+}
+
+export function getParticipantGenderLabel(genderKey: string): string {
+  const labels: Record<string, string> = {
+    male: 'Male',
+    female: 'Female',
+    other: 'Other',
+    unknown: 'Unknown',
+  }
+
+  return labels[genderKey] ?? genderKey
+}
+
+export function compareGenderKeys(a: string, b: string): number {
+  const indexA = GENDER_ORDER.indexOf(a)
+  const indexB = GENDER_ORDER.indexOf(b)
+  const orderA = indexA === -1 ? GENDER_ORDER.length : indexA
+  const orderB = indexB === -1 ? GENDER_ORDER.length : indexB
+  return orderA - orderB
+}
+
+export function getParticipantAgeGroupKey(age?: number): string {
+  if (age == null || age < 0 || Number.isNaN(age)) {
+    return 'unknown'
+  }
+
+  if (age < 20) {
+    return 'under-20'
+  }
+
+  if (age >= 80) {
+    return '80-plus'
+  }
+
+  const lower = Math.floor(age / 5) * 5
+  return `${lower}-${lower + 4}`
+}
+
+export function getParticipantAgeGroupLabel(ageGroupKey: string): string {
+  if (ageGroupKey === 'unknown') {
+    return 'Unknown'
+  }
+
+  if (ageGroupKey === 'under-20') {
+    return 'Under 20'
+  }
+
+  if (ageGroupKey === '80-plus') {
+    return '80+'
+  }
+
+  return ageGroupKey.replace('-', '–')
+}
+
+export function compareAgeGroupKeys(a: string, b: string): number {
+  const order = (key: string): number => {
+    if (key === 'unknown') {
+      return Number.POSITIVE_INFINITY
+    }
+
+    if (key === 'under-20') {
+      return -1
+    }
+
+    if (key === '80-plus') {
+      return 1000
+    }
+
+    const lower = Number.parseInt(key, 10)
+    return Number.isNaN(lower) ? Number.POSITIVE_INFINITY - 1 : lower
+  }
+
+  return order(a) - order(b)
+}
+
 function createParticipantFlow(participant: NonNullable<TimingRecord['participant']>): ParticipantFlow {
   return {
     participantId: participant.id,
@@ -75,7 +161,9 @@ function createParticipantFlow(participant: NonNullable<TimingRecord['participan
     firstName: participant.first_name,
     lastName: participant.last_name,
     gender: participant.gender,
+    genderKey: getParticipantGenderKey(participant.gender),
     age: participant.age,
+    ageGroup: getParticipantAgeGroupKey(participant.age),
     status: participant.status,
     points: [],
   }
@@ -120,8 +208,9 @@ export function buildParticipantFlowTooltip(
     fullName: `${flow.firstName} ${flow.lastName}`.trim(),
     bibNumber: flow.bibNumber,
     status: flow.status,
-    gender: flow.gender,
+    gender: flow.genderKey,
     age: flow.age,
+    ageGroup: flow.ageGroup,
     progress,
   }
 }
@@ -207,7 +296,9 @@ function buildLapFlows(records: TimingRecord[], raceStartMs: number): Participan
     const existingFlow = flows.get(participant.id) ?? createParticipantFlow(participant)
     existingFlow.status = participant.status
     existingFlow.gender = participant.gender
+    existingFlow.genderKey = getParticipantGenderKey(participant.gender)
     existingFlow.age = participant.age
+    existingFlow.ageGroup = getParticipantAgeGroupKey(participant.age)
     existingFlow.lastName = participant.last_name
     existingFlow.points.push({ elapsedMinutes, value: laps })
     flows.set(participant.id, existingFlow)
@@ -244,7 +335,9 @@ function buildDistanceFlows(
     const existingFlow = flows.get(participant.id) ?? createParticipantFlow(participant)
     existingFlow.status = participant.status
     existingFlow.gender = participant.gender
+    existingFlow.genderKey = getParticipantGenderKey(participant.gender)
     existingFlow.age = participant.age
+    existingFlow.ageGroup = getParticipantAgeGroupKey(participant.age)
     existingFlow.lastName = participant.last_name
     existingFlow.points.push({ elapsedMinutes, value })
     flows.set(participant.id, existingFlow)
