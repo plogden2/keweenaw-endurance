@@ -7,7 +7,11 @@
       <router-link :to="`/timing/${eventId}`" class="back-link">← Back to event</router-link>
       <h1 class="page-title">{{ racesStore.currentRace.name }}</h1>
       <p class="meta">
-        {{ racesStore.currentRace.race_type }} ·
+        {{ racesStore.currentRace.race_type }}
+        <template v-if="racesStore.currentRace.distance_km != null">
+          · {{ formatRaceDistance(racesStore.currentRace.distance_km) }}
+        </template>
+        ·
         <span :class="`status-${racesStore.currentRace.status}`">
           {{ racesStore.currentRace.status }}
         </span>
@@ -114,6 +118,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import { useRacesStore } from '@/stores/races'
+import { useUnitsStore } from '@/stores/units'
 import { timingApi } from '@/services/api'
 import type { LeaderboardEntry, TimingRecord } from '@/types/models'
 import {
@@ -123,9 +128,11 @@ import {
   type RaceStatistics,
 } from '@/utils/raceFlowData'
 import { getErrorMessage } from '@/utils/error'
+import { formatDistance } from '@/utils/units'
 
 const route = useRoute()
 const racesStore = useRacesStore()
+const unitsStore = useUnitsStore()
 
 const eventId = computed(() => String(route.params.eventId))
 const raceId = computed(() => String(route.params.raceId))
@@ -151,6 +158,10 @@ const averageResultLabel = computed(() =>
 const averageResultValue = computed(() =>
   formatAverageResult(racesStore.currentRace?.race_type ?? 'time_based', statistics.value),
 )
+
+function formatRaceDistance(distanceKm: number): string {
+  return formatDistance(distanceKm, unitsStore.unitSystem)
+}
 
 function formatResult(entry: LeaderboardEntry): string {
   if (entry.laps) {

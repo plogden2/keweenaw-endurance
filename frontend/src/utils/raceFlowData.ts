@@ -1,4 +1,10 @@
-import type { RaceType, TimingRecord } from '@/types/models'
+import type { ParticipantStatus, RaceType, TimingRecord } from '@/types/models'
+import {
+  convertDistanceFromKm,
+  getDistanceAxisLabel,
+  getDistanceUnitAbbreviation,
+  type UnitSystem,
+} from '@/utils/units'
 
 export interface FlowPoint {
   elapsedMinutes: number
@@ -8,7 +14,116 @@ export interface FlowPoint {
 export interface ParticipantFlow {
   participantId: string
   label: string
+  bibNumber: string
+  firstName: string
+  lastName: string
+  gender?: string
+  age?: number
+  status: ParticipantStatus
   points: FlowPoint[]
+}
+
+export interface ParticipantFlowTooltip {
+  fullName: string
+  bibNumber: string
+  status: ParticipantStatus
+  gender?: string
+  age?: number
+  progress: string
+}
+
+const FLOW_COLOR_SATURATION = 70
+const FLOW_COLOR_LIGHTNESS = 45
+
+export function getFlowLineColor(participantId: string): string {
+  let hash = 0
+  for (let index = 0; index < participantId.length; index += 1) {
+    hash = participantId.charCodeAt(index) + ((hash << 5) - hash)
+  }
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue}, ${FLOW_COLOR_SATURATION}%, ${FLOW_COLOR_LIGHTNESS}%)`
+}
+
+export function assignContrastFlowColors(participantIds: string[]): Map<string, string> {
+  const sortedIds = [...participantIds].sort()
+  const colors = new Map<string, string>()
+
+  if (sortedIds.length === 0) {
+    return colors
+  }
+
+  sortedIds.forEach((participantId, index) => {
+    const hue = Math.round((index * 360) / sortedIds.length)
+    colors.set(
+      participantId,
+      `hsl(${hue}, ${FLOW_COLOR_SATURATION}%, ${FLOW_COLOR_LIGHTNESS}%)`,
+    )
+  })
+
+  return colors
+}
+
+export function getParticipantStatusLabel(status: ParticipantStatus): string {
+  return status.toUpperCase()
+}
+
+function createParticipantFlow(participant: NonNullable<TimingRecord['participant']>): ParticipantFlow {
+  return {
+    participantId: participant.id,
+    label: `#${participant.bib_number} ${participant.first_name}`,
+    bibNumber: participant.bib_number,
+    firstName: participant.first_name,
+    lastName: participant.last_name,
+    gender: participant.gender,
+    age: participant.age,
+    status: participant.status,
+    points: [],
+  }
+}
+
+function formatElapsedMinutes(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes))
+  const hours = Math.floor(total / 60)
+  const mins = total % 60
+
+  if (hours > 0) {
+    return `${hours}h ${mins}m`
+  }
+
+  return `${mins}m`
+}
+
+export function buildParticipantFlowTooltip(
+  flow: ParticipantFlow,
+  raceType: RaceType,
+  unitSystem: UnitSystem = 'imperial',
+): ParticipantFlowTooltip {
+  const lastPoint = flow.points.at(-1)
+  let progress = 'No timing data yet'
+
+  if (lastPoint) {
+    const elapsed = formatElapsedMinutes(lastPoint.elapsedMinutes)
+    if (raceType === 'lap_based') {
+      const laps = Number.isInteger(lastPoint.value)
+        ? String(lastPoint.value)
+        : lastPoint.value.toFixed(1)
+      progress = `${laps} laps at ${elapsed}`
+    } else {
+      const unit = getDistanceUnitAbbreviation(unitSystem)
+      const formatted =
+        lastPoint.value >= 10 ? lastPoint.value.toFixed(1) : lastPoint.value.toFixed(2)
+      progress = `${formatted} ${unit} at ${elapsed}`
+    }
+  }
+
+  return {
+    fullName: `${flow.firstName} ${flow.lastName}`.trim(),
+    bibNumber: flow.bibNumber,
+    status: flow.status,
+    gender: flow.gender,
+    age: flow.age,
+    progress,
+  }
 }
 
 export interface RaceStatistics {
@@ -89,11 +204,11 @@ function buildLapFlows(records: TimingRecord[], raceStartMs: number): Participan
     const elapsedMinutes =
       (new Date(record.timestamp).getTime() - raceStartMs) / 60000
 
-    const existingFlow = flows.get(participant.id) ?? {
-      participantId: participant.id,
-      label: `#${participant.bib_number} ${participant.first_name}`,
-      points: [],
-    }
+    const existingFlow = flows.get(participant.id) ?? createParticipantFlow(participant)
+    existingFlow.status = participant.status
+    existingFlow.gender = participant.gender
+    existingFlow.age = participant.age
+    existingFlow.lastName = participant.last_name
     existingFlow.points.push({ elapsedMinutes, value: laps })
     flows.set(participant.id, existingFlow)
   }
@@ -101,7 +216,11 @@ function buildLapFlows(records: TimingRecord[], raceStartMs: number): Participan
   return [...flows.values()]
 }
 
-function buildDistanceFlows(records: TimingRecord[], raceStartMs: number): ParticipantFlow[] {
+function buildDistanceFlows(
+  records: TimingRecord[],
+  raceStartMs: number,
+  unitSystem: UnitSystem,
+): ParticipantFlow[] {
   const checkpointRecords = records
     .filter(
       (record) =>
@@ -119,13 +238,14 @@ function buildDistanceFlows(records: TimingRecord[], raceStartMs: number): Parti
     const participant = record.participant!
     const elapsedMinutes =
       (new Date(record.timestamp).getTime() - raceStartMs) / 60000
-    const value = record.checkpoint?.distance_from_start_km ?? 0
+    const distanceKm = record.checkpoint?.distance_from_start_km ?? 0
+    const value = convertDistanceFromKm(distanceKm, unitSystem)
 
-    const existingFlow = flows.get(participant.id) ?? {
-      participantId: participant.id,
-      label: `#${participant.bib_number} ${participant.first_name}`,
-      points: [],
-    }
+    const existingFlow = flows.get(participant.id) ?? createParticipantFlow(participant)
+    existingFlow.status = participant.status
+    existingFlow.gender = participant.gender
+    existingFlow.age = participant.age
+    existingFlow.lastName = participant.last_name
     existingFlow.points.push({ elapsedMinutes, value })
     flows.set(participant.id, existingFlow)
   }
@@ -137,6 +257,7 @@ export function buildParticipantFlows(
   records: TimingRecord[],
   raceStartTime?: string,
   raceType: RaceType = 'time_based',
+  unitSystem: UnitSystem = 'imperial',
 ): ParticipantFlow[] {
   const raceStartMs = resolveRaceStartMs(records, raceStartTime)
   if (raceStartMs === null) {
@@ -147,11 +268,14 @@ export function buildParticipantFlows(
     return buildLapFlows(records, raceStartMs)
   }
 
-  return buildDistanceFlows(records, raceStartMs)
+  return buildDistanceFlows(records, raceStartMs, unitSystem)
 }
 
-export function getFlowYAxisLabel(raceType: RaceType): string {
-  return raceType === 'lap_based' ? 'Laps' : 'Distance (km)'
+export function getFlowYAxisLabel(
+  raceType: RaceType,
+  unitSystem: UnitSystem = 'imperial',
+): string {
+  return raceType === 'lap_based' ? 'Laps' : getDistanceAxisLabel(unitSystem)
 }
 
 export function getFlowChartTitle(raceType: RaceType, showCurrentTime: boolean): string {

@@ -22,6 +22,9 @@
               class="race-link"
             >
               <span class="race-name">{{ race.name }}</span>
+              <span v-if="race.distance_km != null" class="race-distance">
+                {{ formatRaceDistance(race.distance_km) }}
+              </span>
               <span class="race-status" :class="`status-${race.status}`">
                 {{ race.status }}
               </span>
@@ -41,16 +44,23 @@ import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useEventsStore } from '@/stores/events'
 import { useRacesStore } from '@/stores/races'
+import { useUnitsStore } from '@/stores/units'
+import { formatDistance } from '@/utils/units'
 
 const route = useRoute()
 const eventsStore = useEventsStore()
 const racesStore = useRacesStore()
+const unitsStore = useUnitsStore()
 
 const eventId = computed(() => String(route.params.eventId))
 
 function formatDate(value: string | undefined): string {
   if (!value) return ''
   return new Date(value).toLocaleDateString()
+}
+
+function formatRaceDistance(distanceKm: number): string {
+  return formatDistance(distanceKm, unitsStore.unitSystem)
 }
 
 async function loadEvent(): Promise<void> {
@@ -94,6 +104,7 @@ watch(eventId, loadEvent)
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
   padding: 1rem;
   background: white;
   border-radius: 8px;
@@ -105,6 +116,16 @@ watch(eventId, loadEvent)
 
 .race-link:hover {
   background: #f8f9fa;
+}
+
+.race-name {
+  flex: 1;
+}
+
+.race-distance {
+  font-size: 0.875rem;
+  color: #6c757d;
+  white-space: nowrap;
 }
 
 .race-status {

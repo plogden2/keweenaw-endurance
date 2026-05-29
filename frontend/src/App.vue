@@ -8,6 +8,7 @@
 
     <footer class="footer">
       <div class="footer-content">
+        <UnitToggle />
         <p>&copy; 2026 Keweenaw Endurance Syndicate. All rights reserved.</p>
       </div>
     </footer>
@@ -18,6 +19,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
+import UnitToggle from '@/components/UnitToggle.vue'
 
 const route = useRoute()
 // Show Inferior Timing branding only on timing routes.
@@ -42,5 +44,9 @@ const showTimingHeader = computed(() => route.path.startsWith('/timing'))
   margin: 0 auto;
   padding: 0 2rem;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
 }
 </style>
