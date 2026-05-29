@@ -8,12 +8,14 @@ import './assets/main.css'
 
 initOfflineQueue()
 
-registerSW({
-  immediate: true,
-  onOfflineReady() {
-    console.info('App ready for offline use')
-  },
-})
+if (import.meta.env.PROD) {
+  registerSW({
+    immediate: true,
+    onOfflineReady() {
+      console.info('App ready for offline use')
+    },
+  })
+}
 
 const app = createApp(App)
 

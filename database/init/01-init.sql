@@ -1,13 +1,4 @@
--- Create the database
-CREATE DATABASE keweenaw_timing;
-
--- Create the user and grant privileges
-CREATE USER timing_user WITH PASSWORD 'timing_pass';
-GRANT ALL PRIVILEGES ON DATABASE keweenaw_timing TO timing_user;
-
--- Connect to the new database
-\c keweenaw_timing
-
+-- Database and user are created by POSTGRES_DB / POSTGRES_USER in docker-compose.
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 

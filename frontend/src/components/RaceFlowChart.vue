@@ -20,12 +20,82 @@ import {
   Title,
   Tooltip,
   Legend,
+  type Plugin,
 } from 'chart.js'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { timingApi } from '@/services/api'
-import type { TimingRecord } from '@/types/models'
-import { buildParticipantFlows } from '@/utils/raceFlowData'
+import type { RaceStatus, RaceType, TimingRecord } from '@/types/models'
+import {
+  buildExtrapolationPoint,
+  buildParticipantFlows,
+  getCurrentElapsedMinutes,
+  getFlowChartTitle,
+  getFlowYAxisLabel,
+  resolveRaceStartMs,
+} from '@/utils/raceFlowData'
 import { getErrorMessage } from '@/utils/error'
+
+const FLOW_LINE_COLORS = [
+  '#3498db',
+  '#e74c3c',
+  '#2ecc71',
+  '#9b59b6',
+  '#f39c12',
+  '#1abc9c',
+  '#e91e63',
+  '#16a085',
+  '#d35400',
+  '#8e44ad',
+]
+
+const CURRENT_TIME_LINE_COLOR = '#e74c3c'
+const LIVE_REFRESH_MS = 30_000
+
+function flowLineColor(index: number): string {
+  return FLOW_LINE_COLORS[index % FLOW_LINE_COLORS.length]
+}
+
+interface FlowLineDataset {
+  label: string
+  data: Array<{ x: number; y: number }>
+  borderColor: string
+  backgroundColor: string
+  pointBackgroundColor: string
+  pointBorderColor: string
+  borderWidth: number
+  tension: number
+  hasExtrapolation: boolean
+  segment?: {
+    borderDash: (ctx: { p1DataIndex: number }) => number[] | undefined
+  }
+  pointRadius?: number | number[]
+}
+
+const currentTimeLinePlugin: Plugin<'line'> = {
+  id: 'currentTimeLine',
+  afterDraw(chart, _args, options) {
+    const xMinutes = (options as { xMinutes?: number | null }).xMinutes
+    if (xMinutes == null) {
+      return
+    }
+
+    const { ctx, chartArea, scales } = chart
+    const xScale = scales.x
+    if (!xScale || xMinutes < xScale.min || xMinutes > xScale.max) {
+      return
+    }
+
+    const xPixel = xScale.getPixelForValue(xMinutes)
+    ctx.save()
+    ctx.strokeStyle = CURRENT_TIME_LINE_COLOR
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(xPixel, chartArea.top)
+    ctx.lineTo(xPixel, chartArea.bottom)
+    ctx.stroke()
+    ctx.restore()
+  },
+}
 
 Chart.register(
   LineController,
@@ -36,20 +106,63 @@ Chart.register(
   Title,
   Tooltip,
   Legend,
+  currentTimeLinePlugin,
 )
 
 const props = defineProps<{
   raceId: string
+  raceStatus?: RaceStatus
+  raceStartTime?: string
+  raceType?: RaceType
 }>()
+
+const chartRaceType = computed(() => props.raceType ?? 'time_based')
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const records = ref<TimingRecord[]>([])
 const chartInstance = ref<Chart | null>(null)
+const nowMs = ref(Date.now())
+let liveRefreshTimer: ReturnType<typeof setInterval> | null = null
 
-const flows = computed(() => buildParticipantFlows(records.value))
+const isActiveRace = computed(() => props.raceStatus === 'active')
+const flows = computed(() =>
+  buildParticipantFlows(records.value, props.raceStartTime, chartRaceType.value),
+)
 const hasData = computed(() => flows.value.length > 0)
+const raceStartMs = computed(() => resolveRaceStartMs(records.value, props.raceStartTime))
+const currentElapsedMinutes = computed(() => {
+  if (!isActiveRace.value || raceStartMs.value === null) {
+    return null
+  }
+
+  const elapsed = getCurrentElapsedMinutes(raceStartMs.value, nowMs.value)
+  const latestRecordedMinute = flows.value.reduce((latest, flow) => {
+    const lastPoint = flow.points.at(-1)
+    return lastPoint ? Math.max(latest, lastPoint.elapsedMinutes) : latest
+  }, 0)
+
+  return elapsed > latestRecordedMinute ? elapsed : null
+})
+
+function clearLiveRefreshTimer(): void {
+  if (liveRefreshTimer) {
+    clearInterval(liveRefreshTimer)
+    liveRefreshTimer = null
+  }
+}
+
+function startLiveRefreshTimer(): void {
+  clearLiveRefreshTimer()
+  if (!isActiveRace.value) {
+    return
+  }
+
+  liveRefreshTimer = setInterval(() => {
+    nowMs.value = Date.now()
+  }, LIVE_REFRESH_MS)
+}
 
 async function loadRecords(): Promise<void> {
   loading.value = true
@@ -57,6 +170,7 @@ async function loadRecords(): Promise<void> {
   try {
     const { data } = await timingApi.getLive(props.raceId)
     records.value = data.records ?? []
+    nowMs.value = Date.now()
   } catch (err) {
     error.value = getErrorMessage(err, 'Failed to load race flow data')
   } finally {
@@ -75,17 +189,61 @@ function renderChart(): void {
     return
   }
 
+  const showCurrentTime = currentElapsedMinutes.value != null
+  const maxElapsedMinutes = flows.value.reduce((max, flow) => {
+    const extrapolation = showCurrentTime
+      ? buildExtrapolationPoint(flow, currentElapsedMinutes.value!)
+      : null
+    const lastElapsed = extrapolation?.elapsedMinutes ?? flow.points.at(-1)?.elapsedMinutes ?? 0
+    return Math.max(max, lastElapsed)
+  }, 0)
+
   chartInstance.value = new Chart(canvasRef.value, {
     type: 'line',
     data: {
-      datasets: flows.value.map((flow) => ({
-        label: flow.label,
-        data: flow.points.map((point) => ({
-          x: point.elapsedMinutes,
-          y: point.position,
-        })),
-        tension: 0.2,
-      })),
+      datasets: flows.value.map((flow, index) => {
+        const color = flowLineColor(index)
+        const extrapolation = showCurrentTime
+          ? buildExtrapolationPoint(flow, currentElapsedMinutes.value!)
+          : null
+        const chartPoints = [
+          ...flow.points.map((point) => ({
+            x: point.elapsedMinutes,
+            y: point.value,
+          })),
+        ]
+
+        if (extrapolation) {
+          chartPoints.push({
+            x: extrapolation.elapsedMinutes,
+            y: extrapolation.value,
+          })
+        }
+
+        const dataset: FlowLineDataset = {
+          label: flow.label,
+          data: chartPoints,
+          borderColor: color,
+          backgroundColor: color,
+          pointBackgroundColor: color,
+          pointBorderColor: color,
+          borderWidth: 2,
+          tension: 0.2,
+          hasExtrapolation: extrapolation != null,
+        }
+
+        if (extrapolation) {
+          dataset.segment = {
+            borderDash: (ctx: { p1DataIndex: number }) =>
+              ctx.p1DataIndex === chartPoints.length - 1 ? [6, 6] : undefined,
+          }
+          dataset.pointRadius = chartPoints.map((_point, pointIndex) =>
+            pointIndex === chartPoints.length - 1 ? 0 : 4,
+          )
+        }
+
+        return dataset
+      }),
     },
     options: {
       responsive: true,
@@ -94,43 +252,58 @@ function renderChart(): void {
         x: {
           type: 'linear',
           title: { display: true, text: 'Elapsed time (minutes)' },
+          max: showCurrentTime ? Math.ceil(maxElapsedMinutes * 1.05) : undefined,
         },
         y: {
-          reverse: true,
-          title: { display: true, text: 'Position' },
-          ticks: { stepSize: 1 },
+          title: { display: true, text: getFlowYAxisLabel(chartRaceType.value) },
+          ticks: chartRaceType.value === 'lap_based' ? { stepSize: 1 } : undefined,
         },
       },
       plugins: {
+        currentTimeLine: { xMinutes: currentElapsedMinutes.value },
         legend: { display: true, position: 'bottom' },
-        title: { display: true, text: 'Finish order over elapsed time' },
-      },
+        title: {
+          display: true,
+          text: getFlowChartTitle(chartRaceType.value, showCurrentTime),
+        },
+      } as Record<string, unknown>,
     },
   })
 }
 
 onMounted(async () => {
   await loadRecords()
+  startLiveRefreshTimer()
 })
 
 watch(
   () => props.raceId,
   async () => {
     await loadRecords()
+    startLiveRefreshTimer()
   },
 )
 
-watch([flows, loading], () => {
+watch(
+  () => [props.raceStatus, props.raceStartTime, props.raceType],
+  () => {
+    startLiveRefreshTimer()
+  },
+)
+
+watch([flows, loading, currentElapsedMinutes, chartRaceType], async () => {
   if (!loading.value) {
+    await nextTick()
     renderChart()
   }
 })
 
 onBeforeUnmount(() => {
+  clearLiveRefreshTimer()
   destroyChart()
 })
 
-defineExpose({ loadRecords, records, flows })
+defineExpose({ loadRecords, records, flows, currentElapsedMinutes })
 </script>
 
 <style scoped>

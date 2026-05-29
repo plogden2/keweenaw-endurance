@@ -1,7 +1,5 @@
 <template>
   <div class="live-timing">
-    <AppHeader />
-
     <div v-if="racesStore.loading" class="status">Loading race…</div>
     <div v-else-if="racesStore.error" class="status error">{{ racesStore.error }}</div>
 
@@ -120,7 +118,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import AppHeader from '@/components/AppHeader.vue'
 import ManualTimingForm from '@/components/ManualTimingForm.vue'
 import SyncStatus from '@/components/SyncStatus.vue'
 import { useRacesStore } from '@/stores/races'

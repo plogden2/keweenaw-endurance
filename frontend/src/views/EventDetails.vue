@@ -1,7 +1,5 @@
 <template>
   <div class="event-details">
-    <AppHeader />
-
     <div v-if="eventsStore.loading" class="status">Loading event…</div>
     <div v-else-if="eventsStore.error" class="status error">{{ eventsStore.error }}</div>
 
@@ -41,7 +39,6 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import AppHeader from '@/components/AppHeader.vue'
 import { useEventsStore } from '@/stores/events'
 import { useRacesStore } from '@/stores/races'
 

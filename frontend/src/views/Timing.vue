@@ -1,6 +1,5 @@
 <template>
   <div class="timing">
-    <AppHeader />
     <h1 class="page-title">Race Timing</h1>
 
     <div v-if="eventsStore.loading" class="status">Loading events…</div>
@@ -22,7 +21,6 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import AppHeader from '@/components/AppHeader.vue'
 import EventsTable from '@/components/EventsTable.vue'
 import { useEventsStore } from '@/stores/events'
 

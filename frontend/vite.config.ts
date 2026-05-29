@@ -7,6 +7,9 @@ export default defineConfig({
   plugins: [
     vue(),
     VitePWA({
+      devOptions: {
+        enabled: false,
+      },
       registerType: 'autoUpdate',
       includeAssets: ['vite.svg'],
       manifest: {
@@ -53,6 +56,13 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 3000,
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
+    hmr: {
+      clientPort: 3000,
+    },
     proxy: {
       '/api': {
         target: 'http://backend:8080',

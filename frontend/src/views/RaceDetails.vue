@@ -1,7 +1,5 @@
 <template>
   <div class="race-details">
-    <AppHeader />
-
     <div v-if="racesStore.loading" class="status">Loading race…</div>
     <div v-else-if="racesStore.error" class="status error">{{ racesStore.error }}</div>
 
@@ -69,7 +67,12 @@
       </section>
 
       <section v-else-if="activeTab === 'race-flow'" class="race-flow">
-        <RaceFlowChart :race-id="raceId" />
+        <RaceFlowChart
+          :race-id="raceId"
+          :race-status="racesStore.currentRace.status"
+          :race-start-time="racesStore.currentRace.start_time"
+          :race-type="racesStore.currentRace.race_type"
+        />
       </section>
 
       <section v-else-if="activeTab === 'statistics'" class="statistics">
@@ -111,7 +114,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import AppHeader from '@/components/AppHeader.vue'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import { useRacesStore } from '@/stores/races'
 import { timingApi } from '@/services/api'
