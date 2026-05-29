@@ -13,7 +13,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['vite.svg'],
       manifest: {
-        name: 'Keweenaw Endurance Race Timing',
+        name: 'Keweenaw Endurance Syndicate Race Timing',
         short_name: 'Keweenaw Timing',
         description: 'Endurance race timing and indexing for Keweenaw area events',
         theme_color: '#2c3e50',

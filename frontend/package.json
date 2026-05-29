@@ -1,7 +1,7 @@
 {
   "name": "keweenaw-endurance-frontend",
   "version": "1.0.0",
-  "description": "Keweenaw Endurance Race Timing System Frontend",
+  "description": "Keweenaw Endurance Syndicate Race Timing System Frontend",
   "type": "module",
   "scripts": {
     "dev": "vite",

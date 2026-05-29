@@ -2,7 +2,7 @@
   <div class="home">
     <section class="hero">
       <div class="hero-content">
-        <h1 class="hero-title">Keweenaw Endurance Race Timing</h1>
+        <h1 class="hero-title">Keweenaw Endurance Syndicate Race Timing</h1>
         <p class="hero-subtitle">Comprehensive race timing and indexing for endurance events</p>
         <router-link to="/timing" class="cta-button" data-testid="timing-cta">
           View Live Timing

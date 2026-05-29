@@ -1,8 +1,8 @@
-# Keweenaw Endurance Race Timing System - Task Breakdown
+# Keweenaw Endurance Syndicate Race Timing System - Task Breakdown
 
 ## Task Management Overview
 
-This document provides a comprehensive task breakdown following the Test-Driven Development (TDD) workflow mandated by the Keweenaw Endurance Constitution. Each task follows the strict TDD methodology: **Write Failing Tests → User Approval → Implement → Refactor → Verify**.
+This document provides a comprehensive task breakdown following the Test-Driven Development (TDD) workflow mandated by the Keweenaw Endurance Syndicate Constitution. Each task follows the strict TDD methodology: **Write Failing Tests → User Approval → Implement → Refactor → Verify**.
 
 ## Task Categories
 
@@ -727,11 +727,11 @@ This document provides a comprehensive task breakdown following the Test-Driven 
    <head>
        <meta charset="UTF-8">
        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-       <title>Keweenaw Endurance - Race Timing</title>
+       <title>Keweenaw Endurance Syndicate - Race Timing</title>
        <!-- Test: SEO meta tags -->
        <meta name="description" content="Endurance race timing and indexing for Keweenaw area">
        <!-- Test: Open Graph meta tags -->
-       <meta property="og:title" content="Keweenaw Endurance">
+       <meta property="og:title" content="Keweenaw Endurance Syndicate">
        <meta property="og:description" content="Race timing and event information">
    </head>
    <body>
@@ -1446,4 +1446,4 @@ Each task must pass these quality gates:
 - Process 100 races simultaneously
 - Support 500 checkpoint stations
 
-This comprehensive task breakdown provides a complete roadmap for implementing the Keweenaw Endurance race timing system while maintaining strict adherence to the TDD methodology and constitutional requirements.
+This comprehensive task breakdown provides a complete roadmap for implementing the Keweenaw Endurance Syndicate race timing system while maintaining strict adherence to the TDD methodology and constitutional requirements.

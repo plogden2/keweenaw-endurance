@@ -1,4 +1,4 @@
-# Tasks: Keweenaw Endurance Race Timing System
+# Tasks: Keweenaw Endurance Syndicate Race Timing System
 
 **Input**: Design documents from `/specs/001-race-timing/`
 

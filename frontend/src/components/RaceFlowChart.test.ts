@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { Chart } from 'chart.js'
 import RaceFlowChart from './RaceFlowChart.vue'
 import { timingApi } from '@/services/api'
-import { buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, getCurrentElapsedMinutes, resolveRaceStartMs } from '@/utils/raceFlowData'
+import { buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, resolveRaceStartMs } from '@/utils/raceFlowData'
 import type { TimingRecord } from '@/types/models'
 
 vi.mock('chart.js', () => ({
@@ -256,11 +256,93 @@ describe('raceFlowData', () => {
   })
 
   it('computes race statistics from timing records', () => {
-    const stats = buildRaceStatistics(sampleRecords)
+    const stats = buildRaceStatistics(sampleRecords, '2024-06-01T10:30:00.000Z', 'time_based')
 
     expect(stats.totalParticipants).toBe(2)
     expect(stats.finished).toBe(2)
-    expect(stats.averageFinishMinutes).not.toBeNull()
+    expect(stats.averageFinishSeconds).toBe(2700)
+    expect(formatDuration(stats.averageFinishSeconds!)).toBe('45m 0s')
+    expect(formatAverageResult('time_based', stats)).toBe('45m 0s')
+    expect(getAverageResultLabel('lap_based')).toBe('Avg laps')
+  })
+
+  it('computes average laps for lap-based races', () => {
+    const lapRecords: TimingRecord[] = [
+      {
+        id: 'lap-1',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T11:00:00.000Z',
+        local_timestamp: '2024-06-01T11:00:00.000Z',
+        sync_status: 'synced',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '201',
+          first_name: 'Pat',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Loop',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+      {
+        id: 'lap-2',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T12:00:00.000Z',
+        local_timestamp: '2024-06-01T12:00:00.000Z',
+        sync_status: 'synced',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '201',
+          first_name: 'Pat',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Loop',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+      {
+        id: 'lap-3',
+        participant_id: 'p2',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T11:30:00.000Z',
+        local_timestamp: '2024-06-01T11:30:00.000Z',
+        sync_status: 'synced',
+        participant: {
+          id: 'p2',
+          race_id: 'race-1',
+          bib_number: '202',
+          first_name: 'Dana',
+          last_name: 'Endure',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Loop',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+    ]
+
+    const stats = buildRaceStatistics(lapRecords, undefined, 'lap_based')
+
+    expect(stats.averageLaps).toBe(1.5)
+    expect(formatAverageResult('lap_based', stats)).toBe('1.5')
   })
 
   it('resolves race start from official start time when provided', () => {

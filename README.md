@@ -1,4 +1,4 @@
-# Keweenaw Endurance
+# Keweenaw Endurance Syndicate
 
 Race timing and event management system for endurance events in the Keweenaw area.
 

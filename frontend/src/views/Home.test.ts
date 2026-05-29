@@ -21,7 +21,7 @@ describe('Home.vue', () => {
 
     const wrapper = mount(Home, { global: { plugins: [router] } })
 
-    expect(wrapper.text()).toContain('Keweenaw Endurance Race Timing')
+    expect(wrapper.text()).toContain('Keweenaw Endurance Syndicate Race Timing')
     const cta = wrapper.find('[data-testid="timing-cta"]')
     expect(cta.attributes('href')).toBe('/timing')
   })

@@ -100,10 +100,8 @@
             <span class="value">{{ statistics.dnf }}</span>
           </li>
           <li>
-            <span class="label">Avg finish (min)</span>
-            <span class="value">
-              {{ statistics.averageFinishMinutes?.toFixed(1) ?? '—' }}
-            </span>
+            <span class="label">{{ averageResultLabel }}</span>
+            <span class="value">{{ averageResultValue }}</span>
           </li>
         </ul>
       </section>
@@ -118,7 +116,12 @@ import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import { useRacesStore } from '@/stores/races'
 import { timingApi } from '@/services/api'
 import type { LeaderboardEntry, TimingRecord } from '@/types/models'
-import { buildRaceStatistics, type RaceStatistics } from '@/utils/raceFlowData'
+import {
+  buildRaceStatistics,
+  formatAverageResult,
+  getAverageResultLabel,
+  type RaceStatistics,
+} from '@/utils/raceFlowData'
 import { getErrorMessage } from '@/utils/error'
 
 const route = useRoute()
@@ -138,8 +141,16 @@ const statistics = ref<RaceStatistics>({
   started: 0,
   registered: 0,
   dnf: 0,
-  averageFinishMinutes: null,
+  averageFinishSeconds: null,
+  averageLaps: null,
 })
+
+const averageResultLabel = computed(() =>
+  getAverageResultLabel(racesStore.currentRace?.race_type ?? 'time_based'),
+)
+const averageResultValue = computed(() =>
+  formatAverageResult(racesStore.currentRace?.race_type ?? 'time_based', statistics.value),
+)
 
 function formatResult(entry: LeaderboardEntry): string {
   if (entry.laps) {
@@ -177,7 +188,11 @@ async function loadStatistics(): Promise<void> {
   statsError.value = null
   try {
     const { data } = await timingApi.getLive(raceId.value)
-    statistics.value = buildRaceStatistics((data.records ?? []) as TimingRecord[])
+    statistics.value = buildRaceStatistics(
+      (data.records ?? []) as TimingRecord[],
+      racesStore.currentRace?.start_time,
+      racesStore.currentRace?.race_type,
+    )
   } catch (err) {
     statsError.value = getErrorMessage(err, 'Failed to load statistics')
   } finally {

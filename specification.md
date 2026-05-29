@@ -1,4 +1,4 @@
-# Keweenaw Endurance Race Timing System - Specification
+# Keweenaw Endurance Syndicate Race Timing System - Specification
 
 ## Project Overview
 
@@ -381,4 +381,4 @@ services:
 - Cloud CDN for static asset delivery
 - Monitoring and alerting setup
 
-This specification provides the foundation for implementing the Keweenaw Endurance race timing system following the constitutional requirements of test-driven development and comprehensive testing coverage.
+This specification provides the foundation for implementing the Keweenaw Endurance Syndicate race timing system following the constitutional requirements of test-driven development and comprehensive testing coverage.

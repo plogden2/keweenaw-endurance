@@ -1,4 +1,4 @@
-# Keweenaw Endurance Constitution
+# Keweenaw Endurance Syndicate Constitution
 
 ## Core Principles
 

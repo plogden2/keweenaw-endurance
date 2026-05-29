@@ -8,7 +8,7 @@
 
     <footer class="footer">
       <div class="footer-content">
-        <p>&copy; 2024 Keweenaw Endurance. All rights reserved.</p>
+        <p>&copy; 2026 Keweenaw Endurance Syndicate. All rights reserved.</p>
       </div>
     </footer>
   </div>

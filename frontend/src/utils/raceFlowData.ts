@@ -17,7 +17,8 @@ export interface RaceStatistics {
   started: number
   registered: number
   dnf: number
-  averageFinishMinutes: number | null
+  averageFinishSeconds: number | null
+  averageLaps: number | null
 }
 
 const DISTANCE_CHECKPOINT_TYPES = new Set(['start', 'intermediate', 'finish'])
@@ -161,10 +162,57 @@ export function getFlowChartTitle(raceType: RaceType, showCurrentTime: boolean):
   return `${metric} over elapsed time`
 }
 
-export function buildRaceStatistics(records: TimingRecord[]): RaceStatistics {
+export function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+
+  const parts: string[] = []
+  if (h > 0) {
+    parts.push(`${h}h`)
+  }
+  if (m > 0 || h > 0) {
+    parts.push(`${m}m`)
+  }
+  parts.push(`${s}s`)
+
+  return parts.join(' ')
+}
+
+export function getAverageResultLabel(raceType: RaceType): string {
+  return raceType === 'lap_based' ? 'Avg laps' : 'Avg finish'
+}
+
+export function formatAverageResult(
+  raceType: RaceType,
+  statistics: Pick<RaceStatistics, 'averageFinishSeconds' | 'averageLaps'>,
+): string {
+  if (raceType === 'lap_based') {
+    if (statistics.averageLaps == null) {
+      return '—'
+    }
+
+    const rounded = statistics.averageLaps
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+  }
+
+  if (statistics.averageFinishSeconds == null) {
+    return '—'
+  }
+
+  return formatDuration(statistics.averageFinishSeconds)
+}
+
+export function buildRaceStatistics(
+  records: TimingRecord[],
+  raceStartTime?: string,
+  raceType: RaceType = 'time_based',
+): RaceStatistics {
+  const raceStartMs = resolveRaceStartMs(records, raceStartTime)
   const participants = new Map<
     string,
-    { status: string; finishMinutes: number | null }
+    { status: string; startMs: number | null; finishMs: number | null; laps: number }
   >()
 
   for (const record of records) {
@@ -173,14 +221,23 @@ export function buildRaceStatistics(records: TimingRecord[]): RaceStatistics {
       continue
     }
 
+    const checkpointType = record.checkpoint?.checkpoint_type
+    const crossingMs = new Date(record.timestamp).getTime()
     const existing = participants.get(participant.id) ?? {
       status: participant.status,
-      finishMinutes: null,
+      startMs: null,
+      finishMs: null,
+      laps: 0,
     }
     existing.status = participant.status
 
-    if (record.checkpoint?.checkpoint_type === 'finish') {
-      existing.finishMinutes = new Date(record.timestamp).getTime() / 60000
+    if (checkpointType === 'start') {
+      existing.startMs = crossingMs
+    }
+
+    if (checkpointType === 'finish') {
+      existing.finishMs = crossingMs
+      existing.laps += 1
     }
 
     participants.set(participant.id, existing)
@@ -191,9 +248,21 @@ export function buildRaceStatistics(records: TimingRecord[]): RaceStatistics {
   const started = values.filter((entry) => entry.status === 'started').length
   const registered = values.filter((entry) => entry.status === 'registered').length
   const dnf = values.filter((entry) => entry.status === 'dnf').length
-  const finishTimes = values
-    .map((entry) => entry.finishMinutes)
-    .filter((value): value is number => value !== null)
+
+  const finishDurations = values
+    .filter((entry) => entry.status === 'finished' && entry.startMs != null && entry.finishMs != null)
+    .map((entry) => (entry.finishMs! - entry.startMs!) / 1000)
+
+  const fallbackFinishDurations =
+    finishDurations.length > 0 || raceStartMs == null
+      ? finishDurations
+      : values
+          .filter((entry) => entry.status === 'finished' && entry.finishMs != null)
+          .map((entry) => (entry.finishMs! - raceStartMs) / 1000)
+
+  const lapCounts = values
+    .map((entry) => entry.laps)
+    .filter((laps) => laps > 0)
 
   return {
     totalParticipants: values.length,
@@ -201,9 +270,14 @@ export function buildRaceStatistics(records: TimingRecord[]): RaceStatistics {
     started,
     registered,
     dnf,
-    averageFinishMinutes:
-      finishTimes.length > 0
-        ? finishTimes.reduce((sum, value) => sum + value, 0) / finishTimes.length
+    averageFinishSeconds:
+      raceType === 'time_based' && fallbackFinishDurations.length > 0
+        ? fallbackFinishDurations.reduce((sum, value) => sum + value, 0) /
+          fallbackFinishDurations.length
+        : null,
+    averageLaps:
+      raceType === 'lap_based' && lapCounts.length > 0
+        ? lapCounts.reduce((sum, value) => sum + value, 0) / lapCounts.length
         : null,
   }
 }
