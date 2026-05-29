@@ -74,9 +74,29 @@ func main() {
 		{
 			races.GET("", handlers.GetRaces)
 			races.POST("", handlers.CreateRace)
+			races.GET("/:id/checkpoints", handlers.GetCheckpointsByRace)
+			races.POST("/:id/checkpoints", handlers.CreateCheckpoint)
+			races.GET("/:id/categories", handlers.GetCategoriesByRace)
+			races.POST("/:id/categories", handlers.CreateCategory)
 			races.GET("/:id", handlers.GetRace)
 			races.PUT("/:id", handlers.UpdateRace)
 			races.DELETE("/:id", handlers.DeleteRace)
+		}
+
+		// Checkpoint routes
+		checkpoints := api.Group("/checkpoints")
+		{
+			checkpoints.GET("/:id", handlers.GetCheckpoint)
+			checkpoints.PUT("/:id", handlers.UpdateCheckpoint)
+			checkpoints.DELETE("/:id", handlers.DeleteCheckpoint)
+		}
+
+		// Category routes
+		categories := api.Group("/categories")
+		{
+			categories.GET("/:id", handlers.GetCategory)
+			categories.PUT("/:id", handlers.UpdateCategory)
+			categories.DELETE("/:id", handlers.DeleteCategory)
 		}
 
 		// Participant routes
@@ -94,6 +114,7 @@ func main() {
 		{
 			timing.GET("/live/:raceId", handlers.GetLiveTiming)
 			timing.POST("/record", handlers.CreateTimingRecord)
+			timing.PUT("/records/:id", handlers.UpdateTimingRecord)
 			timing.GET("/results/:raceId", handlers.GetRaceResults)
 			timing.GET("/leaderboard/:raceId", handlers.GetLeaderboard)
 		}

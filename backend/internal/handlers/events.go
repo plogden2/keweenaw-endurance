@@ -140,11 +140,17 @@ func respondServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrEventNotFound),
 		errors.Is(err, services.ErrRaceNotFound),
-		errors.Is(err, services.ErrParticipantNotFound):
+		errors.Is(err, services.ErrParticipantNotFound),
+		errors.Is(err, services.ErrCheckpointNotFound),
+		errors.Is(err, services.ErrCategoryNotFound),
+		errors.Is(err, services.ErrTimingRecordNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrInvalidEventInput),
 		errors.Is(err, services.ErrInvalidRaceInput),
-		errors.Is(err, services.ErrInvalidParticipantInput):
+		errors.Is(err, services.ErrInvalidParticipantInput),
+		errors.Is(err, services.ErrInvalidCheckpointInput),
+		errors.Is(err, services.ErrInvalidCategoryInput),
+		errors.Is(err, services.ErrInvalidTimingInput):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
