@@ -82,7 +82,7 @@ func TestCORS(t *testing.T) {
 			}
 			
 			if tt.method == "OPTIONS" {
-				assert.Equal(t, "204", w.Header().Get("Content-Length"))
+				assert.Equal(t, http.StatusNoContent, w.Code)
 			}
 		})
 	}

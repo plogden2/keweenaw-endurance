@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -8,9 +9,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func clearConfigEnv(t *testing.T) {
+	t.Helper()
+	keys := []string{
+		"GO_ENV", "PORT", "DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD",
+		"DB_MAX_OPEN_CONNS", "DB_MAX_IDLE_CONNS", "DB_CONN_MAX_LIFETIME",
+		"REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "REDIS_DB",
+		"JWT_SECRET", "JWT_ACCESS_TOKEN_TTL", "JWT_REFRESH_TOKEN_TTL",
+		"RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW", "CORS_ORIGINS",
+	}
+	saved := make(map[string]string, len(keys))
+	for _, key := range keys {
+		saved[key] = os.Getenv(key)
+		os.Unsetenv(key)
+	}
+	t.Cleanup(func() {
+		for _, key := range keys {
+			if val, ok := saved[key]; ok && val != "" {
+				os.Setenv(key, val)
+			} else {
+				os.Unsetenv(key)
+			}
+		}
+	})
+}
+
 func TestLoadConfig(t *testing.T) {
 	// Test default configuration
 	t.Run("DefaultConfig", func(t *testing.T) {
+		clearConfigEnv(t)
 		config, err := Load()
 		
 		require.NoError(t, err)
