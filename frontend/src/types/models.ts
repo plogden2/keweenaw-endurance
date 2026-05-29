@@ -35,6 +35,7 @@ export interface Participant {
   last_name: string
   gender?: string
   age?: number
+  location?: string
   rfid_tag_uid?: string
   status: ParticipantStatus
   created_at?: string
@@ -78,7 +79,7 @@ export type UpdateRacePayload = Partial<Omit<CreateRacePayload, 'event_id'>>
 
 export type CreateParticipantPayload = Pick<
   Participant,
-  'race_id' | 'bib_number' | 'first_name' | 'last_name' | 'gender' | 'age' | 'rfid_tag_uid' | 'status'
+  'race_id' | 'bib_number' | 'first_name' | 'last_name' | 'gender' | 'age' | 'location' | 'rfid_tag_uid' | 'status'
 >
 
 export type UpdateParticipantPayload = Partial<Omit<CreateParticipantPayload, 'race_id'>>

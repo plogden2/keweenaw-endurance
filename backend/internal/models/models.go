@@ -51,6 +51,7 @@ type Participant struct {
 	LastName   string    `gorm:"type:varchar(100);not null" json:"last_name"`
 	Gender     string    `gorm:"type:varchar(10)" json:"gender"`
 	Age        int       `gorm:"type:integer" json:"age"`
+	Location   string    `gorm:"type:varchar(500)" json:"location"`
 	RFIDTagUID string    `gorm:"type:varchar(100)" json:"rfid_tag_uid"`
 	Status     string    `gorm:"type:varchar(50);not null;check:status IN ('registered','started','finished','dnf','dns')" json:"status"`
 	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`

@@ -308,7 +308,7 @@ def build_sql(participants_by_contest: dict[int, list[ParticipantRow]]) -> str:
     lines.append(",\n".join(category_values) + ";")
     lines.append("")
     lines.append(
-        "INSERT INTO participants (id, race_id, bib_number, first_name, last_name, gender, age, rfid_tag_uid, status)"
+        "INSERT INTO participants (id, race_id, bib_number, first_name, last_name, gender, age, location, rfid_tag_uid, status)"
     )
     lines.append("VALUES")
 
@@ -330,6 +330,7 @@ def build_sql(participants_by_contest: dict[int, list[ParticipantRow]]) -> str:
                 f"{sql_str(row.last_name)}, "
                 f"{sql_str(row.gender)}, "
                 f"{row.age if row.age is not None else 'NULL'}, "
+                f"{sql_str(row.city_state)}, "
                 f"{sql_str(f'RR{EVENT_ID}-{row.rr_id}')}, "
                 f"{sql_str(row.status)}"
                 ")"

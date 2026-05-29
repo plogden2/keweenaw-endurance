@@ -147,6 +147,9 @@ func (s *ParticipantService) UpdateParticipant(id uuid.UUID, input *models.Parti
 	if input.Age > 0 {
 		participant.Age = input.Age
 	}
+	if input.Location != "" {
+		participant.Location = input.Location
+	}
 	if input.RFIDTagUID != "" && input.RFIDTagUID != participant.RFIDTagUID {
 		if err := s.ensureRFIDAvailable(input.RFIDTagUID, &id); err != nil {
 			return nil, err

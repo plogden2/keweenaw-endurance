@@ -37,6 +37,7 @@ CREATE TABLE participants (
     last_name VARCHAR(100) NOT NULL,
     gender VARCHAR(10) CHECK (gender IS NULL OR gender IN ('male', 'female', 'other')),
     age INTEGER,
+    location VARCHAR(500),
     rfid_tag_uid VARCHAR(100),
     status VARCHAR(50) CHECK (status IN ('registered', 'started', 'finished', 'dnf', 'dns')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

@@ -57,6 +57,7 @@ func (h *Handlers) CreateParticipant(c *gin.Context) {
 		LastName:   req.LastName,
 		Gender:     req.Gender,
 		Age:        req.Age,
+		Location:   req.Location,
 		RFIDTagUID: req.RFIDTagUID,
 		Status:     req.Status,
 	})
@@ -112,6 +113,9 @@ func (h *Handlers) UpdateParticipant(c *gin.Context) {
 	}
 	if req.Age != nil {
 		update.Age = *req.Age
+	}
+	if req.Location != nil {
+		update.Location = *req.Location
 	}
 	if req.RFIDTagUID != nil {
 		update.RFIDTagUID = *req.RFIDTagUID

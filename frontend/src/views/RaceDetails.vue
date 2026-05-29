@@ -253,7 +253,7 @@ const certificateData = computed(() => {
     eventName,
     eventDate: formatEventDate(event?.event_date ?? racesStore.currentRace.start_time),
     participantName: `${entry.first_name} ${entry.last_name}`.trim(),
-    location: event?.location,
+    location: participant?.location ?? event?.location,
     bibNumber: entry.bib_number,
     raceName,
     categoryLabel: participant ? formatCategoryLabel(participant) : '—',

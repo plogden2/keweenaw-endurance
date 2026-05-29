@@ -47,6 +47,7 @@ type createParticipantRequest struct {
 	LastName   string `json:"last_name" binding:"required"`
 	Gender     string `json:"gender"`
 	Age        int    `json:"age"`
+	Location   string `json:"location"`
 	RFIDTagUID string `json:"rfid_tag_uid"`
 	Status     string `json:"status"`
 }
@@ -57,6 +58,7 @@ type updateParticipantRequest struct {
 	LastName   *string `json:"last_name"`
 	Gender     *string `json:"gender"`
 	Age        *int    `json:"age"`
+	Location   *string `json:"location"`
 	RFIDTagUID *string `json:"rfid_tag_uid"`
 	Status     *string `json:"status"`
 }
