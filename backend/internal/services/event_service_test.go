@@ -41,7 +41,7 @@ func TestEventService_CreateAndGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, event.ID.IsZero())
 
-	fetched, err := svc.GetEvent(event.ID)
+	fetched, err := svc.GetEvent(event.ID.UUID())
 	require.NoError(t, err)
 	assert.Equal(t, "Copper Harbor Classic", fetched.Name)
 }
@@ -90,13 +90,13 @@ func TestEventService_UpdateAndDelete(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	updated, err := svc.UpdateEvent(event.ID, &models.Event{Name: "Updated Name"})
+	updated, err := svc.UpdateEvent(event.ID.UUID(), &models.Event{Name: "Updated Name"})
 	require.NoError(t, err)
 	assert.Equal(t, "Updated Name", updated.Name)
 
-	require.NoError(t, svc.DeleteEvent(event.ID))
+	require.NoError(t, svc.DeleteEvent(event.ID.UUID()))
 
-	_, err = svc.GetEvent(event.ID)
+	_, err = svc.GetEvent(event.ID.UUID())
 	assert.ErrorIs(t, err, ErrEventNotFound)
 }
 

@@ -103,7 +103,7 @@ func (s *ResultsService) computeLeaderboard(raceID uuid.UUID, categoryID *uuid.U
 	if err != nil {
 		return nil, err
 	}
-	if category.RaceID != raceID {
+	if category.RaceID.UUID() != raceID {
 		return nil, ErrInvalidCategoryInput
 	}
 
@@ -272,7 +272,7 @@ func filterResultsByCategory(db *gorm.DB, results []LeaderboardEntry, category *
 
 	for _, entry := range results {
 		var participant models.Participant
-		if err := db.First(&participant, "id = ?", entry.ParticipantID).Error; err != nil {
+		if err := db.First(&participant, "id = ?", entry.ParticipantID.UUID()).Error; err != nil {
 			return nil, err
 		}
 		if !participantMatchesCategory(&participant, category) {

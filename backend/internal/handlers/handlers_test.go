@@ -530,7 +530,8 @@ func TestRFIDHandlers_Scan(t *testing.T) {
 
 	var found models.Participant
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &found))
-	assert.Equal(t, participant.ID, found.ID)
+	assert.Equal(t, participant.ID.Short(), found.ID.Short())
+	assert.Equal(t, participant.RFIDTagUID, found.RFIDTagUID)
 
 	req = httptest.NewRequest(http.MethodGet, "/api/rfid/scan/UNKNOWN", nil)
 	w = httptest.NewRecorder()

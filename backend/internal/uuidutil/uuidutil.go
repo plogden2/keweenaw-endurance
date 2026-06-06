@@ -18,8 +18,16 @@ var (
 	ErrInvalidID    = errors.New("invalid id")
 	ErrAmbiguousID  = errors.New("ambiguous id")
 	suffixHex       = regexp.MustCompile(`^[0-9a-f]{6}$`)
-	idSuffixSQLExpr = "RIGHT(id::text, 6)"
 )
+
+func idSuffixWhere(db *gorm.DB, value string) *gorm.DB {
+	switch db.Dialector.Name() {
+	case "postgres":
+		return db.Where("RIGHT(id::text, 6) = ?", value)
+	default:
+		return db.Where("SUBSTR(CAST(id AS TEXT), -6) = ?", value)
+	}
+}
 
 // Suffix returns the last six characters of the canonical UUID string (lowercase).
 func Suffix(id uuid.UUID) string {
@@ -105,7 +113,17 @@ func (p *PublicUUID) Scan(value interface{}) error {
 	}
 }
 
-// Parse accepts a full UUID or a six-character suffix (suffix cannot be resolved without a database).
+// UUIDFromSuffix builds a placeholder UUID whose canonical string ends with the given suffix.
+// Used only for JSON unmarshaling of API responses; database lookups must use Resolve.
+func UUIDFromSuffix(suffix string) (uuid.UUID, error) {
+	suffix = strings.ToLower(strings.TrimSpace(suffix))
+	if len(suffix) != SuffixLength || !suffixHex.MatchString(suffix) {
+		return uuid.Nil, ErrInvalidID
+	}
+	return uuid.Parse("00000000-0000-0000-0000-" + strings.Repeat("0", 6) + suffix)
+}
+
+// Parse accepts a full UUID or a six-character suffix placeholder for in-memory use.
 func Parse(value string) (uuid.UUID, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -115,7 +133,7 @@ func Parse(value string) (uuid.UUID, error) {
 		return id, nil
 	}
 	if len(value) == SuffixLength && suffixHex.MatchString(strings.ToLower(value)) {
-		return uuid.Nil, fmt.Errorf("%w: short id requires database lookup", ErrInvalidID)
+		return UUIDFromSuffix(value)
 	}
 	return uuid.Nil, ErrInvalidID
 }
@@ -136,9 +154,7 @@ func Resolve(db *gorm.DB, model interface{}, value string) (uuid.UUID, error) {
 	}
 
 	var ids []uuid.UUID
-	if err := db.Model(model).
-		Where(fmt.Sprintf("%s = ?", idSuffixSQLExpr), value).
-		Pluck("id", &ids).Error; err != nil {
+	if err := idSuffixWhere(db.Model(model), value).Pluck("id", &ids).Error; err != nil {
 		return uuid.Nil, err
 	}
 

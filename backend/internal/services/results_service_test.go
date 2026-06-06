@@ -51,7 +51,7 @@ func TestResultsService_TimeBasedRace(t *testing.T) {
 	require.NoError(t, err)
 
 	resultsSvc := NewResultsService(db, nil)
-	results, err := resultsSvc.GetRaceResults(race.ID)
+	results, err := resultsSvc.GetRaceResults(race.ID.UUID())
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 	assert.Equal(t, 1, results[0].Position)
@@ -88,7 +88,7 @@ func TestResultsService_LapBasedRace(t *testing.T) {
 	}
 
 	resultsSvc := NewResultsService(db, nil)
-	results, err := resultsSvc.GetRaceResults(race.ID)
+	results, err := resultsSvc.GetRaceResults(race.ID.UUID())
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, 3, results[0].Laps)
@@ -133,7 +133,8 @@ func TestResultsService_Leaderboard(t *testing.T) {
 	_ = male
 
 	resultsSvc := NewResultsService(db, nil)
-	leaderboard, err := resultsSvc.GetLeaderboard(race.ID, &femaleCat.ID)
+	femaleCategoryID := femaleCat.ID.UUID()
+	leaderboard, err := resultsSvc.GetLeaderboard(race.ID.UUID(), &femaleCategoryID)
 	require.NoError(t, err)
 	require.Len(t, leaderboard, 1)
 	assert.Equal(t, "Jane", leaderboard[0].FirstName)
@@ -158,7 +159,7 @@ func TestResultsService_GetLiveTiming(t *testing.T) {
 	require.NoError(t, err)
 
 	resultsSvc := NewResultsService(db, nil)
-	live, err := resultsSvc.GetLiveTiming(race.ID)
+	live, err := resultsSvc.GetLiveTiming(race.ID.UUID())
 	require.NoError(t, err)
 	assert.Len(t, live.Records, 1)
 	assert.Equal(t, race.ID, live.RaceID)

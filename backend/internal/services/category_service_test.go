@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +24,7 @@ func TestCategoryService_CreateAndGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, category.ID.IsZero())
 
-	fetched, err := svc.GetCategory(category.ID)
+	fetched, err := svc.GetCategory(category.ID.UUID())
 	require.NoError(t, err)
 	assert.Equal(t, "Overall", fetched.Name)
 	assert.Equal(t, race.ID, fetched.RaceID)
@@ -47,7 +48,7 @@ func TestCategoryService_CreateValidation(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidCategoryInput)
 
 	_, err = svc.CreateCategory(&models.Category{
-		RaceID:       uuid.New(),
+		RaceID:       uuidutil.NewPublicUUID(uuid.New()),
 		Name:         "Orphan",
 		CategoryType: "male",
 	})
@@ -93,7 +94,7 @@ func TestCategoryService_ListByRace(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	categories, total, err := svc.ListCategoriesByRace(race.ID, 1, 20)
+	categories, total, err := svc.ListCategoriesByRace(race.ID.UUID(), 1, 20)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), total)
 	assert.Len(t, categories, 2)
@@ -111,7 +112,7 @@ func TestCategoryService_UpdateAndDelete(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	updated, err := svc.UpdateCategory(category.ID, &models.Category{
+	updated, err := svc.UpdateCategory(category.ID.UUID(), &models.Category{
 		Name:         "Men",
 		DisplayOrder: 2,
 	})
@@ -119,9 +120,9 @@ func TestCategoryService_UpdateAndDelete(t *testing.T) {
 	assert.Equal(t, "Men", updated.Name)
 	assert.Equal(t, 2, updated.DisplayOrder)
 
-	require.NoError(t, svc.DeleteCategory(category.ID))
+	require.NoError(t, svc.DeleteCategory(category.ID.UUID()))
 
-	_, err = svc.GetCategory(category.ID)
+	_, err = svc.GetCategory(category.ID.UUID())
 	assert.ErrorIs(t, err, ErrCategoryNotFound)
 }
 

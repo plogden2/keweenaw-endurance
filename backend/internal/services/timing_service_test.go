@@ -6,12 +6,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
-func createCheckpoint(t *testing.T, db *gorm.DB, raceID uuid.UUID, name, cpType string) *models.TimingCheckpoint {
+func createCheckpoint(t *testing.T, db *gorm.DB, raceID uuidutil.PublicUUID, name, cpType string) *models.TimingCheckpoint {
 	t.Helper()
 	svc := NewCheckpointService(db)
 	cp, err := svc.CreateCheckpoint(&models.TimingCheckpoint{
@@ -49,7 +50,7 @@ func TestTimingService_CreateAndGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "synced", record.SyncStatus)
 
-	fetched, err := svc.GetRecord(record.ID)
+	fetched, err := svc.GetRecord(record.ID.UUID())
 	require.NoError(t, err)
 	assert.Equal(t, participant.ID, fetched.ParticipantID)
 }
@@ -61,8 +62,8 @@ func TestTimingService_CreateValidation(t *testing.T) {
 	now := time.Now()
 
 	_, err := svc.CreateRecord(&models.TimingRecord{
-		ParticipantID: uuid.New(),
-		CheckpointID:  uuid.New(),
+		ParticipantID: uuidutil.NewPublicUUID(uuid.New()),
+		CheckpointID:  uuidutil.NewPublicUUID(uuid.New()),
 		Timestamp:     now,
 	})
 	assert.ErrorIs(t, err, ErrInvalidTimingInput)
@@ -104,7 +105,7 @@ func TestTimingService_UpdateRecord(t *testing.T) {
 	require.NoError(t, err)
 
 	updatedTime := now.Add(time.Minute)
-	updated, err := svc.UpdateRecord(record.ID, &models.TimingRecord{
+	updated, err := svc.UpdateRecord(record.ID.UUID(), &models.TimingRecord{
 		Timestamp: updatedTime, LocalTimestamp: updatedTime,
 		SyncStatus: "pending_sync",
 	})
@@ -130,7 +131,7 @@ func TestTimingService_ListByRace(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	records, err := svc.ListRecordsByRace(race.ID)
+	records, err := svc.ListRecordsByRace(race.ID.UUID())
 	require.NoError(t, err)
 	assert.Len(t, records, 1)
 }

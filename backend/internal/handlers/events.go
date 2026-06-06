@@ -62,7 +62,7 @@ func (h *Handlers) CreateEvent(c *gin.Context) {
 func (h *Handlers) GetEvent(c *gin.Context) {
 	id, err := h.resolveEventID(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event id"})
+		respondServiceError(c, err)
 		return
 	}
 
@@ -78,7 +78,7 @@ func (h *Handlers) GetEvent(c *gin.Context) {
 func (h *Handlers) UpdateEvent(c *gin.Context) {
 	id, err := h.resolveEventID(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event id"})
+		respondServiceError(c, err)
 		return
 	}
 
@@ -128,7 +128,7 @@ func (h *Handlers) UpdateEvent(c *gin.Context) {
 func (h *Handlers) DeleteEvent(c *gin.Context) {
 	id, err := h.resolveEventID(c.Param("id"))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event id"})
+		respondServiceError(c, err)
 		return
 	}
 

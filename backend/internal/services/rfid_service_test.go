@@ -45,7 +45,7 @@ func TestRFIDService_WriteTag(t *testing.T) {
 	mock := rfid.NewMockReader()
 	svc := NewRFIDService(db, mock)
 
-	updated, err := svc.WriteTag(participant.ID, "NEW-TAG-001")
+	updated, err := svc.WriteTag(participant.ID.UUID(), "NEW-TAG-001")
 	require.NoError(t, err)
 	assert.Equal(t, "NEW-TAG-001", updated.RFIDTagUID)
 	assert.Equal(t, "NEW-TAG-001", mock.LastUID)
@@ -66,7 +66,7 @@ func TestRFIDService_WriteTag_HardwareUnavailable(t *testing.T) {
 	mock.Available = false
 	svc := NewRFIDService(db, mock)
 
-	_, err = svc.WriteTag(participant.ID, "TAG-002")
+	_, err = svc.WriteTag(participant.ID.UUID(), "TAG-002")
 	assert.ErrorIs(t, err, ErrHardwareUnavailable)
 }
 
@@ -85,8 +85,8 @@ func TestRFIDService_ManualEntry_ByBib(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	record, err := svc.ManualEntry(&ManualEntryInput{
-		RaceID:       race.ID,
-		CheckpointID: checkpoint.ID,
+		RaceID:       race.ID.UUID(),
+		CheckpointID: checkpoint.ID.UUID(),
 		BibNumber:    "101",
 		Timestamp:    now,
 		DeviceID:     "station-1",
@@ -112,8 +112,8 @@ func TestRFIDService_ManualEntry_ByRFID(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	record, err := svc.ManualEntry(&ManualEntryInput{
-		RaceID:       race.ID,
-		CheckpointID: checkpoint.ID,
+		RaceID:       race.ID.UUID(),
+		CheckpointID: checkpoint.ID.UUID(),
 		RFIDTagUID:   "SCAN-UID-999",
 		Timestamp:    now,
 		SyncStatus:   "pending_sync",
@@ -131,12 +131,12 @@ func TestRFIDService_ManualEntry_Validation(t *testing.T) {
 	now := time.Now().UTC()
 
 	_, err := svc.ManualEntry(&ManualEntryInput{
-		RaceID: race.ID, CheckpointID: checkpoint.ID, Timestamp: now,
+		RaceID: race.ID.UUID(), CheckpointID: checkpoint.ID.UUID(), Timestamp: now,
 	})
 	assert.ErrorIs(t, err, ErrInvalidRFIDInput)
 
 	_, err = svc.ManualEntry(&ManualEntryInput{
-		RaceID: race.ID, CheckpointID: checkpoint.ID, BibNumber: "999", Timestamp: now,
+		RaceID: race.ID.UUID(), CheckpointID: checkpoint.ID.UUID(), BibNumber: "999", Timestamp: now,
 	})
 	assert.ErrorIs(t, err, ErrParticipantNotFound)
 }
@@ -198,7 +198,7 @@ func TestRFIDService_SyncPending(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), synced)
 
-	updated, err := timing.GetRecord(record.ID)
+	updated, err := timing.GetRecord(record.ID.UUID())
 	require.NoError(t, err)
 	assert.Equal(t, "synced", updated.SyncStatus)
 }
@@ -226,7 +226,7 @@ func TestRFIDService_ManualEntry_WrongRaceForRFID(t *testing.T) {
 
 	svc := NewRFIDService(db, rfid.NewMockReader())
 	_, err = svc.ManualEntry(&ManualEntryInput{
-		RaceID: race2.ID, CheckpointID: checkpoint.ID,
+		RaceID: race2.ID.UUID(), CheckpointID: checkpoint.ID.UUID(),
 		RFIDTagUID: "TAG-RACE-1", Timestamp: time.Now().UTC(),
 	})
 	assert.ErrorIs(t, err, ErrInvalidRFIDInput)

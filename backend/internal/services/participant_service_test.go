@@ -41,7 +41,7 @@ func TestParticipantService_CreateAndGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "registered", participant.Status)
 
-	fetched, err := svc.GetParticipant(participant.ID)
+	fetched, err := svc.GetParticipant(participant.ID.UUID())
 	require.NoError(t, err)
 	assert.Equal(t, "Jane", fetched.FirstName)
 }
@@ -97,10 +97,10 @@ func TestParticipantService_DuplicateRFIDOnUpdate(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = svc.UpdateParticipant(first.ID, &models.Participant{RFIDTagUID: "RFID-B"})
+	_, err = svc.UpdateParticipant(first.ID.UUID(), &models.Participant{RFIDTagUID: "RFID-B"})
 	assert.ErrorIs(t, err, ErrInvalidParticipantInput)
 
-	updated, err := svc.UpdateParticipant(first.ID, &models.Participant{RFIDTagUID: "RFID-A"})
+	updated, err := svc.UpdateParticipant(first.ID.UUID(), &models.Participant{RFIDTagUID: "RFID-A"})
 	require.NoError(t, err)
 	assert.Equal(t, "RFID-A", updated.RFIDTagUID)
 }
@@ -118,7 +118,8 @@ func TestParticipantService_ListByRace(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	participants, total, err := svc.ListParticipants(1, 10, &race.ID)
+	raceID := race.ID.UUID()
+	participants, total, err := svc.ListParticipants(1, 10, &raceID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), total)
 	assert.Len(t, participants, 3)

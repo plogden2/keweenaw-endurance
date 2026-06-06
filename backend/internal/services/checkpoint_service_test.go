@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ func TestCheckpointService_CreateAndGet(t *testing.T) {
 	assert.False(t, checkpoint.ID.IsZero())
 	assert.True(t, checkpoint.IsActive)
 
-	fetched, err := svc.GetCheckpoint(checkpoint.ID)
+	fetched, err := svc.GetCheckpoint(checkpoint.ID.UUID())
 	require.NoError(t, err)
 	assert.Equal(t, "Start Line", fetched.Name)
 	assert.Equal(t, race.ID, fetched.RaceID)
@@ -49,7 +50,7 @@ func TestCheckpointService_CreateValidation(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidCheckpointInput)
 
 	_, err = svc.CreateCheckpoint(&models.TimingCheckpoint{
-		RaceID:         uuid.New(),
+		RaceID:         uuidutil.NewPublicUUID(uuid.New()),
 		Name:           "Orphan",
 		CheckpointType: "finish",
 	})
@@ -77,7 +78,7 @@ func TestCheckpointService_ListByRace(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	checkpoints, total, err := svc.ListCheckpointsByRace(race.ID, 1, 20)
+	checkpoints, total, err := svc.ListCheckpointsByRace(race.ID.UUID(), 1, 20)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), total)
 	assert.Len(t, checkpoints, 2)
@@ -95,7 +96,7 @@ func TestCheckpointService_UpdateAndDelete(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	updated, err := svc.UpdateCheckpoint(checkpoint.ID, &models.TimingCheckpoint{
+	updated, err := svc.UpdateCheckpoint(checkpoint.ID.UUID(), &models.TimingCheckpoint{
 		Name:              "Updated CP",
 		DistanceFromStartKm: 5.5,
 	})
@@ -103,9 +104,9 @@ func TestCheckpointService_UpdateAndDelete(t *testing.T) {
 	assert.Equal(t, "Updated CP", updated.Name)
 	assert.Equal(t, 5.5, updated.DistanceFromStartKm)
 
-	require.NoError(t, svc.DeleteCheckpoint(checkpoint.ID))
+	require.NoError(t, svc.DeleteCheckpoint(checkpoint.ID.UUID()))
 
-	_, err = svc.GetCheckpoint(checkpoint.ID)
+	_, err = svc.GetCheckpoint(checkpoint.ID.UUID())
 	assert.ErrorIs(t, err, ErrCheckpointNotFound)
 }
 

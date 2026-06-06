@@ -60,7 +60,7 @@ func (s *TimingService) CreateRecord(input *models.TimingRecord) (*models.Timing
 		return nil, err
 	}
 
-	if participant.RaceID != checkpoint.RaceID {
+	if participant.RaceID.UUID() != checkpoint.RaceID.UUID() {
 		return nil, fmt.Errorf("%w: participant and checkpoint must belong to the same race", ErrInvalidTimingInput)
 	}
 

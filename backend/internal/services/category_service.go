@@ -71,7 +71,7 @@ func (s *CategoryService) CreateCategory(input *models.Category) (*models.Catego
 		return nil, err
 	}
 
-	if err := s.ensureRaceExists(input.RaceID); err != nil {
+	if err := s.ensureRaceExists(input.RaceID.UUID()); err != nil {
 		return nil, err
 	}
 

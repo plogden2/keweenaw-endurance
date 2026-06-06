@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 	"gorm.io/gorm"
 )
 
@@ -130,14 +131,14 @@ func (s *RFIDService) ManualEntry(input *ManualEntryInput) (*models.TimingRecord
 			}
 			return nil, err
 		}
-		if participant.RaceID != input.RaceID {
+		if participant.RaceID.UUID() != input.RaceID {
 			return nil, fmt.Errorf("%w: participant is not registered for this race", ErrInvalidRFIDInput)
 		}
 	}
 
 	record := &models.TimingRecord{
 		ParticipantID:  participant.ID,
-		CheckpointID:   input.CheckpointID,
+		CheckpointID:   uuidutil.NewPublicUUID(input.CheckpointID),
 		Timestamp:      input.Timestamp,
 		LocalTimestamp: input.Timestamp,
 		DeviceID:       input.DeviceID,

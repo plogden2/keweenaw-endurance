@@ -69,7 +69,7 @@ func (s *CheckpointService) CreateCheckpoint(input *models.TimingCheckpoint) (*m
 		return nil, err
 	}
 
-	if err := s.ensureRaceExists(input.RaceID); err != nil {
+	if err := s.ensureRaceExists(input.RaceID.UUID()); err != nil {
 		return nil, err
 	}
 

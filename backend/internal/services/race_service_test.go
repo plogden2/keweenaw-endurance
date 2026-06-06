@@ -37,7 +37,7 @@ func TestRaceService_CreateAndGet(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "scheduled", race.Status)
 
-	fetched, err := svc.GetRace(race.ID)
+	fetched, err := svc.GetRace(race.ID.UUID())
 	require.NoError(t, err)
 	assert.Equal(t, "50K Ultra", fetched.Name)
 }
@@ -78,7 +78,8 @@ func TestRaceService_ListByEvent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	races, total, err := svc.ListRaces(1, 10, &event.ID)
+	eventID := event.ID.UUID()
+	races, total, err := svc.ListRaces(1, 10, &eventID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), total)
 	assert.Len(t, races, 2)
