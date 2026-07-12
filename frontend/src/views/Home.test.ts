@@ -1,9 +1,16 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import Home from './Home.vue'
 import { useEventsStore } from '@/stores/events'
+
+const bluffetCss = readFileSync(
+  join(process.cwd(), 'src/themes/bluffet.css'),
+  'utf8',
+)
 
 function createHomeRouter() {
   return createRouter({
@@ -69,6 +76,17 @@ describe('Home.vue', () => {
     expect(wrapper.find('.featured-logo').attributes('alt')).toBe('All You Can East Bluffet')
     expect(wrapper.find('.featured-event').classes()).toContain('bluffet-theme')
     expect(wrapper.text()).toContain('August 1, 2026')
+  })
+
+  it('keeps the local Bluffet featured register link readable on tan paper', () => {
+    expect(bluffetCss).toMatch(/--bluffet-teal:\s*#0f766e;/)
+    expect(bluffetCss).toMatch(/#app\.theme-bluffet\s*\{[^}]*--accent:\s*var\(--bluffet-red\);/s)
+    expect(bluffetCss).toMatch(
+      /\.featured-event\.bluffet-theme\s+\.featured-link\s*\{[^}]*background:\s*var\(--bluffet-red[^;]*;[^}]*color:\s*#fff;/s,
+    )
+    expect(bluffetCss).toMatch(
+      /\.featured-event\.bluffet-theme\s+\.featured-link\s*\{[^}]*border:\s*var\(--bluffet-outline[^;]*;/s,
+    )
   })
 
   it('renders teaser race cards with external links only', () => {

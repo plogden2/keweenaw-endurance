@@ -219,10 +219,9 @@ import { eventsApi, setAuthToken } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useRacesStore } from '@/stores/races'
 import { useStationStore } from '@/stores/station'
+import { BLUFFET_EVENT_NAME } from '@/themes/bluffetConstants'
 import type { Race } from '@/types/models'
 import { getErrorMessage } from '@/utils/error'
-
-const BLUFFET_EVENT_NAME = 'All You Can East Bluffet'
 
 const pinAuth = usePinAuthStore()
 const station = useStationStore()

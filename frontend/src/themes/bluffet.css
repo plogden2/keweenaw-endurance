@@ -2,14 +2,15 @@
   --bluffet-paper: #c4a574;
   --bluffet-panel: #f7f3ea;
   --bluffet-red: #c8102e;
-  --bluffet-teal: #0d9488;
+  --bluffet-teal-jersey: #0d9488;
+  --bluffet-teal: #0f766e;
   --bluffet-ink: #1a1a1a;
   --bluffet-outline: 2px solid var(--bluffet-ink);
   --bluffet-shadow: 4px 4px 0 var(--bluffet-ink);
 }
 
 #app.theme-bluffet {
-  --accent: var(--bluffet-teal);
+  --accent: var(--bluffet-red);
   background: var(--bluffet-panel);
   color: var(--bluffet-ink);
   font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
@@ -51,9 +52,18 @@
   box-shadow: var(--bluffet-shadow);
 }
 
-#app.theme-bluffet .featured-link {
-  color: var(--bluffet-teal);
-  border-color: var(--bluffet-teal);
+#app.theme-bluffet .featured-link,
+.featured-event.bluffet-theme .featured-link {
+  background: var(--bluffet-red, #c8102e);
+  color: #fff;
+  border: var(--bluffet-outline, 2px solid #1a1a1a);
+  box-shadow: var(--bluffet-shadow, 4px 4px 0 #1a1a1a);
+}
+
+#app.theme-bluffet .featured-link:hover,
+.featured-event.bluffet-theme .featured-link:hover {
+  background: var(--bluffet-ink, #1a1a1a);
+  color: #fff;
 }
 
 #app.theme-bluffet .scan-overlay .modal {
