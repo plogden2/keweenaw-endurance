@@ -16,7 +16,7 @@ vi.mock('@/composables/useReaderStation', () => ({
   }),
 }))
 
-async function mountApp() {
+async function mountApp(eventId = BLUFFET_EVENT_ID) {
   const pinia = createPinia()
   setActivePinia(pinia)
 
@@ -28,9 +28,9 @@ async function mountApp() {
   await router.isReady()
 
   const station = useStationStore()
-  station.eventId = BLUFFET_EVENT_ID
+  station.eventId = eventId
   vi.spyOn(station, 'fetchCurrent').mockResolvedValue({
-    event_id: BLUFFET_EVENT_ID,
+    event_id: eventId,
     mode: 'finish',
     device_id: 'finish-1',
     name: 'Finish 1',
@@ -58,5 +58,11 @@ describe('App theme class', () => {
     const wrapper = await mountApp()
 
     expect(wrapper.get('#app').classes()).toContain(BLUFFET_THEME_CLASS)
+  })
+
+  it('does not add the Bluffet theme class for an unrelated station eventId', async () => {
+    const wrapper = await mountApp('unrelated-event-id')
+
+    expect(wrapper.get('#app').classes()).not.toContain(BLUFFET_THEME_CLASS)
   })
 })
