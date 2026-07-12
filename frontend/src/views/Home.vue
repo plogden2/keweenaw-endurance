@@ -160,7 +160,6 @@ const teaserRaces: TeaserRace[] = [
 }
 
 .featured-event {
-  background: #f8f9fa;
   padding: 3rem;
   border-radius: 12px;
   margin-bottom: 3rem;

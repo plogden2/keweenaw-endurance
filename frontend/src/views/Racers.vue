@@ -464,7 +464,6 @@ onUnmounted(() => {
   --ink: #2c3e50;
   --muted: #6c757d;
   --line: #dee2e6;
-  --accent: #1a5276;
   --ok: #1e8449;
 }
 
@@ -574,7 +573,7 @@ select {
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 4px;
-  background: var(--accent);
+  background: var(--accent, #1a5276);
   color: #fff;
   font: inherit;
   cursor: pointer;

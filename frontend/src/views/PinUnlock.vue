@@ -421,7 +421,6 @@ onMounted(async () => {
   padding: 0 2rem;
   --line: #dee2e6;
   --muted: #6c757d;
-  --accent: #1a5276;
   --danger: #c0392b;
 }
 
@@ -517,7 +516,7 @@ label {
   padding: 0.55rem 1rem;
   font: inherit;
   cursor: pointer;
-  background: var(--accent);
+  background: var(--accent, #1a5276);
   color: #fff;
 }
 

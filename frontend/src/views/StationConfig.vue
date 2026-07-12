@@ -218,7 +218,6 @@ onUnmounted(() => {
   padding: 0 2rem;
   --line: #dee2e6;
   --muted: #6c757d;
-  --accent: #1a5276;
 }
 
 .page-title {
@@ -282,7 +281,7 @@ select {
   padding: 0.55rem 1rem;
   font: inherit;
   cursor: pointer;
-  background: var(--accent);
+  background: var(--accent, #1a5276);
   color: #fff;
   text-decoration: none;
   display: inline-block;
