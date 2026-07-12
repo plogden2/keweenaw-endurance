@@ -11,6 +11,7 @@ function createHomeRouter() {
     routes: [
       { path: '/', name: 'home', component: Home },
       { path: '/timing', name: 'timing', component: { template: '<div />' } },
+      { path: '/timing/:eventId', name: 'event-timing', component: { template: '<div />' } },
     ],
   })
 }
@@ -57,7 +58,16 @@ describe('Home.vue', () => {
 
     const timingLink = wrapper.find('[data-testid="bluffet-timing-link"]')
     expect(timingLink.attributes('href')).toBe('/timing/a1b2c3')
+    const poster = wrapper.find('[data-testid="bluffet-poster"]')
+    expect(poster.exists()).toBe(true)
+    expect(poster.find('source[type="image/avif"]').attributes('srcset')).toBe(
+      '/images/bluffet-2026-poster.avif',
+    )
+    expect(wrapper.find('.featured-logo').attributes('src')).toBe(
+      '/images/bluffet-2026-poster.png',
+    )
     expect(wrapper.find('.featured-logo').attributes('alt')).toBe('All You Can East Bluffet')
+    expect(wrapper.find('.featured-event').classes()).toContain('bluffet-theme')
     expect(wrapper.text()).toContain('August 1, 2026')
   })
 
