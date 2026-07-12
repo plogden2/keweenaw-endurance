@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prototype — Racers</title>
+  <link rel="stylesheet" href="prototype.css" />
+  <style>
+    .bib-cell { white-space: nowrap; }
+    .bib-display {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.4rem;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      background: transparent;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .bib-display:hover { border-color: var(--line); background: #f8f9fa; }
+    .bib-edit-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .bib-edit-wrap input {
+      width: 4rem;
+      margin: 0;
+      padding: 0.3rem 0.4rem;
+    }
+    .icon-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #fff;
+      cursor: pointer;
+      color: var(--ok);
+    }
+    .icon-btn:hover { background: #eafaf1; }
+    .icon-btn[hidden] { display: none !important; }
+    .program-inline {
+      display: none;
+      margin-top: 0.75rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--line);
+    }
+    .program-inline.open { display: block; }
+    tr.programming { background: #f0f7fb; }
+  </style>
+</head>
+<body>
+  <nav class="topnav" aria-label="Prototype navigation">
+    <strong>RFID Scanner Prototypes</strong>
+    <a href="racers.html" aria-current="page">Racers</a>
+    <a href="event-live.html">Event Live</a>
+    <a href="scan-popup.html">Scan Popup</a>
+    <a href="pin-unlock.html">PIN Unlock</a>
+    <a href="station-config.html">Station Config</a>
+    <a href="csv-import-export.html">CSV Recovery</a>
+  </nav>
+
+  <div class="wrap">
+    <p class="meta-bar">
+      <span>Event: <strong>All You Can East Bluffet 2026</strong></span>
+      <span>Race: <strong>12 Hour</strong></span>
+      <span class="badge online">Management unlocked</span>
+    </p>
+
+    <h1>Racers</h1>
+    <p class="lead">Table-first: search, add, click bib to edit, program tags from the row. PIN required.</p>
+
+    <div class="panel">
+      <div class="row" style="justify-content: space-between; width: 100%;">
+        <label style="flex: 1; min-width: 200px; margin: 0;">
+          Search by name or bib
+          <input type="search" id="racer-search" name="q" placeholder="Type to filter…" aria-label="Search racers" autocomplete="off" />
+        </label>
+        <button type="button" class="btn secondary" id="toggle-add">Add racer</button>
+      </div>
+      <p class="muted" style="margin: 0.5rem 0 0;">Results update as you type (debounced). No search button.</p>
+    </div>
+
+    <div class="panel" id="add-form" hidden>
+      <h2>Add racer</h2>
+      <form>
+        <div class="grid-2">
+          <label>First name <input name="first_name" required /></label>
+          <label>Last name <input name="last_name" required /></label>
+          <label>Gender
+            <select name="gender">
+              <option value="male">Men</option>
+              <option value="female">Women</option>
+            </select>
+          </label>
+          <label>Category
+            <select name="category">
+              <option>Advanced Men</option>
+              <option>Advanced Women</option>
+              <option>Intermediate Men</option>
+              <option>Intermediate Women</option>
+            </select>
+          </label>
+          <label>Bib number (optional — default next sequential)
+            <input name="bib" type="text" inputmode="numeric" placeholder="Auto: 101" />
+          </label>
+        </div>
+        <div class="row">
+          <button type="submit" class="btn">Save racer</button>
+          <button type="button" class="btn secondary" id="cancel-add">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Racer list <span class="muted" id="result-count">(3 shown)</span></h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Bib</th>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Tags</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="racer-tbody">
+          <tr data-racer="alex" data-search="12 alex rivera advanced men">
+            <td class="bib-cell" data-bib="12">
+              <button type="button" class="bib-display" aria-label="Edit bib for Alex Rivera">12</button>
+            </td>
+            <td>Alex Rivera</td>
+            <td>Advanced Men</td>
+            <td class="tag-count">2 tags</td>
+            <td>
+              <button type="button" class="btn program-btn">Program tag</button>
+            </td>
+          </tr>
+          <tr class="program-row" data-for="alex" hidden>
+            <td colspan="5">
+              <div class="program-inline open">
+                <p class="muted" style="margin-top: 0;">Place tag on Proxmark3 — writes racer UUID. Multiple tags stay active.</p>
+                <div class="row">
+                  <label style="margin: 0; flex: 1;">Tag UID
+                    <input placeholder="Auto from hardware…" />
+                  </label>
+                  <button type="button" class="btn ok">Write tag</button>
+                  <button type="button" class="btn secondary close-program">Done</button>
+                </div>
+                <p class="muted">Associated: DEMO-TAG-0012, DEMO-TAG-1012</p>
+              </div>
+            </td>
+          </tr>
+          <tr data-racer="jordan" data-search="18 jordan lee intermediate women">
+            <td class="bib-cell" data-bib="18">
+              <button type="button" class="bib-display" aria-label="Edit bib for Jordan Lee">18</button>
+            </td>
+            <td>Jordan Lee</td>
+            <td>Intermediate Women</td>
+            <td class="tag-count">1 tag</td>
+            <td>
+              <button type="button" class="btn program-btn">Program tag</button>
+            </td>
+          </tr>
+          <tr class="program-row" data-for="jordan" hidden>
+            <td colspan="5">
+              <div class="program-inline open">
+                <p class="muted" style="margin-top: 0;">Place tag on Proxmark3 — writes racer UUID.</p>
+                <div class="row">
+                  <label style="margin: 0; flex: 1;">Tag UID
+                    <input placeholder="Auto from hardware…" />
+                  </label>
+                  <button type="button" class="btn ok">Write tag</button>
+                  <button type="button" class="btn secondary close-program">Done</button>
+                </div>
+                <p class="muted">Associated: DEMO-TAG-0018</p>
+              </div>
+            </td>
+          </tr>
+          <tr data-racer="sam" data-search="27 sam ortiz advanced women">
+            <td class="bib-cell" data-bib="27">
+              <button type="button" class="bib-display" aria-label="Edit bib for Sam Ortiz">27</button>
+            </td>
+            <td>Sam Ortiz</td>
+            <td>Advanced Women</td>
+            <td class="tag-count">0 tags</td>
+            <td>
+              <button type="button" class="btn program-btn">Program tag</button>
+            </td>
+          </tr>
+          <tr class="program-row" data-for="sam" hidden>
+            <td colspan="5">
+              <div class="program-inline open">
+                <p class="muted" style="margin-top: 0;">Place tag on Proxmark3 — writes racer UUID.</p>
+                <div class="row">
+                  <label style="margin: 0; flex: 1;">Tag UID
+                    <input placeholder="Auto from hardware…" />
+                  </label>
+                  <button type="button" class="btn ok">Write tag</button>
+                  <button type="button" class="btn secondary close-program">Done</button>
+                </div>
+                <p class="muted">No tags yet</p>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <section class="notes">
+      <h2>Approved</h2>
+      <p><strong>Option A — Table-first.</strong> Program expands inline. Bib click-to-edit + save icon when dirty. <strong>Search filters immediately (debounced)</strong> — no search button.</p>
+    </section>
+  </div>
+  <script>
+    const form = document.getElementById('add-form');
+    document.getElementById('toggle-add').onclick = () => { form.hidden = false; };
+    document.getElementById('cancel-add').onclick = () => { form.hidden = true; };
+
+    const searchInput = document.getElementById('racer-search');
+    const resultCount = document.getElementById('result-count');
+    let searchTimer;
+    function applySearch() {
+      const q = searchInput.value.trim().toLowerCase();
+      let shown = 0;
+      document.querySelectorAll('#racer-tbody > tr[data-racer]').forEach((tr) => {
+        const match = !q || (tr.dataset.search || '').includes(q);
+        tr.hidden = !match;
+        const prog = document.querySelector(`.program-row[data-for="${tr.dataset.racer}"]`);
+        if (prog && !match) prog.hidden = true;
+        if (match) shown++;
+      });
+      resultCount.textContent = `(${shown} shown)`;
+    }
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(applySearch, 200);
+    });
+
+    function saveIconSvg() {
+      return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
+    }
+
+    document.querySelectorAll('.bib-cell').forEach((cell) => {
+      cell.addEventListener('click', (e) => {
+        if (e.target.closest('.bib-edit-wrap') || e.target.closest('.icon-btn')) return;
+        const display = cell.querySelector('.bib-display');
+        if (!display || cell.querySelector('.bib-edit-wrap')) return;
+        const original = cell.dataset.bib;
+        const wrap = document.createElement('span');
+        wrap.className = 'bib-edit-wrap';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.inputMode = 'numeric';
+        input.value = original;
+        input.setAttribute('aria-label', 'Edit bib number');
+        const save = document.createElement('button');
+        save.type = 'button';
+        save.className = 'icon-btn';
+        save.hidden = true;
+        save.title = 'Save bib';
+        save.setAttribute('aria-label', 'Save bib');
+        save.innerHTML = saveIconSvg();
+        wrap.append(input, save);
+        display.replaceWith(wrap);
+        input.focus();
+        input.select();
+
+        const syncSave = () => {
+          save.hidden = input.value.trim() === original;
+        };
+        input.addEventListener('input', syncSave);
+
+        const commit = () => {
+          const next = input.value.trim() || original;
+          cell.dataset.bib = next;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'bib-display';
+          btn.textContent = next;
+          wrap.replaceWith(btn);
+        };
+        save.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          commit();
+        });
+        input.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter' && !save.hidden) commit();
+          if (ev.key === 'Escape') {
+            cell.dataset.bib = original;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'bib-display';
+            btn.textContent = original;
+            wrap.replaceWith(btn);
+          }
+        });
+      });
+    });
+
+    document.querySelectorAll('.program-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tr = btn.closest('tr');
+        const id = tr.dataset.racer;
+        document.querySelectorAll('.program-row').forEach((row) => {
+          row.hidden = row.dataset.for !== id ? true : !row.hidden;
+        });
+        document.querySelectorAll('tr[data-racer]').forEach((r) => r.classList.remove('programming'));
+        const panel = document.querySelector(`.program-row[data-for="${id}"]`);
+        if (panel && !panel.hidden) tr.classList.add('programming');
+      });
+    });
+    document.querySelectorAll('.close-program').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.program-row');
+        row.hidden = true;
+        document.querySelector(`tr[data-racer="${row.dataset.for}"]`)?.classList.remove('programming');
+      });
+    });
+  </script>
+</body>
+</html>

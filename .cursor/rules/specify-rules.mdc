@@ -5,4 +5,6 @@ alwaysApply: true
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
+at specs/002-rfid-race-scanner/plan.md (also research.md, data-model.md,
+contracts/, quickstart.md in the same feature directory).
 <!-- SPECKIT END -->

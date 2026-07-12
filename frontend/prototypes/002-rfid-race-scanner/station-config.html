@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prototype — Station Config</title>
+  <link rel="stylesheet" href="prototype.css" />
+</head>
+<body>
+  <nav class="topnav" aria-label="Prototype navigation">
+    <strong>RFID Scanner Prototypes</strong>
+    <a href="racers.html">Racers</a>
+    <a href="event-live.html">Event Live</a>
+    <a href="scan-popup.html">Scan Popup</a>
+    <a href="pin-unlock.html">PIN Unlock</a>
+    <a href="station-config.html" aria-current="page">Station Config</a>
+    <a href="csv-import-export.html">CSV Recovery</a>
+  </nav>
+
+  <div class="wrap">
+    <p class="meta-bar">
+      <span class="badge online">Management unlocked</span>
+      <span class="muted">PIN session active</span>
+    </p>
+
+    <h1>Reader station</h1>
+    <p class="lead">Bind this laptop to an <strong>event</strong> (not a single race). Default mode is Finish (+1 lap). Optional Checkpoint mode for ordered courses.</p>
+
+    <form class="panel">
+      <label>Event
+        <select name="event_id" required>
+          <option value="bluffet">All You Can East Bluffet — 2026-08-01</option>
+          <option value="other">Example Other Event</option>
+        </select>
+      </label>
+      <label>Station name
+        <input name="name" value="Finish Mat A" required />
+      </label>
+      <label>Device ID
+        <input name="device_id" value="laptop-finish-1" required />
+      </label>
+
+      <fieldset style="border: 1px solid var(--line); border-radius: 6px; padding: 0.75rem 1rem; margin: 0 0 1rem;">
+        <legend>Mode</legend>
+        <label style="flex-direction: row; align-items: center; gap: 0.5rem;">
+          <input type="radio" name="mode" value="finish" checked />
+          Finish station (default) — each valid tap = +1 lap (cooldown applies)
+        </label>
+        <label style="flex-direction: row; align-items: center; gap: 0.5rem;">
+          <input type="radio" name="mode" value="checkpoint" id="mode-cp" />
+          Checkpoint — advances lap only when sequence is satisfied
+        </label>
+      </fieldset>
+
+      <div id="cp-fields" hidden>
+        <label>Checkpoint
+          <select name="checkpoint_id">
+            <option>Start Line</option>
+            <option>Mid-loop</option>
+            <option>Lap Check (finish)</option>
+          </select>
+        </label>
+        <label>Sequence order
+          <input type="number" name="sequence_order" min="1" value="2" />
+        </label>
+      </div>
+
+      <div class="row">
+        <button type="submit" class="btn">Save &amp; arm reader</button>
+        <a class="btn secondary" href="event-live.html">Go to live view</a>
+        <a class="btn secondary" href="racers.html">Racers</a>
+      </div>
+    </form>
+
+    <div class="panel">
+      <h2>Current status</h2>
+      <table>
+        <tbody>
+          <tr><th>Event</th><td>All You Can East Bluffet</td></tr>
+          <tr><th>Mode</th><td>Finish</td></tr>
+          <tr><th>Hardware</th><td>Proxmark3 connected (or mock)</td></tr>
+          <tr><th>Listening</th><td>Yes — all routes</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <section class="notes">
+      <h2>Approved</h2>
+      <p><strong>Option A — Single form</strong> to arm the station.</p>
+    </section>
+  </div>
+  <script>
+    const cp = document.getElementById('cp-fields');
+    document.querySelectorAll('input[name="mode"]').forEach((el) => {
+      el.addEventListener('change', () => {
+        cp.hidden = document.querySelector('input[name="mode"]:checked').value !== 'checkpoint';
+      });
+    });
+    document.querySelector('form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      window.location.href = 'event-live.html';
+    });
+  </script>
+</body>
+</html>
