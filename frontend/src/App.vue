@@ -1,5 +1,5 @@
 <template>
-  <div id="app">
+  <div id="app" :class="{ [themeClass]: bluffetActive }">
     <AppHeader v-if="showTimingHeader" />
 
     <main class="main">
@@ -24,12 +24,14 @@ import AppHeader from '@/components/AppHeader.vue'
 import UnitToggle from '@/components/UnitToggle.vue'
 import ScanPopup from '@/components/ScanPopup.vue'
 import { useReaderStation } from '@/composables/useReaderStation'
+import { useBluffetTheme } from '@/composables/useBluffetTheme'
 import { timingRecordsApi } from '@/services/api'
 import { useStationStore } from '@/stores/station'
 
 const route = useRoute()
 const station = useStationStore()
 const { lastScan, clearLastScan, start, stop } = useReaderStation()
+const { active: bluffetActive, themeClass } = useBluffetTheme()
 
 // Show Inferior Timing branding only on timing routes.
 const showTimingHeader = computed(() => route.path.startsWith('/timing'))

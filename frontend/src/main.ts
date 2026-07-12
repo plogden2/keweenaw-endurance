@@ -4,7 +4,10 @@ import { registerSW } from 'virtual:pwa-register'
 import router from './router'
 import App from './App.vue'
 import { initOfflineQueue } from '@/services/offlineQueue'
+import '@fontsource/ibm-plex-sans'
+import '@fontsource/yuji-mai'
 import './assets/main.css'
+import './themes/bluffet.css'
 
 initOfflineQueue()
 

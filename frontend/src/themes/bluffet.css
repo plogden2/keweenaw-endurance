@@ -1,0 +1,109 @@
+:root {
+  --bluffet-paper: #c4a574;
+  --bluffet-panel: #f7f3ea;
+  --bluffet-red: #c8102e;
+  --bluffet-teal: #0d9488;
+  --bluffet-ink: #1a1a1a;
+  --bluffet-outline: 2px solid var(--bluffet-ink);
+  --bluffet-shadow: 4px 4px 0 var(--bluffet-ink);
+}
+
+#app.theme-bluffet {
+  --accent: var(--bluffet-teal);
+  background: var(--bluffet-panel);
+  color: var(--bluffet-ink);
+  font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+}
+
+#app.theme-bluffet .bluffet-display,
+#app.theme-bluffet h1.page-title,
+#app.theme-bluffet .featured-event h2 {
+  font-family: 'Yuji Mai', 'Segoe UI', system-ui, sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+#app.theme-bluffet .bluffet-panel,
+#app.theme-bluffet .race-link,
+#app.theme-bluffet .panel {
+  background: var(--bluffet-panel);
+  border: var(--bluffet-outline);
+  box-shadow: var(--bluffet-shadow);
+  border-radius: 6px;
+}
+
+#app.theme-bluffet .bluffet-chip,
+#app.theme-bluffet .legend-item,
+#app.theme-bluffet .race-tabs button[aria-selected='true'] {
+  background: var(--bluffet-red);
+  color: #fff;
+  border: var(--bluffet-outline);
+}
+
+#app.theme-bluffet .countdown {
+  color: var(--bluffet-red);
+}
+
+#app.theme-bluffet .featured-timing-link,
+#app.theme-bluffet .btn:not(.secondary) {
+  background: var(--bluffet-red);
+  border: var(--bluffet-outline);
+  box-shadow: var(--bluffet-shadow);
+}
+
+#app.theme-bluffet .featured-link {
+  color: var(--bluffet-teal);
+  border-color: var(--bluffet-teal);
+}
+
+#app.theme-bluffet .scan-overlay .modal {
+  border: 3px solid var(--bluffet-ink);
+  box-shadow: var(--bluffet-shadow);
+  animation: bluffet-stamp 200ms ease-out;
+}
+
+#app.theme-bluffet .bluffet-poster {
+  animation: bluffet-poster-in 400ms ease-out;
+}
+
+#app.theme-bluffet .race-tabs button,
+#app.theme-bluffet .bluffet-chip {
+  animation: bluffet-stamp 220ms ease-out;
+}
+
+@keyframes bluffet-stamp {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes bluffet-poster-in {
+  from {
+    transform: scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #app.theme-bluffet .bluffet-poster,
+  #app.theme-bluffet .race-tabs button,
+  #app.theme-bluffet .bluffet-chip,
+  #app.theme-bluffet .scan-overlay .modal {
+    animation: none;
+  }
+}
+
+.featured-event.bluffet-theme {
+  background: var(--bluffet-paper, #c4a574);
+  border: 2px solid var(--bluffet-ink, #1a1a1a);
+  box-shadow: 4px 4px 0 var(--bluffet-ink, #1a1a1a);
+}
