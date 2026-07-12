@@ -1,0 +1,21 @@
+#SECTION,event
+id,name,event_date,location,status
+2e553e3e-6352-46f4-9787-217b0dd2dc05,Live Board Event,2026-07-13,,upcoming
+#SECTION,races
+id,event_id,name,race_type,duration_minutes,start_time,status
+a6656a2c-f4fb-4dc5-a219-2da3838ce10c,2e553e3e-6352-46f4-9787-217b0dd2dc05,12 Hour,lap_based,720,2026-07-12T17:28:55Z,active
+#SECTION,categories
+id,race_id,name,category_type,gender_filter,display_order
+6c748aca-88a4-42f8-8779-ef9b23312ed9,a6656a2c-f4fb-4dc5-a219-2da3838ce10c,Advanced Men,custom,male,0
+#SECTION,participants
+id,race_id,bib_number,first_name,last_name,gender,status,category_id
+547df4bb-5031-46a6-9684-1437c8f93d65,a6656a2c-f4fb-4dc5-a219-2da3838ce10c,12,Alex,Rivera,male,started,6c748aca-88a4-42f8-8779-ef9b23312ed9
+#SECTION,tags
+id,participant_id,tag_uid,created_at
+7df68f57-83b6-465a-bf93-d44d9f01aa2c,547df4bb-5031-46a6-9684-1437c8f93d65,DEMO-TAG-0001,2026-07-12T18:28:55Z
+#SECTION,checkpoints
+id,race_id,name,checkpoint_type,distance_from_start_km,is_active
+17bd4794-b983-4a1f-959b-24a13a6d3ddf,a6656a2c-f4fb-4dc5-a219-2da3838ce10c,Finish,finish,0,true
+#SECTION,timing_records
+id,participant_id,checkpoint_id,timestamp,local_timestamp,device_id,sync_status,record_type,source_lap_id,station_id
+30357042-321a-426b-9eaa-365abde4d063,547df4bb-5031-46a6-9684-1437c8f93d65,17bd4794-b983-4a1f-959b-24a13a6d3ddf,2026-07-12T18:28:55Z,2026-07-12T18:28:55Z,laptop-finish-1,synced,rfid_lap,,

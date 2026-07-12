@@ -1,0 +1,17 @@
+#SECTION,event
+id,name,event_date,location,status
+de2d4437-7dea-4f67-9198-dc948b2a1ac9,Event,2026-08-12,,upcoming
+#SECTION,races
+id,event_id,name,race_type,duration_minutes,start_time,status
+98d7b920-76bf-41f2-a6e2-f67a844989fe,de2d4437-7dea-4f67-9198-dc948b2a1ac9,Race,time_based,0,,scheduled
+#SECTION,categories
+id,race_id,name,category_type,gender_filter,display_order
+#SECTION,participants
+id,race_id,bib_number,first_name,last_name,gender,status,category_id
+a32b3f03-51fc-4aa0-a8d1-6b0553ed116c,98d7b920-76bf-41f2-a6e2-f67a844989fe,007,James,Bond,,registered,
+#SECTION,tags
+id,participant_id,tag_uid,created_at
+#SECTION,checkpoints
+id,race_id,name,checkpoint_type,distance_from_start_km,is_active
+#SECTION,timing_records
+id,participant_id,checkpoint_id,timestamp,local_timestamp,device_id,sync_status,record_type,source_lap_id,station_id

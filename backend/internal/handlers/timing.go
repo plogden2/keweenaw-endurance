@@ -1,13 +1,42 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/services/scan"
 	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 )
+
+// CreateKaraokeBonus handles POST /api/timing-records/:id/karaoke-bonus.
+// Open like scan ingest (no re-PIN on an armed station).
+func (h *Handlers) CreateKaraokeBonus(c *gin.Context) {
+	id, err := h.resolveTimingRecordID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid timing record id"})
+		return
+	}
+
+	result, err := h.services.Scan.AddKaraokeBonus(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, scan.ErrAlreadyExists):
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		case errors.Is(err, scan.ErrSourceLapNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		case errors.Is(err, scan.ErrInvalidSourceLap):
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			respondServiceError(c, err)
+		}
+		return
+	}
+
+	c.JSON(http.StatusCreated, result)
+}
 
 func (h *Handlers) GetLiveTiming(c *gin.Context) {
 	raceID, err := h.resolveRaceID(c.Param("raceId"))

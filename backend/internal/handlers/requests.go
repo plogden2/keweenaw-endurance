@@ -43,8 +43,8 @@ type updateRaceRequest struct {
 }
 
 type createParticipantRequest struct {
-	RaceID     string `json:"race_id" binding:"required"`
-	BibNumber  string `json:"bib_number" binding:"required"`
+	RaceID     string `json:"race_id"`
+	BibNumber  string `json:"bib_number"`
 	FirstName  string `json:"first_name" binding:"required"`
 	LastName   string `json:"last_name" binding:"required"`
 	Gender     string `json:"gender"`
@@ -52,6 +52,7 @@ type createParticipantRequest struct {
 	Location   string `json:"location"`
 	RFIDTagUID string `json:"rfid_tag_uid"`
 	Status     string `json:"status"`
+	CategoryID string `json:"category_id"`
 }
 
 type updateParticipantRequest struct {
@@ -63,6 +64,7 @@ type updateParticipantRequest struct {
 	Location   *string `json:"location"`
 	RFIDTagUID *string `json:"rfid_tag_uid"`
 	Status     *string `json:"status"`
+	CategoryID *string `json:"category_id"`
 }
 
 type createCheckpointRequest struct {
@@ -120,6 +122,14 @@ type writeRFIDTagRequest struct {
 	TagUID        string `json:"tag_uid" binding:"required"`
 }
 
+type participantTagRequest struct {
+	TagUID string `json:"tag_uid" binding:"required"`
+}
+
+type injectRFIDTagRequest struct {
+	TagUID string `json:"tag_uid" binding:"required"`
+}
+
 type manualTimingEntryRequest struct {
 	RaceID       string `json:"race_id" binding:"required"`
 	CheckpointID string `json:"checkpoint_id" binding:"required"`
@@ -128,4 +138,18 @@ type manualTimingEntryRequest struct {
 	Timestamp    string `json:"timestamp" binding:"required"`
 	DeviceID     string `json:"device_id"`
 	SyncStatus   string `json:"sync_status"`
+}
+
+type processScanRequest struct {
+	TagUID         string `json:"tag_uid" binding:"required"`
+	DeviceID       string `json:"device_id"`
+	LocalTimestamp string `json:"local_timestamp"`
+}
+
+type putStationRequest struct {
+	EventID      string  `json:"event_id" binding:"required"`
+	Mode         string  `json:"mode"`
+	CheckpointID *string `json:"checkpoint_id"`
+	DeviceID     string  `json:"device_id"`
+	Name         string  `json:"name"`
 }

@@ -1,9 +1,11 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,10 +37,21 @@ type SyncStatusResponse struct {
 	SyncedCount  int64 `json:"synced_count"`
 }
 
+// TagReadEvent is a fan-out payload for the RFID WebSocket stream.
+type TagReadEvent struct {
+	Type     string    `json:"type"`
+	TagUID   string    `json:"tag_uid"`
+	ReadAt   time.Time `json:"read_at"`
+	DeviceID string    `json:"device_id"`
+}
+
 type RFIDService struct {
 	db     *gorm.DB
 	timing *TimingService
 	reader rfid.Reader
+
+	mu          sync.Mutex
+	subscribers []chan TagReadEvent
 }
 
 func NewRFIDService(db *gorm.DB, reader rfid.Reader) *RFIDService {
@@ -58,6 +71,15 @@ func (s *RFIDService) LookupParticipantByUID(uid string) (*models.Participant, e
 		return nil, fmt.Errorf("%w: uid is required", ErrInvalidRFIDInput)
 	}
 
+	var assoc models.RFIDTagAssociation
+	err := s.db.Where("tag_uid = ? AND active = ?", uid, true).First(&assoc).Error
+	if err == nil {
+		return NewParticipantService(s.db).GetParticipant(assoc.ParticipantID.UUID())
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
 	var participant models.Participant
 	if err := s.db.Where(&models.Participant{RFIDTagUID: uid}).First(&participant).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -65,7 +87,78 @@ func (s *RFIDService) LookupParticipantByUID(uid string) (*models.Participant, e
 		}
 		return nil, err
 	}
-	return &participant, nil
+	partSvc := NewParticipantService(s.db)
+	return partSvc.GetParticipant(participant.ID.UUID())
+}
+
+// ListParticipantTags returns active RFID tag associations for a participant.
+func (s *RFIDService) ListParticipantTags(participantID uuid.UUID) ([]models.RFIDTagAssociation, error) {
+	if participantID == uuid.Nil {
+		return nil, fmt.Errorf("%w: participant_id is required", ErrInvalidRFIDInput)
+	}
+	if _, err := NewParticipantService(s.db).GetParticipant(participantID); err != nil {
+		return nil, err
+	}
+	var assocs []models.RFIDTagAssociation
+	if err := s.db.Where("participant_id = ? AND active = ?", participantID, true).
+		Order("created_at ASC").
+		Find(&assocs).Error; err != nil {
+		return nil, err
+	}
+	return assocs, nil
+}
+
+// AssociateTag links a tag UID to a participant via rfid_tag_associations (no revoke).
+// Also mirrors the UID onto participants.rfid_tag_uid for legacy lookup compatibility.
+func (s *RFIDService) AssociateTag(participantID uuid.UUID, tagUID string) (*models.RFIDTagAssociation, error) {
+	tagUID = strings.TrimSpace(tagUID)
+	if tagUID == "" {
+		return nil, fmt.Errorf("%w: tag_uid is required", ErrInvalidRFIDInput)
+	}
+	if participantID == uuid.Nil {
+		return nil, fmt.Errorf("%w: participant_id is required", ErrInvalidRFIDInput)
+	}
+
+	partSvc := NewParticipantService(s.db)
+	participant, err := partSvc.GetParticipant(participantID)
+	if err != nil {
+		return nil, err
+	}
+
+	var existing models.RFIDTagAssociation
+	err = s.db.Where("tag_uid = ?", tagUID).First(&existing).Error
+	if err == nil {
+		if existing.ParticipantID.UUID() != participantID {
+			return nil, fmt.Errorf("%w: tag_uid already associated with another participant", ErrInvalidRFIDInput)
+		}
+		if !existing.Active {
+			existing.Active = true
+			if err := s.db.Save(&existing).Error; err != nil {
+				return nil, err
+			}
+		}
+		if participant.RFIDTagUID == "" {
+			_, _ = partSvc.UpdateParticipant(participantID, &models.Participant{RFIDTagUID: tagUID})
+		}
+		return &existing, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	assoc := models.RFIDTagAssociation{
+		ParticipantID: participant.ID,
+		TagUID:        tagUID,
+		Active:        true,
+	}
+	if err := s.db.Create(&assoc).Error; err != nil {
+		return nil, err
+	}
+
+	if _, err := partSvc.UpdateParticipant(participantID, &models.Participant{RFIDTagUID: tagUID}); err != nil {
+		return nil, err
+	}
+	return &assoc, nil
 }
 
 func (s *RFIDService) WriteTag(participantID uuid.UUID, tagUID string) (*models.Participant, error) {
@@ -88,11 +181,10 @@ func (s *RFIDService) WriteTag(participantID uuid.UUID, tagUID string) (*models.
 		return nil, err
 	}
 
-	updated, err := partSvc.UpdateParticipant(participantID, &models.Participant{RFIDTagUID: tagUID})
-	if err != nil {
+	if _, err := s.AssociateTag(participantID, tagUID); err != nil {
 		return nil, err
 	}
-	return updated, nil
+	return partSvc.GetParticipant(participantID)
 }
 
 func (s *RFIDService) ManualEntry(input *ManualEntryInput) (*models.TimingRecord, error) {
@@ -125,12 +217,11 @@ func (s *RFIDService) ManualEntry(input *ManualEntryInput) (*models.TimingRecord
 			return nil, err
 		}
 	default:
-		if err := s.db.Where(&models.Participant{RFIDTagUID: uid}).First(&participant).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, ErrRFIDTagNotFound
-			}
-			return nil, err
+		found, lookupErr := s.LookupParticipantByUID(uid)
+		if lookupErr != nil {
+			return nil, lookupErr
 		}
+		participant = *found
 		if participant.RaceID.UUID() != input.RaceID {
 			return nil, fmt.Errorf("%w: participant is not registered for this race", ErrInvalidRFIDInput)
 		}
@@ -175,4 +266,85 @@ func (s *RFIDService) SyncPending() (int64, error) {
 		return 0, result.Error
 	}
 	return result.RowsAffected, nil
+}
+
+// InjectTag pushes a UID into the mock reader queue (when present) and
+// broadcasts on the stub tag-stream fan-out channel.
+func (s *RFIDService) InjectTag(tagUID string) error {
+	tagUID = strings.TrimSpace(tagUID)
+	if tagUID == "" {
+		return fmt.Errorf("%w: tag_uid is required", ErrInvalidRFIDInput)
+	}
+
+	if mock, ok := s.reader.(*rfid.MockReader); ok {
+		mock.PushUID(tagUID)
+	}
+
+	s.broadcastTag(TagReadEvent{
+		Type:   "tag_read",
+		TagUID: tagUID,
+		ReadAt: time.Now(),
+	})
+	return nil
+}
+
+// StartPolling continuously polls the reader and fans out tag_read events.
+func (s *RFIDService) StartPolling(ctx context.Context, interval time.Duration, deviceIDFn func() string) {
+	if interval <= 0 {
+		interval = 200 * time.Millisecond
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				uid, err := s.Poll()
+				if err != nil || uid == "" {
+					continue
+				}
+				deviceID := ""
+				if deviceIDFn != nil {
+					deviceID = deviceIDFn()
+				}
+				s.broadcastTag(TagReadEvent{
+					Type:     "tag_read",
+					TagUID:   uid,
+					ReadAt:   time.Now(),
+					DeviceID: deviceID,
+				})
+			}
+		}
+	}()
+}
+
+// Poll reads the next tag UID from the underlying reader (empty string if none).
+func (s *RFIDService) Poll() (string, error) {
+	return s.reader.Poll()
+}
+
+// SubscribeTagReads returns a buffered channel of injected/read tag events.
+// Callers should not close the channel; it is for stub stream fan-out.
+func (s *RFIDService) SubscribeTagReads(buffer int) <-chan TagReadEvent {
+	if buffer < 1 {
+		buffer = 8
+	}
+	ch := make(chan TagReadEvent, buffer)
+	s.mu.Lock()
+	s.subscribers = append(s.subscribers, ch)
+	s.mu.Unlock()
+	return ch
+}
+
+func (s *RFIDService) broadcastTag(ev TagReadEvent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, ch := range s.subscribers {
+		select {
+		case ch <- ev:
+		default:
+		}
+	}
 }

@@ -35,8 +35,14 @@ services:
       - LOG_LEVEL=debug
       - TESTING=true
       - GOFLAGS=-mod=mod
+      - ORGANIZER_PIN=1738
+      - RFID_INJECT=true
+      - PROXMARK3_ENABLED=true
+      - HOSTED_API_URL=
+      - DATA_DIR=/tmp/keweenaw-csv-data
     volumes:
       - ./backend:/app
+      - ./database:/database:ro
     depends_on:
       - postgres-test
       - redis-test

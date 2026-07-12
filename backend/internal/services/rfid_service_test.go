@@ -48,8 +48,70 @@ func TestRFIDService_WriteTag(t *testing.T) {
 	updated, err := svc.WriteTag(participant.ID.UUID(), "NEW-TAG-001")
 	require.NoError(t, err)
 	assert.Equal(t, "NEW-TAG-001", updated.RFIDTagUID)
+	assert.Equal(t, []string{"NEW-TAG-001"}, updated.TagUIDs)
 	assert.Equal(t, "NEW-TAG-001", mock.LastUID)
 	assert.Equal(t, participant.ID.Short(), mock.LastData)
+}
+
+func TestRFIDService_MultiTagAssociationCRUD(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "12", FirstName: "Multi", LastName: "Tag",
+	})
+	require.NoError(t, err)
+
+	svc := NewRFIDService(db, rfid.NewMockReader())
+
+	a1, err := svc.AssociateTag(participant.ID.UUID(), "TAG-A")
+	require.NoError(t, err)
+	assert.Equal(t, "TAG-A", a1.TagUID)
+
+	a2, err := svc.AssociateTag(participant.ID.UUID(), "TAG-B")
+	require.NoError(t, err)
+	assert.Equal(t, "TAG-B", a2.TagUID)
+
+	tags, err := svc.ListParticipantTags(participant.ID.UUID())
+	require.NoError(t, err)
+	require.Len(t, tags, 2)
+	assert.Equal(t, "TAG-A", tags[0].TagUID)
+	assert.Equal(t, "TAG-B", tags[1].TagUID)
+
+	foundA, err := svc.LookupParticipantByUID("TAG-A")
+	require.NoError(t, err)
+	assert.Equal(t, participant.ID, foundA.ID)
+	assert.ElementsMatch(t, []string{"TAG-A", "TAG-B"}, foundA.TagUIDs)
+
+	foundB, err := svc.LookupParticipantByUID("TAG-B")
+	require.NoError(t, err)
+	assert.Equal(t, participant.ID, foundB.ID)
+
+	// Idempotent re-associate same tag
+	again, err := svc.AssociateTag(participant.ID.UUID(), "TAG-A")
+	require.NoError(t, err)
+	assert.Equal(t, a1.ID, again.ID)
+
+	other, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "13", FirstName: "Other", LastName: "Racer",
+	})
+	require.NoError(t, err)
+	_, err = svc.AssociateTag(other.ID.UUID(), "TAG-A")
+	assert.ErrorIs(t, err, ErrInvalidRFIDInput)
+
+	raceID := race.ID.UUID()
+	listed, _, err := partSvc.ListParticipants(1, 50, &raceID, "")
+	require.NoError(t, err)
+	var multi *models.Participant
+	for i := range listed {
+		if listed[i].ID == participant.ID {
+			multi = &listed[i]
+			break
+		}
+	}
+	require.NotNil(t, multi)
+	assert.ElementsMatch(t, []string{"TAG-A", "TAG-B"}, multi.TagUIDs)
 }
 
 func TestRFIDService_WriteTag_HardwareUnavailable(t *testing.T) {

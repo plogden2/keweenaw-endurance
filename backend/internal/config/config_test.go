@@ -17,6 +17,7 @@ func clearConfigEnv(t *testing.T) {
 		"REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "REDIS_DB",
 		"JWT_SECRET", "JWT_ACCESS_TOKEN_TTL", "JWT_REFRESH_TOKEN_TTL",
 		"RATE_LIMIT_REQUESTS", "RATE_LIMIT_WINDOW", "CORS_ORIGINS",
+		"AUTH_USERS", "ORGANIZER_PIN", "RFID_INJECT", "PROXMARK3_ENABLED", "HOSTED_API_URL", "DATA_DIR",
 	}
 	saved := make(map[string]string, len(keys))
 	for _, key := range keys {
@@ -46,6 +47,7 @@ func TestLoadConfig(t *testing.T) {
 		// Test default values
 		assert.Equal(t, "development", config.Environment)
 		assert.Equal(t, "8080", config.Port)
+		assert.Equal(t, "data", config.DataDir)
 		assert.Equal(t, "localhost", config.Database.Host)
 		assert.Equal(t, "5432", config.Database.Port)
 		assert.Equal(t, "keweenaw_timing", config.Database.Name)
@@ -66,6 +68,25 @@ func TestLoadConfig(t *testing.T) {
 		assert.Equal(t, 100, config.Security.RateLimitRequests)
 		assert.Equal(t, time.Minute, config.Security.RateLimitWindow)
 		assert.Equal(t, []string{"http://localhost:3000"}, config.Security.CORSOrigins)
+
+		assert.Equal(t, "1738", config.Auth.OrganizerPIN)
+		assert.False(t, config.RFID.InjectEnabled)
+		assert.False(t, config.RFID.Proxmark3Enabled)
+		assert.Equal(t, "", config.RFID.HostedAPIURL)
+	})
+
+	t.Run("RFIDAndPINEnv", func(t *testing.T) {
+		clearConfigEnv(t)
+		t.Setenv("ORGANIZER_PIN", "9999")
+		t.Setenv("RFID_INJECT", "true")
+		t.Setenv("PROXMARK3_ENABLED", "true")
+		t.Setenv("HOSTED_API_URL", "https://api.example.com")
+		config, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, "9999", config.Auth.OrganizerPIN)
+		assert.True(t, config.RFID.InjectEnabled)
+		assert.True(t, config.RFID.Proxmark3Enabled)
+		assert.Equal(t, "https://api.example.com", config.RFID.HostedAPIURL)
 	})
 }
 

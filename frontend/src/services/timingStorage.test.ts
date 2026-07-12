@@ -3,11 +3,20 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { ManualTimingEntryPayload } from '@/types/models'
 import {
   DB_NAME,
+  addPendingKaraoke,
   addPendingRecord,
+  addPendingScan,
   deleteDatabase,
+  getAllPendingKaraoke,
   getAllPendingRecords,
+  getAllPendingScans,
+  getDisplayCache,
   getPendingCount,
+  getWAQPendingCount,
+  removePendingKaraoke,
   removePendingRecord,
+  removePendingScan,
+  setDisplayCache,
   updatePendingRecord,
 } from './timingStorage'
 
@@ -18,7 +27,7 @@ const samplePayload = (): ManualTimingEntryPayload => ({
   timestamp: '2024-06-01T10:00:00.000Z',
 })
 
-describe('timingStorage', () => {
+describe('timingStorage (WAQ / UI cache only)', () => {
   beforeEach(async () => {
     await deleteDatabase()
   })
@@ -75,5 +84,65 @@ describe('timingStorage', () => {
 
     expect(await getAllPendingRecords()).toHaveLength(0)
     expect(await getPendingCount()).toBe(0)
+  })
+
+  it('queues pending RFID scans separately from manual timing records', async () => {
+    const scan = await addPendingScan('evt-1', {
+      tag_uid: 'DEMO-TAG-0001',
+      device_id: 'laptop-finish-1',
+      local_timestamp: '2026-08-01T12:00:00.000Z',
+    })
+
+    expect(scan.id).toBeTruthy()
+    expect(scan.event_id).toBe('evt-1')
+    expect(scan.payload.tag_uid).toBe('DEMO-TAG-0001')
+    expect(scan.sync_status).toBe('pending_sync')
+    expect(await getAllPendingScans()).toHaveLength(1)
+    expect(await getAllPendingRecords()).toHaveLength(0)
+  })
+
+  it('queues pending karaoke bonuses for replay', async () => {
+    const bonus = await addPendingKaraoke({
+      timing_record_id: 'lap-1',
+      source_lap_id: 'lap-1',
+    })
+
+    expect(bonus.payload.timing_record_id).toBe('lap-1')
+    expect(await getAllPendingKaraoke()).toHaveLength(1)
+    await removePendingKaraoke(bonus.id)
+    expect(await getAllPendingKaraoke()).toHaveLength(0)
+  })
+
+  it('stores minimal display cache for event/race labels (not system of record)', async () => {
+    await setDisplayCache({
+      event_id: 'evt-1',
+      event_name: 'All You Can East Bluffet',
+      races: [{ id: 'r-12', name: '12 Hour' }],
+      tags: {
+        'DEMO-TAG-0001': {
+          participant_name: 'Alex Rivera',
+          bib_number: '12',
+          race_name: '12 Hour',
+        },
+      },
+    })
+
+    const cache = await getDisplayCache()
+    expect(cache?.event_name).toBe('All You Can East Bluffet')
+    expect(cache?.races[0].name).toBe('12 Hour')
+    expect(cache?.tags['DEMO-TAG-0001'].participant_name).toBe('Alex Rivera')
+  })
+
+  it('counts all WAQ pending items (manual + scans + karaoke)', async () => {
+    await addPendingRecord(samplePayload())
+    await addPendingScan('evt-1', {
+      tag_uid: 'T1',
+      device_id: 'd1',
+      local_timestamp: '2026-08-01T12:00:00.000Z',
+    })
+    await addPendingKaraoke({ timing_record_id: 'lap-1' })
+    expect(await getWAQPendingCount()).toBe(3)
+    await removePendingScan((await getAllPendingScans())[0].id)
+    expect(await getWAQPendingCount()).toBe(2)
   })
 })

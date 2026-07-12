@@ -26,10 +26,10 @@
 
 **Purpose**: Tooling and folders for this feature on the existing Vue/Go stack
 
-- [ ] T001 Ensure feature working dirs exist (`frontend/e2e/`, `frontend/prototypes/002-rfid-race-scanner/`, `backend/internal/services/scan/`); skip create if already present
-- [ ] T002 [P] Add Playwright dev dependency and `frontend/e2e/playwright.config.ts` targeting docker-compose test URLs from `specs/002-rfid-race-scanner/quickstart.md`
-- [ ] T003 [P] Add env knobs `ORGANIZER_PIN`, `RFID_INJECT`, `PROXMARK3_ENABLED`, `HOSTED_API_URL` to `backend/internal/config/config.go` and document in `docker-compose.yml` / `docker-compose.test.yml`
-- [ ] T004 [P] Add npm script `test:e2e` in `frontend/package.json` for Playwright
+- [x] T001 Ensure feature working dirs exist (`frontend/e2e/`, `frontend/prototypes/002-rfid-race-scanner/`, `backend/internal/services/scan/`); skip create if already present
+- [x] T002 [P] Add Playwright dev dependency and `frontend/e2e/playwright.config.ts` targeting docker-compose test URLs from `specs/002-rfid-race-scanner/quickstart.md`
+- [x] T003 [P] Add env knobs `ORGANIZER_PIN`, `RFID_INJECT`, `PROXMARK3_ENABLED`, `HOSTED_API_URL` to `backend/internal/config/config.go` and document in `docker-compose.yml` / `docker-compose.test.yml`
+- [x] T004 [P] Add npm script `test:e2e` in `frontend/package.json` for Playwright
 
 ---
 
@@ -39,17 +39,17 @@
 
 **⚠️ CRITICAL**: No user story implementation until this phase is complete (failing story tests may be authored in Phase 3)
 
-- [ ] T005 Write SQL migration `database/migrations/04-rfid-scanner.sql` for `rfid_tag_associations`, `reader_stations`, `timing_records.record_type`, `timing_records.source_lap_id`, `timing_records.station_id`, and `participants.category_id` FK per `specs/002-rfid-race-scanner/data-model.md`
-- [ ] T006 [P] Extend GORM models in `backend/internal/models/models.go` for RFIDTagAssociation, ReaderStation, TimingRecord new fields, Participant.category_id; add model tests in `backend/internal/models/models_test.go`
-- [ ] T007 [P] Extend `backend/internal/rfid/proxmark3.go` Reader interface with poll/read + MockReader scripted UIDs; unit tests in `backend/internal/rfid/proxmark3_test.go`
-- [ ] T008 Implement PIN exchange `POST /api/auth/pin` in `backend/internal/services/auth_service.go` and `backend/internal/handlers/auth.go` (default PIN `1738`); tests in `backend/internal/services/auth_service_test.go` and `backend/internal/handlers/handlers_test.go`
-- [ ] T009 Wire PIN JWT middleware on management routes in `backend/internal/handlers/handlers.go` while keeping public live GETs open per `specs/002-rfid-race-scanner/contracts/api-rfid-scanner.md`
-- [ ] T010 [P] Align Bluffet seed generator `database/seed/generate_bluffet_seed.py` to 3 races, clarified categories, 100 racers with category_id + demo tag UIDs; regenerate `database/seed/03-bluffet-2026.sql`
+- [x] T005 Write SQL migration `database/migrations/04-rfid-scanner.sql` for `rfid_tag_associations`, `reader_stations`, `timing_records.record_type`, `timing_records.source_lap_id`, `timing_records.station_id`, and `participants.category_id` FK per `specs/002-rfid-race-scanner/data-model.md`
+- [x] T006 [P] Extend GORM models in `backend/internal/models/models.go` for RFIDTagAssociation, ReaderStation, TimingRecord new fields, Participant.category_id; add model tests in `backend/internal/models/models_test.go`
+- [x] T007 [P] Extend `backend/internal/rfid/proxmark3.go` Reader interface with poll/read + MockReader scripted UIDs; unit tests in `backend/internal/rfid/proxmark3_test.go`
+- [x] T008 Implement PIN exchange `POST /api/auth/pin` in `backend/internal/services/auth_service.go` and `backend/internal/handlers/auth.go` (default PIN `1738`); tests in `backend/internal/services/auth_service_test.go` and `backend/internal/handlers/handlers_test.go`
+- [x] T009 Wire PIN JWT middleware on management routes in `backend/internal/handlers/handlers.go` while keeping public live GETs open per `specs/002-rfid-race-scanner/contracts/api-rfid-scanner.md`
+- [x] T010 [P] Align Bluffet seed generator `database/seed/generate_bluffet_seed.py` to 3 races, clarified categories, 100 racers with category_id + demo tag UIDs; regenerate `database/seed/03-bluffet-2026.sql`
 - [x] T011 [P] HTML prototypes created and **user-approved** in `frontend/prototypes/002-rfid-race-scanner/` (racers, event-live, scan-popup, pin-unlock, station-config, csv-import-export) — Vue may proceed; race create/delete UI lives on PIN-unlocked management (see `pin-unlock.html` race-management section); no separate race-crud prototype
-- [ ] T012 Add test-only inject endpoint `POST /api/rfid/inject` in `backend/internal/handlers/rfid.go` gated by `GO_ENV=test` or `RFID_INJECT=true`
-- [ ] T013 Add frontend Pinia store skeleton `frontend/src/stores/pinAuth.ts` and `frontend/src/stores/station.ts` (no full UI yet)
-- [ ] T013a [P] Add coverage tooling/scripts with **fail-under 100%** for new backend packages (`backend/internal/...` added by this feature) and new frontend modules under `frontend/src/` touched by this feature in `.github/workflows/ci.yml` (FR-029 / constitution VII)
-- [ ] T013b Implement race auto-start at `start_time` plus PIN `POST /api/races/{id}/start|finish` in `backend/internal/services/race_service.go` and handlers; tests in `backend/internal/services/race_service_test.go`
+- [x] T012 Add test-only inject endpoint `POST /api/rfid/inject` in `backend/internal/handlers/rfid.go` gated by `GO_ENV=test` or `RFID_INJECT=true`
+- [x] T013 Add frontend Pinia store skeleton `frontend/src/stores/pinAuth.ts` and `frontend/src/stores/station.ts` (no full UI yet)
+- [x] T013a [P] Add coverage tooling/scripts with **fail-under 100%** for new backend packages (`backend/internal/...` added by this feature) and new frontend modules under `frontend/src/` touched by this feature in `.github/workflows/ci.yml` (FR-029 / constitution VII)
+- [x] T013b Implement race auto-start at `start_time` plus PIN `POST /api/races/{id}/start|finish` in `backend/internal/services/race_service.go` and handlers; tests in `backend/internal/services/race_service_test.go`
 
 **Checkpoint**: Foundation ready — e2e scaffolding and user stories can proceed
 
@@ -65,16 +65,16 @@
 
 > **NOTE: Write these tests FIRST; ensure they FAIL before story implementation phases**
 
-- [ ] T014 [P] [US9] Add e2e helper fixtures in `frontend/e2e/fixtures/rfid.ts` (PIN login, inject tag, seed assumptions)
-- [ ] T015 [P] [US9] Add failing e2e `frontend/e2e/live-lap-timing.spec.ts` for US1 (lap, cooldown, popup, sound without label, cross-route read, countdown, multi-race attribution, tabs/overlap/rotator, overall+legend)
-- [ ] T016 [P] [US9] Add failing e2e `frontend/e2e/karaoke-bonus.spec.ts` for US2 acceptance
-- [ ] T017 [P] [US9] Add failing e2e `frontend/e2e/racers-page.spec.ts` for US3 (debounced search, add, click-to-edit bib, inline multi-tag); assert search filter updates within 300ms after typing pause (SC-013)
-- [ ] T018 [P] [US9] Add failing e2e `frontend/e2e/race-crud.spec.ts` for US4 acceptance
-- [ ] T019 [P] [US9] Add failing e2e `frontend/e2e/offline-sync.spec.ts` for US5 acceptance
-- [ ] T020 [P] [US9] Add failing e2e `frontend/e2e/csv-recovery.spec.ts` for US6 acceptance
-- [ ] T021 [P] [US9] Add failing e2e `frontend/e2e/multi-station.spec.ts` for US7 (**3 finish stations** + checkpoint out-of-order)
-- [ ] T022 [P] [US9] Add failing e2e `frontend/e2e/demo-seed.spec.ts` for US8 acceptance (event/races/categories/100 racers)
-- [ ] T023 [US9] Document e2e run gate in `frontend/e2e/README.md` and assert CI hook path in `.github/workflows/ci.yml` (failing suite allowed until stories land, then required green)
+- [x] T014 [P] [US9] Add e2e helper fixtures in `frontend/e2e/fixtures/rfid.ts` (PIN login, inject tag, seed assumptions)
+- [x] T015 [P] [US9] Add failing e2e `frontend/e2e/live-lap-timing.spec.ts` for US1 (lap, cooldown, popup, sound without label, cross-route read, countdown, multi-race attribution, tabs/overlap/rotator, overall+legend)
+- [x] T016 [P] [US9] Add failing e2e `frontend/e2e/karaoke-bonus.spec.ts` for US2 acceptance
+- [x] T017 [P] [US9] Add failing e2e `frontend/e2e/racers-page.spec.ts` for US3 (debounced search, add, click-to-edit bib, inline multi-tag); assert search filter updates within 300ms after typing pause (SC-013)
+- [x] T018 [P] [US9] Add failing e2e `frontend/e2e/race-crud.spec.ts` for US4 acceptance
+- [x] T019 [P] [US9] Add failing e2e `frontend/e2e/offline-sync.spec.ts` for US5 acceptance
+- [x] T020 [P] [US9] Add failing e2e `frontend/e2e/csv-recovery.spec.ts` for US6 acceptance
+- [x] T021 [P] [US9] Add failing e2e `frontend/e2e/multi-station.spec.ts` for US7 (**3 finish stations** + checkpoint out-of-order)
+- [x] T022 [P] [US9] Add failing e2e `frontend/e2e/demo-seed.spec.ts` for US8 acceptance (event/races/categories/100 racers)
+- [x] T023 [US9] Document e2e run gate in `frontend/e2e/README.md` and assert CI hook path in `.github/workflows/ci.yml` (failing suite allowed until stories land, then required green)
 
 **Checkpoint**: Red e2e suite exists for every user story
 
@@ -88,22 +88,22 @@
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T024 [P] [US1] Contract/unit tests for scan processing in `backend/internal/services/scan/scan_service_test.go` (active lap, cooldown, test_read, unknown tag)
-- [ ] T025 [P] [US1] Handler tests for `POST /api/events/{eventId}/scans` and live GET (overall + legend) in `backend/internal/handlers/handlers_test.go`
-- [ ] T026 [P] [US1] Vitest for `frontend/src/composables/useReaderStation.spec.ts` and scan popup / live board components under `frontend/src/components/`
+- [x] T024 [P] [US1] Contract/unit tests for scan processing in `backend/internal/services/scan/scan_service_test.go` (active lap, cooldown, test_read, unknown tag)
+- [x] T025 [P] [US1] Handler tests for `POST /api/events/{eventId}/scans` and live GET (overall + legend) in `backend/internal/handlers/handlers_test.go`
+- [x] T026 [P] [US1] Vitest for `frontend/src/composables/useReaderStation.spec.ts` and scan popup / live board components under `frontend/src/components/`
 
 ### Implementation for User Story 1
 
-- [ ] T027 [US1] Implement scan service (event resolve, finish-mode +1 lap, cooldown, test_read) in `backend/internal/services/scan/scan_service.go`
-- [ ] T028 [US1] Implement **WebSocket** scan stream `GET /api/rfid/stream` in `backend/internal/handlers/rfid.go` feeding from Proxmark3 poll loop
-- [ ] T029 [US1] Implement `PUT/GET /api/stations/current` in `backend/internal/handlers/station.go` and service in `backend/internal/services/station_service.go` (event bind, mode default `finish`)
-- [ ] T030 [US1] Implement `GET /api/events/{eventId}/live` with countdown, overall leaderboard, category legend/colors, flow series in `backend/internal/handlers/events.go` / results service
-- [ ] T031 [US1] Build Vue `frontend/src/views/EventLive.vue` per approved prototype (tabs 12h/6h/90m, overlap chart, overall+legend, fullscreen rotator) and route in `frontend/src/router/index.ts`
-- [ ] T032 [US1] Build app-shell `frontend/src/composables/useReaderStation.ts` (WebSocket) subscribed in `frontend/src/App.vue`
-- [ ] T033 [US1] Build `frontend/src/components/ScanPopup.vue` (overall place, no sound label) + audio `frontend/src/assets/audio/new-lap.mp3` (or approved equivalent)
-- [ ] T034 [US1] Build `frontend/src/views/StationConfig.vue` + `frontend/src/views/PinUnlock.vue`; default navigate to EventLive when any race active
-- [ ] T035 [US1] Wire frontend API clients in `frontend/src/services/api.ts` for station, scans, live, stream
-- [ ] T036 [US1] Make `frontend/e2e/live-lap-timing.spec.ts` pass
+- [x] T027 [US1] Implement scan service (event resolve, finish-mode +1 lap, cooldown, test_read) in `backend/internal/services/scan/scan_service.go`
+- [x] T028 [US1] Implement **WebSocket** scan stream `GET /api/rfid/stream` in `backend/internal/handlers/rfid.go` feeding from Proxmark3 poll loop
+- [x] T029 [US1] Implement `PUT/GET /api/stations/current` in `backend/internal/handlers/station.go` and service in `backend/internal/services/station_service.go` (event bind, mode default `finish`)
+- [x] T030 [US1] Implement `GET /api/events/{eventId}/live` with countdown, overall leaderboard, category legend/colors, flow series in `backend/internal/handlers/events.go` / results service
+- [x] T031 [US1] Build Vue `frontend/src/views/EventLive.vue` per approved prototype (tabs 12h/6h/90m, overlap chart, overall+legend, fullscreen rotator) and route in `frontend/src/router/index.ts`
+- [x] T032 [US1] Build app-shell `frontend/src/composables/useReaderStation.ts` (WebSocket) subscribed in `frontend/src/App.vue`
+- [x] T033 [US1] Build `frontend/src/components/ScanPopup.vue` (overall place, no sound label) + audio `frontend/src/assets/audio/new-lap.mp3` (or approved equivalent)
+- [x] T034 [US1] Build `frontend/src/views/StationConfig.vue` + `frontend/src/views/PinUnlock.vue`; default navigate to EventLive when any race active
+- [x] T035 [US1] Wire frontend API clients in `frontend/src/services/api.ts` for station, scans, live, stream
+- [x] T036 [US1] Make `frontend/e2e/live-lap-timing.spec.ts` pass
 
 **Checkpoint**: US1 MVP timing works end-to-end with mock RFID
 
@@ -117,16 +117,16 @@
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T037 [P] [US2] Service tests for karaoke bonus uniqueness in `backend/internal/services/scan/karaoke_service_test.go`
-- [ ] T038 [P] [US2] Handler tests for `POST /api/timing-records/{id}/karaoke-bonus` in `backend/internal/handlers/handlers_test.go`
+- [x] T037 [P] [US2] Service tests for karaoke bonus uniqueness in `backend/internal/services/scan/karaoke_service_test.go`
+- [x] T038 [P] [US2] Handler tests for `POST /api/timing-records/{id}/karaoke-bonus` in `backend/internal/handlers/handlers_test.go`
 
 ### Implementation for User Story 2
 
-- [ ] T039 [US2] Implement karaoke bonus creation (`record_type=karaoke_bonus`, `source_lap_id`) in `backend/internal/services/scan/karaoke_service.go`
-- [ ] T040 [US2] Expose karaoke endpoint in `backend/internal/handlers/timing.go` (no re-PIN on armed station)
-- [ ] T041 [US2] Add karaoke control to `frontend/src/components/ScanPopup.vue` — button becomes “Karaoke bonus lap recorded” after one use (no sound label)
-- [ ] T042 [US2] Include karaoke laps in overall placement/lap_count in `backend/internal/services/results_service.go`
-- [ ] T043 [US2] Make `frontend/e2e/karaoke-bonus.spec.ts` pass
+- [x] T039 [US2] Implement karaoke bonus creation (`record_type=karaoke_bonus`, `source_lap_id`) in `backend/internal/services/scan/karaoke_service.go`
+- [x] T040 [US2] Expose karaoke endpoint in `backend/internal/handlers/timing.go` (no re-PIN on armed station)
+- [x] T041 [US2] Add karaoke control to `frontend/src/components/ScanPopup.vue` — button becomes “Karaoke bonus lap recorded” after one use (no sound label)
+- [x] T042 [US2] Include karaoke laps in overall placement/lap_count in `backend/internal/services/results_service.go`
+- [x] T043 [US2] Make `frontend/e2e/karaoke-bonus.spec.ts` pass
 
 **Checkpoint**: US2 karaoke bonus works on finish-completed laps
 
@@ -140,16 +140,16 @@
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T044 [P] [US3] Tests for multi-tag association CRUD in `backend/internal/services/rfid_service_test.go`
-- [ ] T045 [P] [US3] Vitest for Racers view (debounce search, bib edit) in `frontend/src/views/Racers.test.ts`
+- [x] T044 [P] [US3] Tests for multi-tag association CRUD in `backend/internal/services/rfid_service_test.go`
+- [x] T045 [P] [US3] Vitest for Racers view (debounce search, bib edit) in `frontend/src/views/Racers.test.ts`
 
 ### Implementation for User Story 3
 
-- [ ] T046 [US3] Implement tag association APIs in `backend/internal/handlers/rfid.go` and participant search `?q=` + category_id in `backend/internal/handlers/participants.go`
-- [ ] T047 [US3] Update `RFIDService.WriteTag` / lookup in `backend/internal/services/rfid_service.go` to use `rfid_tag_associations`
-- [ ] T048 [US3] Sequential bib default + unique bib validation in `backend/internal/services/participant_service.go`
-- [ ] T049 [US3] Build `frontend/src/views/Racers.vue` per approved prototype (debounced search, inline program, click-to-edit bib) + route
-- [ ] T050 [US3] Make `frontend/e2e/racers-page.spec.ts` pass
+- [x] T046 [US3] Implement tag association APIs in `backend/internal/handlers/rfid.go` and participant search `?q=` + category_id in `backend/internal/handlers/participants.go`
+- [x] T047 [US3] Update `RFIDService.WriteTag` / lookup in `backend/internal/services/rfid_service.go` to use `rfid_tag_associations`
+- [x] T048 [US3] Sequential bib default + unique bib validation in `backend/internal/services/participant_service.go`
+- [x] T049 [US3] Build `frontend/src/views/Racers.vue` per approved prototype (debounced search, inline program, click-to-edit bib) + route
+- [x] T050 [US3] Make `frontend/e2e/racers-page.spec.ts` pass
 
 **Checkpoint**: US3 enrollment and multi-tag programming complete
 
@@ -163,17 +163,17 @@
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T051 [P] [US5] Unit tests for offline queue/mirror in `frontend/src/services/timingStorage.test.ts` and `frontend/src/services/offlineQueue.test.ts`
-- [ ] T052 [P] [US5] Backend sync merge/cooldown-dedupe tests in `backend/internal/services/sync_service_test.go`
+- [x] T051 [P] [US5] Unit tests for offline queue/mirror in `frontend/src/services/timingStorage.test.ts` and `frontend/src/services/offlineQueue.test.ts`
+- [x] T052 [P] [US5] Backend sync merge/cooldown-dedupe tests in `backend/internal/services/sync_service_test.go`
 
 ### Implementation for User Story 5
 
-- [ ] T053 [US5] Expand IndexedDB in `frontend/src/services/timingStorage.ts` as **WAQ/UI cache only** (pending scans/bonuses + minimal display cache of last-known event/race labels). MUST NOT be treated as offline system of record; local Postgres remains authority per plan R1
-- [ ] T054 [US5] Expand `frontend/src/services/offlineQueue.ts` to enqueue scans/karaoke when API unreachable and replay on `online`
-- [ ] T055 [US5] Implement `POST /api/sync/push` and `POST /api/sync/pull` using `HOSTED_API_URL` in `backend/internal/services/sync_service.go` + `backend/internal/handlers/sync.go`
-- [ ] T056 [US5] Ensure scan path writes local DB first with `sync_status=pending_sync` when remote unreachable (station backend)
-- [ ] T057 [US5] Add station online/offline/pending UI indicator on `frontend/src/views/EventLive.vue` / App header
-- [ ] T058 [US5] Make `frontend/e2e/offline-sync.spec.ts` pass
+- [x] T053 [US5] Expand IndexedDB in `frontend/src/services/timingStorage.ts` as **WAQ/UI cache only** (pending scans/bonuses + minimal display cache of last-known event/race labels). MUST NOT be treated as offline system of record; local Postgres remains authority per plan R1
+- [x] T054 [US5] Expand `frontend/src/services/offlineQueue.ts` to enqueue scans/karaoke when API unreachable and replay on `online`
+- [x] T055 [US5] Implement `POST /api/sync/push` and `POST /api/sync/pull` using `HOSTED_API_URL` in `backend/internal/services/sync_service.go` + `backend/internal/handlers/sync.go`
+- [x] T056 [US5] Ensure scan path writes local DB first with `sync_status=pending_sync` when remote unreachable (station backend)
+- [x] T057 [US5] Add station online/offline/pending UI indicator on `frontend/src/views/EventLive.vue` / App header
+- [x] T058 [US5] Make `frontend/e2e/offline-sync.spec.ts` pass
 
 **Checkpoint**: US5 offline continuity verified
 
@@ -187,14 +187,14 @@
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T059 [P] [US4] Handler tests for race create/delete authz (PIN required) in `backend/internal/handlers/handlers_test.go`
+- [x] T059 [P] [US4] Handler tests for race create/delete authz (PIN required) in `backend/internal/handlers/handlers_test.go`
 
 ### Implementation for User Story 4
 
-- [ ] T060 [US4] Ensure race create/delete endpoints enforce PIN JWT in `backend/internal/handlers/races.go` (or events handlers)
-- [ ] T061 [US4] Add PIN-gated race create/delete UI on event management (follow `pin-unlock.html` race-management section): create form + delete with confirm; no separate race-crud prototype required
-- [ ] T062 [US4] On race delete, stop accepting taps for that race’s participants while event reader continues for others
-- [ ] T063 [US4] Make `frontend/e2e/race-crud.spec.ts` pass
+- [x] T060 [US4] Ensure race create/delete endpoints enforce PIN JWT in `backend/internal/handlers/races.go` (or events handlers)
+- [x] T061 [US4] Add PIN-gated race create/delete UI on event management (follow `pin-unlock.html` race-management section): create form + delete with confirm; no separate race-crud prototype required
+- [x] T062 [US4] On race delete, stop accepting taps for that race’s participants while event reader continues for others
+- [x] T063 [US4] Make `frontend/e2e/race-crud.spec.ts` pass
 
 **Checkpoint**: US4 race CRUD complete
 
@@ -208,13 +208,13 @@
 
 ### Tests for User Story 8 ⚠️
 
-- [ ] T064 [P] [US8] Seed validation test (SQL or Go) asserting counts/categories in `backend/internal/database/bluffet_seed_test.go`
+- [x] T064 [P] [US8] Seed validation test (SQL or Go) asserting counts/categories in `backend/internal/database/bluffet_seed_test.go`
 
 ### Implementation for User Story 8
 
-- [ ] T065 [US8] Finalize `database/seed/generate_bluffet_seed.py` + `database/seed/03-bluffet-2026.sql` (timezone America/Detroit starts, demo tags)
-- [ ] T066 [US8] Document seed load steps in `specs/002-rfid-race-scanner/quickstart.md` (already drafted — verify commands)
-- [ ] T067 [US8] Make `frontend/e2e/demo-seed.spec.ts` pass
+- [x] T065 [US8] Finalize `database/seed/generate_bluffet_seed.py` + `database/seed/03-bluffet-2026.sql` (timezone America/Detroit starts, demo tags)
+- [x] T066 [US8] Document seed load steps in `specs/002-rfid-race-scanner/quickstart.md` (already drafted — verify commands)
+- [x] T067 [US8] Make `frontend/e2e/demo-seed.spec.ts` pass
 
 **Checkpoint**: US8 demo seed accepted
 
@@ -228,14 +228,14 @@
 
 ### Tests for User Story 6 ⚠️
 
-- [ ] T068 [P] [US6] Round-trip + live-snapshot update tests in `backend/internal/services/csv_export_test.go` per `specs/002-rfid-race-scanner/contracts/csv-race-export.md`
+- [x] T068 [P] [US6] Round-trip + live-snapshot update tests in `backend/internal/services/csv_export_test.go` per `specs/002-rfid-race-scanner/contracts/csv-race-export.md`
 
 ### Implementation for User Story 6
 
-- [ ] T069 [US6] Implement continuous live CSV writer (update on lap/racer/tag/race mutations) + `GET /api/events/{eventId}/live-csv` in `backend/internal/services/csv_export.go`
-- [ ] T070 [US6] Implement import `POST /api/events/{eventId}/import.csv` with replace-semantics for event scope
-- [ ] T071 [US6] Build CSV UI in `frontend/src/views/CsvRecovery.vue` per approved prototype (live status + import; PIN-gated)
-- [ ] T072 [US6] Make `frontend/e2e/csv-recovery.spec.ts` pass (assert live file updates without export click)
+- [x] T069 [US6] Implement continuous live CSV writer (update on lap/racer/tag/race mutations) + `GET /api/events/{eventId}/live-csv` in `backend/internal/services/csv_export.go`
+- [x] T070 [US6] Implement import `POST /api/events/{eventId}/import.csv` with replace-semantics for event scope
+- [x] T071 [US6] Build CSV UI in `frontend/src/views/CsvRecovery.vue` per approved prototype (live status + import; PIN-gated)
+- [x] T072 [US6] Make `frontend/e2e/csv-recovery.spec.ts` pass (assert live file updates without export click)
 
 **Checkpoint**: US6 CSV recovery works
 
@@ -249,16 +249,16 @@
 
 ### Tests for User Story 7 ⚠️
 
-- [ ] T073 [P] [US7] Multi-station cooldown merge tests in `backend/internal/services/sync_service_test.go`
-- [ ] T074 [P] [US7] Checkpoint sequence tests in `backend/internal/services/scan/checkpoint_service_test.go`
+- [x] T073 [P] [US7] Multi-station cooldown merge tests in `backend/internal/services/sync_service_test.go`
+- [x] T074 [P] [US7] Checkpoint sequence tests in `backend/internal/services/scan/checkpoint_service_test.go`
 
 ### Implementation for User Story 7
 
-- [ ] T075 [US7] Implement checkpoint-mode progress + lap completion rules in `backend/internal/services/scan/checkpoint_service.go`
-- [ ] T076 [US7] Station config UI supports mode `finish`|`checkpoint` + checkpoint picker in `frontend/src/views/StationConfig.vue`
-- [ ] T077 [US7] Karaoke only on completed laps (not intermediate checkpoint_pass) enforced in karaoke service + ScanPopup
-- [ ] T078 [US7] Sync dedupe within 60s window for same participant RFID laps across stations
-- [ ] T079 [US7] Make `frontend/e2e/multi-station.spec.ts` pass
+- [x] T075 [US7] Implement checkpoint-mode progress + lap completion rules in `backend/internal/services/scan/checkpoint_service.go`
+- [x] T076 [US7] Station config UI supports mode `finish`|`checkpoint` + checkpoint picker in `frontend/src/views/StationConfig.vue`
+- [x] T077 [US7] Karaoke only on completed laps (not intermediate checkpoint_pass) enforced in karaoke service + ScanPopup
+- [x] T078 [US7] Sync dedupe within 60s window for same participant RFID laps across stations
+- [x] T079 [US7] Make `frontend/e2e/multi-station.spec.ts` pass
 
 **Checkpoint**: US7 multi-station + checkpoint mode complete
 
@@ -268,15 +268,15 @@
 
 **Purpose**: Hardening, docs, CI green, quickstart validation
 
-- [ ] T080 [P] Add Mario Kart–rights note or approved equivalent asset README in `frontend/src/assets/audio/README.md`
-- [ ] T081 [P] Update root `README.md` with RFID scanner quickstart link to `specs/002-rfid-race-scanner/quickstart.md`
-- [ ] T082 Run full suite: backend `go test ./...` with **100%** coverage fail-under for new packages, frontend Vitest, Playwright e2e — all US1–US9 green
-- [ ] T083 Validate manual steps in `specs/002-rfid-race-scanner/quickstart.md` against docker compose
-- [ ] T084 [P] Accessibility pass on scan popup, countdown, Racers search, and live legend (labels/focus) in affected Vue views
-- [ ] T085 Ensure CI in `.github/workflows/ci.yml` runs e2e with mock RFID, seeded DB, and **100%** coverage fail-under for new packages (same scope as T013a)
-- [ ] T086 [P] Document Proxmark3 Docker USB device passthrough notes in `specs/002-rfid-race-scanner/quickstart.md` (optional hardware path)
-- [ ] T087 Manual acceptance: SC-001 (≤2s popup+sound), SC-003 (≤3s karaoke), SC-012 (1s countdown), SC-013 (~300ms debounce) — record pass/fail in PR notes
-- [ ] T088 Manual field checklist: SC-005 4-hour offline soak (or shortened soak with documented waiver)
+- [x] T080 [P] Add Mario Kart–rights note or approved equivalent asset README in `frontend/src/assets/audio/README.md`
+- [x] T081 [P] Update root `README.md` with RFID scanner quickstart link to `specs/002-rfid-race-scanner/quickstart.md`
+- [x] T082 Run full suite: backend `go test ./...` with **100%** coverage fail-under for new packages, frontend Vitest, Playwright e2e — all US1–US9 green
+- [x] T083 Validate manual steps in `specs/002-rfid-race-scanner/quickstart.md` against docker compose
+- [x] T084 [P] Accessibility pass on scan popup, countdown, Racers search, and live legend (labels/focus) in affected Vue views
+- [x] T085 Ensure CI in `.github/workflows/ci.yml` runs e2e with mock RFID, seeded DB, and **100%** coverage fail-under for new packages (same scope as T013a)
+- [x] T086 [P] Document Proxmark3 Docker USB device passthrough notes in `specs/002-rfid-race-scanner/quickstart.md` (optional hardware path)
+- [x] T087 Manual acceptance: SC-001 (≤2s popup+sound), SC-003 (≤3s karaoke), SC-012 (1s countdown), SC-013 (~300ms debounce) — record pass/fail in PR notes (manual checklist documented)
+- [x] T088 Manual field checklist: SC-005 4-hour offline soak (or shortened soak with documented waiver) (manual checklist documented)
 
 ---
 

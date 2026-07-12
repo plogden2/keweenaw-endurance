@@ -75,6 +75,7 @@ func (h *Handlers) CreateRace(c *gin.Context) {
 		return
 	}
 
+	h.refreshLiveCSV(eventID)
 	c.JSON(http.StatusCreated, created)
 }
 
@@ -138,6 +139,7 @@ func (h *Handlers) UpdateRace(c *gin.Context) {
 		return
 	}
 
+	h.refreshLiveCSV(race.EventID.UUID())
 	c.JSON(http.StatusOK, race)
 }
 
@@ -148,12 +150,50 @@ func (h *Handlers) DeleteRace(c *gin.Context) {
 		return
 	}
 
+	race, _ := h.services.Races.GetRace(id)
 	if err := h.services.Races.DeleteRace(id); err != nil {
 		respondServiceError(c, err)
 		return
 	}
 
+	if race != nil {
+		h.refreshLiveCSV(race.EventID.UUID())
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "race deleted"})
+}
+
+func (h *Handlers) StartRace(c *gin.Context) {
+	id, err := h.resolveRaceID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
+		return
+	}
+
+	race, err := h.services.Races.StartRace(id)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+
+	h.refreshLiveCSV(race.EventID.UUID())
+	c.JSON(http.StatusOK, race)
+}
+
+func (h *Handlers) FinishRace(c *gin.Context) {
+	id, err := h.resolveRaceID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race id"})
+		return
+	}
+
+	race, err := h.services.Races.FinishRace(id)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+
+	h.refreshLiveCSV(race.EventID.UUID())
+	c.JSON(http.StatusOK, race)
 }
 
 func parseDate(value string) (time.Time, error) {

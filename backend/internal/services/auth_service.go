@@ -44,15 +44,21 @@ type authUserRecord struct {
 }
 
 type AuthService struct {
-	jwtCfg *config.JWTConfig
-	users  map[string]authUserRecord
+	jwtCfg       *config.JWTConfig
+	users        map[string]authUserRecord
+	organizerPIN string
 }
 
 func NewAuthService(cfg *config.Config) *AuthService {
 	users := parseAuthUsers(cfg.Auth.Users)
+	pin := cfg.Auth.OrganizerPIN
+	if pin == "" {
+		pin = "1738"
+	}
 	return &AuthService{
-		jwtCfg: &cfg.JWT,
-		users:  users,
+		jwtCfg:       &cfg.JWT,
+		users:        users,
+		organizerPIN: pin,
 	}
 }
 
@@ -107,6 +113,25 @@ func (s *AuthService) Login(username, password string) (*LoginResponse, error) {
 	return &LoginResponse{
 		Token:     token,
 		Role:      user.role,
+		ExpiresAt: expiresAt,
+	}, nil
+}
+
+// ExchangePIN validates the organizer PIN and issues an admin-role JWT so
+// existing adminOnly / timerWrite middleware protects management routes.
+func (s *AuthService) ExchangePIN(pin string) (*LoginResponse, error) {
+	if pin != s.organizerPIN {
+		return nil, ErrInvalidCredentials
+	}
+
+	token, expiresAt, err := s.issueToken(uuid.New().String(), "organizer", RoleAdmin)
+	if err != nil {
+		return nil, fmt.Errorf("issue token: %w", err)
+	}
+
+	return &LoginResponse{
+		Token:     token,
+		Role:      RoleAdmin,
 		ExpiresAt: expiresAt,
 	}, nil
 }

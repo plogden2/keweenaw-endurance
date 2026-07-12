@@ -1,4 +1,4 @@
-version: '3.8'
+﻿version: '3.8'
 
 services:
   frontend:
@@ -37,9 +37,15 @@ services:
       - REDIS_PORT=6379
       - JWT_SECRET=development-secret-key-change-in-production
       - LOG_LEVEL=debug
+      - ORGANIZER_PIN=1738
+      - RFID_INJECT=true
+      - PROXMARK3_ENABLED=true
+      - HOSTED_API_URL=
+      - DATA_DIR=/app/data
     volumes:
       - ./backend:/app
       - /app/vendor
+      - backend_csv_data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -95,6 +101,7 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  backend_csv_data:
 
 networks:
   keweenaw-network:

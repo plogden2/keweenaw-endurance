@@ -6,6 +6,8 @@
       <router-view />
     </main>
 
+    <ScanPopup :scan="lastScan" @dismiss="clearLastScan" @karaoke="onKaraoke" />
+
     <footer class="footer">
       <div class="footer-content">
         <UnitToggle />
@@ -16,14 +18,49 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import UnitToggle from '@/components/UnitToggle.vue'
+import ScanPopup from '@/components/ScanPopup.vue'
+import { useReaderStation } from '@/composables/useReaderStation'
+import { timingRecordsApi } from '@/services/api'
+import { useStationStore } from '@/stores/station'
 
 const route = useRoute()
+const station = useStationStore()
+const { lastScan, clearLastScan, start, stop } = useReaderStation()
+
 // Show Inferior Timing branding only on timing routes.
 const showTimingHeader = computed(() => route.path.startsWith('/timing'))
+
+async function onKaraoke() {
+  const scan = lastScan.value
+  if (!scan?.timing_record_id) return
+  try {
+    const { data } = await timingRecordsApi.karaokeBonus(scan.timing_record_id)
+    lastScan.value = {
+      ...scan,
+      lap_count: data.lap_count,
+      placement: data.placement,
+      placement_category: data.placement_category,
+      karaoke_available: false,
+    }
+  } catch {
+    /* ScanPopup already shows recorded; duplicate POSTs return 409 */
+  }
+}
+
+onMounted(() => {
+  void station.fetchCurrent().catch(() => {
+    /* station may be unarmed */
+  })
+  start()
+})
+
+onUnmounted(() => {
+  stop()
+})
 </script>
 
 <style scoped>

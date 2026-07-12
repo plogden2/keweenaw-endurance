@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
@@ -11,8 +12,9 @@ import (
 )
 
 var (
-	ErrRaceNotFound     = errors.New("race not found")
-	ErrInvalidRaceInput = errors.New("invalid race input")
+	ErrRaceNotFound          = errors.New("race not found")
+	ErrInvalidRaceInput      = errors.New("invalid race input")
+	ErrInvalidRaceTransition = errors.New("invalid race status transition")
 )
 
 var validRaceTypes = map[string]bool{
@@ -43,7 +45,8 @@ func (s *RaceService) ListRaces(page, limit int, eventID *uuid.UUID) ([]models.R
 		limit = 20
 	}
 
-	query := s.db.Model(&models.Race{})
+	// Exclude cancelled (soft-deleted) races from the active list.
+	query := s.db.Model(&models.Race{}).Where("status != ?", "cancelled")
 	if eventID != nil {
 		query = query.Where("event_id = ?", *eventID)
 	}
@@ -140,15 +143,68 @@ func (s *RaceService) UpdateRace(id uuid.UUID, input *models.Race) (*models.Race
 	return race, nil
 }
 
+// DeleteRace soft-deletes by setting status to cancelled so taps for that
+// race's participants stop scoring laps while the event reader continues.
 func (s *RaceService) DeleteRace(id uuid.UUID) error {
-	result := s.db.Delete(&models.Race{}, "id = ?", id)
-	if result.Error != nil {
-		return result.Error
+	var race models.Race
+	if err := s.db.First(&race, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrRaceNotFound
+		}
+		return err
 	}
-	if result.RowsAffected == 0 {
+	if race.Status == "cancelled" {
 		return ErrRaceNotFound
 	}
+	race.Status = "cancelled"
+	if err := s.db.Model(&race).Update("status", "cancelled").Error; err != nil {
+		return err
+	}
 	return nil
+}
+
+// AutoStartDueRaces promotes scheduled races to active when start_time <= now.
+// Returns the number of races that were auto-started.
+func (s *RaceService) AutoStartDueRaces(now time.Time) (int, error) {
+	result := s.db.Model(&models.Race{}).
+		Where("status = ? AND start_time <= ?", "scheduled", now).
+		Update("status", "active")
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return int(result.RowsAffected), nil
+}
+
+// StartRace manually transitions a scheduled race to active (PIN/admin).
+func (s *RaceService) StartRace(id uuid.UUID) (*models.Race, error) {
+	race, err := s.GetRace(id)
+	if err != nil {
+		return nil, err
+	}
+	if race.Status != "scheduled" {
+		return nil, fmt.Errorf("%w: can only start scheduled races (current: %s)", ErrInvalidRaceTransition, race.Status)
+	}
+	race.Status = "active"
+	if err := s.db.Save(race).Error; err != nil {
+		return nil, err
+	}
+	return race, nil
+}
+
+// FinishRace manually transitions an active race to finished (PIN/admin).
+func (s *RaceService) FinishRace(id uuid.UUID) (*models.Race, error) {
+	race, err := s.GetRace(id)
+	if err != nil {
+		return nil, err
+	}
+	if race.Status != "active" {
+		return nil, fmt.Errorf("%w: can only finish active races (current: %s)", ErrInvalidRaceTransition, race.Status)
+	}
+	race.Status = "finished"
+	if err := s.db.Save(race).Error; err != nil {
+		return nil, err
+	}
+	return race, nil
 }
 
 func validateRaceInput(race *models.Race) error {
