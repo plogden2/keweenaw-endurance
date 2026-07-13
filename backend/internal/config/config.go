@@ -9,15 +9,24 @@ import (
 type Config struct {
 	Environment string
 	Port        string
+	DataDir     string
 	Database    DatabaseConfig
 	Redis       RedisConfig
 	JWT         JWTConfig
 	Auth        AuthConfig
 	Security    SecurityConfig
+	RFID        RFIDConfig
 }
 
 type AuthConfig struct {
-	Users string
+	Users        string
+	OrganizerPIN string
+}
+
+type RFIDConfig struct {
+	InjectEnabled    bool
+	Proxmark3Enabled bool
+	HostedAPIURL     string
 }
 
 type DatabaseConfig struct {
@@ -54,6 +63,7 @@ func Load() (*Config, error) {
 	return &Config{
 		Environment: getEnv("GO_ENV", "development"),
 		Port:        getEnv("PORT", "8080"),
+		DataDir:     getEnv("DATA_DIR", "data"),
 		Database: DatabaseConfig{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnv("DB_PORT", "5432"),
@@ -76,14 +86,32 @@ func Load() (*Config, error) {
 			RefreshTokenTTL: getEnvAsDuration("JWT_REFRESH_TOKEN_TTL", time.Hour*24*7),
 		},
 		Auth: AuthConfig{
-			Users: getEnv("AUTH_USERS", "admin:admin:admin,timer:timer:timer,viewer:viewer:viewer"),
+			Users:        getEnv("AUTH_USERS", "admin:admin:admin,timer:timer:timer,viewer:viewer:viewer"),
+			OrganizerPIN: getEnv("ORGANIZER_PIN", "1738"),
 		},
 		Security: SecurityConfig{
 			RateLimitRequests: getEnvAsInt("RATE_LIMIT_REQUESTS", 100),
 			RateLimitWindow:   getEnvAsDuration("RATE_LIMIT_WINDOW", time.Minute),
 			CORSOrigins:       getEnvAsSlice("CORS_ORIGINS", []string{"http://localhost:3000"}, ","),
 		},
+		RFID: RFIDConfig{
+			InjectEnabled:    getEnvAsBool("RFID_INJECT", false) || getEnv("GO_ENV", "development") == "test",
+			Proxmark3Enabled: getEnvAsBool("PROXMARK3_ENABLED", false),
+			HostedAPIURL:     getEnv("HOSTED_API_URL", ""),
+		},
 	}, nil
+}
+
+func getEnvAsBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		switch value {
+		case "1", "true", "TRUE", "True", "yes", "YES", "on", "ON":
+			return true
+		case "0", "false", "FALSE", "False", "no", "NO", "off", "OFF":
+			return false
+		}
+	}
+	return defaultValue
 }
 
 func getEnv(key, defaultValue string) string {

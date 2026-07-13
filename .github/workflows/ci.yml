@@ -15,5 +15,79 @@ jobs:
       - name: Run backend tests
         run: docker compose -f docker-compose.test.yml run --rm backend-test
 
+      # FR-029 / T013a / T085: 100% coverage fail-under for new RFID scan packages.
+      - name: Backend scan package coverage fail-under 100%
+        run: |
+          chmod +x scripts/coverage-fail-under.sh
+          docker compose -f docker-compose.test.yml run --rm --user root \
+            -v "$(pwd)/scripts:/scripts:ro" \
+            -e COVERAGE_FAIL_UNDER=100.0 \
+            backend-test \
+            sh /scripts/coverage-fail-under.sh
+
       - name: Run frontend tests
         run: docker compose -f docker-compose.test.yml run --rm frontend-test
+
+  # Playwright e2e for 002-rfid-race-scanner (US1–US8).
+  # Stack uses mock RFID inject (RFID_INJECT=true in docker-compose.yml) + Bluffet seed.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start app stack (mock RFID)
+        run: docker compose up --build -d
+
+      - name: Wait for backend
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/health >/dev/null 2>&1; then
+              echo "backend up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "backend did not become ready in time"
+          docker compose ps
+          docker compose logs --tail=80
+          exit 1
+
+      - name: Load Bluffet demo seed
+        run: |
+          python3 database/seed/generate_bluffet_seed.py
+          docker compose exec -T postgres psql -U timing_user -d keweenaw_timing \
+            < database/seed/03-bluffet-2026.sql
+
+      - name: Verify mock RFID inject
+        run: |
+          # RFID_INJECT=true in docker-compose.yml — inject must succeed for e2e.
+          code=$(curl -s -o /tmp/inject.json -w "%{http_code}" -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"tag_uid":"DEMO-TAG-0001"}' \
+            http://localhost:8080/api/rfid/inject)
+          echo "inject HTTP $code"
+          cat /tmp/inject.json
+          test "$code" = "200"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend + Playwright
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run Playwright e2e
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://localhost:3000
+          E2E_API_URL: http://localhost:8080
+        run: npm run test:e2e
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down -v

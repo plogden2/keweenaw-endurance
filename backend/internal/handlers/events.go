@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/services"
 	"github.com/keweenaw-endurance/backend/internal/uuidutil"
@@ -140,6 +141,32 @@ func (h *Handlers) DeleteEvent(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "event deleted"})
 }
 
+// GetEventLive is public GET /api/events/:id/live.
+func (h *Handlers) GetEventLive(c *gin.Context) {
+	id, err := h.resolveEventID(c.Param("id"))
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+
+	var categoryID *uuid.UUID
+	if cat := c.Query("category_id"); cat != "" {
+		resolved, err := h.resolveCategoryID(cat)
+		if err != nil {
+			respondServiceError(c, err)
+			return
+		}
+		categoryID = &resolved
+	}
+
+	view, err := h.services.Results.GetEventLive(id, categoryID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, view)
+}
+
 func respondServiceError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrEventNotFound),
@@ -148,15 +175,21 @@ func respondServiceError(c *gin.Context, err error) {
 		errors.Is(err, services.ErrCheckpointNotFound),
 		errors.Is(err, services.ErrCategoryNotFound),
 		errors.Is(err, services.ErrTimingRecordNotFound),
-		errors.Is(err, services.ErrRFIDTagNotFound):
+		errors.Is(err, services.ErrRFIDTagNotFound),
+		errors.Is(err, services.ErrStationNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case errors.Is(err, services.ErrInvalidEventInput),
+	case errors.Is(err, services.ErrLiveCSVNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+	case errors.Is(err, services.ErrInvalidCSV),
+		errors.Is(err, services.ErrInvalidEventInput),
 		errors.Is(err, services.ErrInvalidRaceInput),
+		errors.Is(err, services.ErrInvalidRaceTransition),
 		errors.Is(err, services.ErrInvalidParticipantInput),
 		errors.Is(err, services.ErrInvalidCheckpointInput),
 		errors.Is(err, services.ErrInvalidCategoryInput),
 		errors.Is(err, services.ErrInvalidTimingInput),
 		errors.Is(err, services.ErrInvalidRFIDInput),
+		errors.Is(err, services.ErrInvalidStationInput),
 		errors.Is(err, uuidutil.ErrInvalidID),
 		errors.Is(err, uuidutil.ErrAmbiguousID):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

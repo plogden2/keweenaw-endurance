@@ -1,10 +1,12 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { ManualTimingEntryPayload } from '@/types/models'
-import { rfidApi } from './api'
-import { deleteDatabase } from './timingStorage'
+import { rfidApi, scansApi, timingRecordsApi } from './api'
+import { deleteDatabase, getAllPendingScans, getDisplayCache, setDisplayCache } from './timingStorage'
 import {
   enqueue,
+  enqueueKaraoke,
+  enqueueScan,
   getLocalPendingCount,
   initOfflineQueue,
   isOnline,
@@ -14,6 +16,12 @@ import {
 vi.mock('./api', () => ({
   rfidApi: {
     manualEntry: vi.fn(),
+  },
+  scansApi: {
+    postScan: vi.fn(),
+  },
+  timingRecordsApi: {
+    karaokeBonus: vi.fn(),
   },
 }))
 
@@ -109,5 +117,84 @@ describe('offlineQueue', () => {
     await vi.waitFor(async () => {
       expect(await getLocalPendingCount()).toBe(0)
     })
+  })
+
+  it('enqueues RFID scans when API unreachable and replays on sync', async () => {
+    ;(scansApi.postScan as Mock).mockRejectedValue(new Error('unreachable'))
+
+    const result = await enqueueScan('evt-1', {
+      tag_uid: 'DEMO-TAG-0001',
+      device_id: 'laptop-finish-1',
+      local_timestamp: '2026-08-01T12:00:00.000Z',
+    })
+
+    expect(result.status).toBe('queued')
+    expect(await getAllPendingScans()).toHaveLength(1)
+
+    ;(scansApi.postScan as Mock).mockResolvedValue({
+      data: { result: 'lap', participant_name: 'Alex', lap_count: 1 },
+    })
+    const sync = await syncAll()
+    expect(sync.synced).toBeGreaterThanOrEqual(1)
+    expect(await getAllPendingScans()).toHaveLength(0)
+  })
+
+  it('posts scans immediately when online and API succeeds', async () => {
+    ;(scansApi.postScan as Mock).mockResolvedValue({
+      data: { result: 'lap', participant_name: 'Alex', lap_count: 2 },
+    })
+
+    const result = await enqueueScan('evt-1', {
+      tag_uid: 'DEMO-TAG-0001',
+      device_id: 'd1',
+      local_timestamp: '2026-08-01T12:00:00.000Z',
+    })
+
+    expect(result.status).toBe('synced')
+    expect(result.scan).toMatchObject({ result: 'lap', lap_count: 2 })
+    expect(await getAllPendingScans()).toHaveLength(0)
+  })
+
+  it('enqueues karaoke bonuses when API unreachable and replays on sync', async () => {
+    ;(timingRecordsApi.karaokeBonus as Mock).mockRejectedValue(new Error('down'))
+
+    const queued = await enqueueKaraoke('lap-99')
+    expect(queued).toBe('queued')
+
+    ;(timingRecordsApi.karaokeBonus as Mock).mockResolvedValue({ data: { id: 'bonus-1' } })
+    const sync = await syncAll()
+    expect(sync.synced).toBeGreaterThanOrEqual(1)
+    expect(timingRecordsApi.karaokeBonus).toHaveBeenCalledWith('lap-99')
+  })
+
+  it('builds provisional lap feedback from display cache when scan is queued', async () => {
+    await setDisplayCache({
+      event_id: 'evt-1',
+      event_name: 'Bluffet',
+      races: [{ id: 'r1', name: '12 Hour' }],
+      tags: {
+        'DEMO-TAG-0001': {
+          participant_name: 'Alex Rivera',
+          bib_number: '12',
+          race_name: '12 Hour',
+        },
+      },
+    })
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+
+    const result = await enqueueScan('evt-1', {
+      tag_uid: 'DEMO-TAG-0001',
+      device_id: 'd1',
+      local_timestamp: '2026-08-01T12:00:00.000Z',
+    })
+
+    expect(result.status).toBe('queued')
+    expect(result.scan).toMatchObject({
+      result: 'lap',
+      participant_name: 'Alex Rivera',
+      bib_number: '12',
+      race_name: '12 Hour',
+    })
+    expect(await getDisplayCache()).not.toBeNull()
   })
 })

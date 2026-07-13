@@ -10,14 +10,17 @@
       </div>
     </section>
 
-    <section class="featured-event" aria-labelledby="featured-event">
+    <section class="featured-event bluffet-theme" aria-labelledby="featured-event">
       <h2 id="featured-event">Featured Event</h2>
       <div class="featured-content">
-        <img
-          src="/images/bluffet-2026-logo.png"
-          alt="All You Can East Bluffet"
-          class="featured-logo"
-        />
+        <picture data-testid="bluffet-poster" class="bluffet-poster">
+          <source type="image/avif" :srcset="posterAvif" />
+          <img
+            :src="posterPng"
+            alt="All You Can East Bluffet"
+            class="featured-logo"
+          />
+        </picture>
         <p class="featured-date">Saturday, August 1, 2026 · East Bluff Bike Park, Copper Harbor, MI</p>
         <div class="featured-actions">
           <router-link
@@ -64,9 +67,15 @@
 import { computed, onMounted } from 'vue'
 import RaceCard from '@/components/RaceCard.vue'
 import { useEventsStore } from '@/stores/events'
+import {
+  BLUFFET_EVENT_NAME,
+  BLUFFET_POSTER_AVIF,
+  BLUFFET_POSTER_PNG,
+} from '@/themes/bluffetConstants'
 
-const BLUFFET_EVENT_NAME = 'All You Can East Bluffet'
 const eventsStore = useEventsStore()
+const posterAvif = BLUFFET_POSTER_AVIF
+const posterPng = BLUFFET_POSTER_PNG
 
 const bluffetEventId = computed(() => {
   const event =
@@ -151,7 +160,6 @@ const teaserRaces: TeaserRace[] = [
 }
 
 .featured-event {
-  background: #f8f9fa;
   padding: 3rem;
   border-radius: 12px;
   margin-bottom: 3rem;

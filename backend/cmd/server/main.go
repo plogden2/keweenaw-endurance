@@ -64,6 +64,8 @@ func main() {
 	api := router.Group("/api")
 	{
 		api.POST("/auth/login", handlers.Login)
+		// Public PIN → admin JWT; existing adminOnly/timerWrite middleware then applies.
+		api.POST("/auth/pin", handlers.ExchangePIN)
 
 		// Event routes
 		events := api.Group("/events")
@@ -73,6 +75,18 @@ func main() {
 			events.GET("/:id", handlers.GetEvent)
 			events.PUT("/:id", append(adminOnly, handlers.UpdateEvent)...)
 			events.DELETE("/:id", append(adminOnly, handlers.DeleteEvent)...)
+			events.GET("/:id/live", handlers.GetEventLive)
+			events.POST("/:id/scans", handlers.ProcessEventScan)
+			events.GET("/:id/live-csv", append(adminOnly, handlers.GetLiveCSV)...)
+			events.GET("/:id/live-csv/status", append(adminOnly, handlers.GetLiveCSVStatus)...)
+			events.POST("/:id/import.csv", append(adminOnly, handlers.ImportCSV)...)
+		}
+
+		// Station routes (current reader laptop config)
+		stations := api.Group("/stations")
+		{
+			stations.GET("/current", handlers.GetCurrentStation)
+			stations.PUT("/current", append(adminOnly, handlers.PutCurrentStation)...)
 		}
 
 		// Race routes
@@ -84,6 +98,12 @@ func main() {
 			races.POST("/:id/checkpoints", append(adminOnly, handlers.CreateCheckpoint)...)
 			races.GET("/:id/categories", handlers.GetCategoriesByRace)
 			races.POST("/:id/categories", append(adminOnly, handlers.CreateCategory)...)
+			races.GET("/:id/participants", handlers.GetRaceParticipants)
+			races.POST("/:id/participants", append(adminOnly, handlers.CreateRaceParticipant)...)
+			races.GET("/:id/participants/:participantId/tags", handlers.GetParticipantTags)
+			races.POST("/:id/participants/:participantId/tags", append(adminOnly, handlers.PostParticipantTag)...)
+			races.POST("/:id/start", append(adminOnly, handlers.StartRace)...)
+			races.POST("/:id/finish", append(adminOnly, handlers.FinishRace)...)
 			races.GET("/:id", handlers.GetRace)
 			races.PUT("/:id", append(adminOnly, handlers.UpdateRace)...)
 			races.DELETE("/:id", append(adminOnly, handlers.DeleteRace)...)
@@ -125,16 +145,56 @@ func main() {
 			timing.GET("/leaderboard/:raceId", handlers.GetLeaderboard)
 		}
 
-		// RFID routes
+		// Karaoke bonus (open like scans — no re-PIN on armed station)
+		api.POST("/timing-records/:id/karaoke-bonus", handlers.CreateKaraokeBonus)
+
+		// RFID routes (scan public; write-tag admin; inject gated by config)
 		rfid := api.Group("/rfid")
 		{
 			rfid.POST("/write-tag", append(adminOnly, handlers.WriteRFIDTag)...)
 			rfid.GET("/scan/:uid", handlers.ScanRFIDTag)
+			rfid.GET("/stream", handlers.StreamRFIDTags)
+			rfid.POST("/inject", handlers.InjectRFIDTag)
 			rfid.POST("/manual-entry", append(timerWrite, handlers.ManualTimingEntry)...)
 			rfid.GET("/sync-status", handlers.GetSyncStatus)
 			rfid.POST("/sync-pending", append(timerWrite, handlers.SyncPendingRecords)...)
 		}
+
+		syncGroup := api.Group("/sync")
+		{
+			syncGroup.POST("/push", handlers.PushSync)
+			syncGroup.POST("/pull", handlers.PullSync)
+			syncGroup.POST("/ingest", handlers.IngestSync)
+			syncGroup.GET("/export", handlers.ExportSync)
+		}
 	}
+
+	// Background ticker: auto-start scheduled races when start_time is reached
+	autoStartCtx, autoStartCancel := context.WithCancel(context.Background())
+	defer autoStartCancel()
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-autoStartCtx.Done():
+				return
+			case now := <-ticker.C:
+				if n, err := svc.Races.AutoStartDueRaces(now); err != nil {
+					log.Printf("auto-start races: %v", err)
+				} else if n > 0 {
+					log.Printf("auto-started %d race(s)", n)
+				}
+			}
+		}
+	}()
+
+	// Continuous Proxmark3 / mock reader poll → WebSocket fan-out
+	pollCtx, pollCancel := context.WithCancel(context.Background())
+	defer pollCancel()
+	svc.RFID.StartPolling(pollCtx, 200*time.Millisecond, func() string {
+		return svc.Stations.CurrentDeviceID()
+	})
 
 	// Start server
 	srv := &http.Server{
@@ -157,6 +217,8 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
+	autoStartCancel()
+	pollCancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

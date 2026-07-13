@@ -44,3 +44,6 @@ frontend/coverage/
 spec-kit/
 .specify/extensions/.cache/
 .specify/extensions/.backup/
+
+# Superpowers brainstorm sessions
+.superpowers/

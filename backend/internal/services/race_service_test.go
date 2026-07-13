@@ -91,3 +91,113 @@ func TestRaceService_DeleteNotFound(t *testing.T) {
 	err := svc.DeleteRace(uuid.New())
 	assert.ErrorIs(t, err, ErrRaceNotFound)
 }
+
+func TestRaceService_DeleteCancelsAndHidesFromList(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	svc := NewRaceService(db)
+
+	race, err := svc.CreateRace(&models.Race{
+		EventID:         event.ID,
+		Name:            "To Cancel",
+		RaceType:        "lap_based",
+		DurationMinutes: 60,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, svc.DeleteRace(race.ID.UUID()))
+
+	fetched, err := svc.GetRace(race.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, "cancelled", fetched.Status)
+
+	eventID := event.ID.UUID()
+	races, total, err := svc.ListRaces(1, 10, &eventID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), total)
+	assert.Empty(t, races)
+
+	err = svc.DeleteRace(race.ID.UUID())
+	assert.ErrorIs(t, err, ErrRaceNotFound)
+}
+
+func TestRaceService_AutoStartDueRaces(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	svc := NewRaceService(db)
+
+	pastStart := time.Now().Add(-2 * time.Minute)
+	futureStart := time.Now().Add(2 * time.Hour)
+
+	due, err := svc.CreateRace(&models.Race{
+		EventID:         event.ID,
+		Name:            "Due Race",
+		RaceType:        "lap_based",
+		DurationMinutes: 60,
+		StartTime:       pastStart,
+		Status:          "scheduled",
+	})
+	require.NoError(t, err)
+
+	notDue, err := svc.CreateRace(&models.Race{
+		EventID:         event.ID,
+		Name:            "Future Race",
+		RaceType:        "lap_based",
+		DurationMinutes: 60,
+		StartTime:       futureStart,
+		Status:          "scheduled",
+	})
+	require.NoError(t, err)
+
+	n, err := svc.AutoStartDueRaces(time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+
+	started, err := svc.GetRace(due.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, "active", started.Status)
+
+	stillScheduled, err := svc.GetRace(notDue.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, "scheduled", stillScheduled.Status)
+
+	n, err = svc.AutoStartDueRaces(time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+}
+
+func TestRaceService_StartAndFinishRace(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	svc := NewRaceService(db)
+
+	race, err := svc.CreateRace(&models.Race{
+		EventID:         event.ID,
+		Name:            "Manual Start Race",
+		RaceType:        "lap_based",
+		DurationMinutes: 90,
+		StartTime:       time.Now().Add(time.Hour),
+		Status:          "scheduled",
+	})
+	require.NoError(t, err)
+
+	started, err := svc.StartRace(race.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, "active", started.Status)
+
+	_, err = svc.StartRace(race.ID.UUID())
+	assert.ErrorIs(t, err, ErrInvalidRaceTransition)
+
+	finished, err := svc.FinishRace(race.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, "finished", finished.Status)
+
+	_, err = svc.FinishRace(race.ID.UUID())
+	assert.ErrorIs(t, err, ErrInvalidRaceTransition)
+
+	_, err = svc.StartRace(uuid.New())
+	assert.ErrorIs(t, err, ErrRaceNotFound)
+
+	_, err = svc.FinishRace(uuid.New())
+	assert.ErrorIs(t, err, ErrRaceNotFound)
+}

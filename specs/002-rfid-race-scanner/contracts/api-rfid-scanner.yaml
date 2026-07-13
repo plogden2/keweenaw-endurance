@@ -1,0 +1,165 @@
+# API Contract: RFID Race Scanner
+
+**Base**: `/api` (existing Gin API)  
+**Auth**: Public GETs for live views; management mutations require PIN-exchanged JWT (`Authorization: Bearer …`). Station scan ingest may use station-scoped or timer token after station is armed.
+
+## Auth
+
+### POST `/api/auth/pin`
+Unlock management with organizer PIN.
+
+Request:
+```json
+{ "pin": "1738" }
+```
+
+Response `200`:
+```json
+{ "token": "<jwt>", "role": "admin", "expires_at": 1710000000 }
+```
+
+Errors: `401` invalid pin.
+
+## Station configuration
+
+### PUT `/api/stations/current`
+Configure this laptop as a reader for an event.
+
+Request:
+```json
+{
+  "event_id": "<uuid>",
+  "mode": "finish",
+  "checkpoint_id": null,
+  "device_id": "laptop-finish-1",
+  "name": "Finish Mat A"
+}
+```
+
+`mode`: `finish` | `checkpoint`. Default `finish`.
+
+Response `200`: station object.
+
+### GET `/api/stations/current`
+Return local station config + online/sync pending counts.
+
+## RFID hardware / scan stream
+
+### GET `/api/rfid/stream` (WebSocket)
+Server pushes tag reads from Proxmark3 (or mock inject).
+
+Server → client message:
+```json
+{ "type": "tag_read", "tag_uid": "DEMO-TAG-0001", "read_at": "2026-08-01T12:00:01-04:00", "device_id": "laptop-finish-1" }
+```
+
+### POST `/api/rfid/write-tag`
+Program tag with participant UUID (PIN required).
+
+Request:
+```json
+{ "participant_id": "<uuid>", "tag_uid": "<uid>" }
+```
+
+Creates/updates `rfid_tag_associations`. Multiple calls allowed (no revoke).
+
+### POST `/api/rfid/inject` (test-only)
+When `GO_ENV=test` or `RFID_INJECT=true`, inject a UID into the stream for e2e.
+
+```json
+{ "tag_uid": "DEMO-TAG-0001" }
+```
+
+## Lap timing
+
+### POST `/api/events/{eventId}/scans`
+Process a tag tap in event context (also invoked internally from stream handler).
+
+Request:
+```json
+{
+  "tag_uid": "DEMO-TAG-0001",
+  "device_id": "laptop-finish-1",
+  "local_timestamp": "2026-08-01T12:00:01-04:00"
+}
+```
+
+Response `200` scored lap:
+```json
+{
+  "result": "lap",
+  "participant": { "id": "...", "first_name": "...", "last_name": "...", "bib_number": "12" },
+  "race_id": "...",
+  "lap_count": 5,
+  "placement": 3,
+  "timing_record_id": "...",
+  "karaoke_available": true
+}
+```
+
+Response `200` test read:
+```json
+{ "result": "test_read", "participant": { "...": "..." }, "race_status": "scheduled" }
+```
+
+Response `200` cooldown:
+```json
+{ "result": "cooldown", "retry_after_seconds": 42, "participant": { "...": "..." } }
+```
+
+Response `404` unknown tag: `{ "result": "unknown_tag" }`
+
+### POST `/api/timing-records/{id}/karaoke-bonus`
+One-click karaoke bonus for a scored RFID lap (no re-PIN required on armed station).
+
+Response `201` bonus record; `409` if bonus already exists for that lap.
+
+## Live / leaderboard
+
+### GET `/api/events/{eventId}/live`
+Public. Races, countdowns for scheduled races, leaderboards by category including karaoke bonuses.
+
+```json
+{
+  "event": { "id": "...", "name": "All You Can East Bluffet" },
+  "races": [
+    {
+      "id": "...",
+      "name": "12 Hour",
+      "status": "scheduled",
+      "start_time": "2026-08-01T08:00:00-04:00",
+      "countdown_seconds": 3600,
+      "leaderboard": []
+    }
+  ]
+}
+```
+
+## Participants (Racers)
+
+Existing CRUD under `/api/races/{raceId}/participants` extended:
+- Search query `?q=`
+- Default sequential bib on create
+- List includes associated tag_uids
+
+### GET `/api/races/{raceId}/participants/{id}/tags`
+### POST `/api/races/{raceId}/participants/{id}/tags` `{ "tag_uid": "..." }`
+
+## Sync
+
+### GET `/api/rfid/sync-status`
+Pending/failed/synced counts (existing, extend for multi-entity).
+
+### POST `/api/sync/push`
+Push local pending timing + mutations to hosted (station online).
+
+### POST `/api/sync/pull`
+Pull hosted event snapshot into local DB.
+
+## CSV disaster recovery
+
+### GET `/api/events/{eventId}/export.csv`
+PIN required. See [csv-race-export.md](./csv-race-export.md).
+
+### POST `/api/events/{eventId}/import.csv`
+PIN required. Multipart file; establishes authoritative local restored state for that event on this station (replace semantics for that event’s races/participants/tags/laps).

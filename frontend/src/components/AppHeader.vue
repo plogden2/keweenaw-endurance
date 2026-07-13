@@ -2,6 +2,15 @@
   <header class="header">
     <nav class="nav">
       <router-link to="/" class="logo">
+        <img
+          v-if="bluffetActive"
+          :src="logoPath"
+          alt=""
+          class="bluffet-nav-mark"
+          width="28"
+          height="28"
+          data-testid="bluffet-nav-mark"
+        />
         <h1>Inferior Timing</h1>
       </router-link>
       <div class="nav-links">
@@ -11,6 +20,12 @@
     </nav>
   </header>
 </template>
+
+<script setup lang="ts">
+import { useBluffetTheme } from '@/composables/useBluffetTheme'
+
+const { active: bluffetActive, logoPath } = useBluffetTheme()
+</script>
 
 <style scoped>
 .header {
@@ -31,11 +46,20 @@
 .logo {
   text-decoration: none;
   color: white;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .logo h1 {
   margin: 0;
   font-size: 1.5rem;
+}
+
+.bluffet-nav-mark {
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .nav-links {

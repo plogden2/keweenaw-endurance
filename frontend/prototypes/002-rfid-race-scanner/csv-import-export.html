@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prototype — CSV Recovery</title>
+  <link rel="stylesheet" href="prototype.css" />
+</head>
+<body>
+  <nav class="topnav" aria-label="Prototype navigation">
+    <strong>RFID Scanner Prototypes</strong>
+    <a href="racers.html">Racers</a>
+    <a href="event-live.html">Event Live</a>
+    <a href="scan-popup.html">Scan Popup</a>
+    <a href="pin-unlock.html">PIN Unlock</a>
+    <a href="station-config.html">Station Config</a>
+    <a href="csv-import-export.html" aria-current="page">CSV Recovery</a>
+  </nav>
+
+  <div class="wrap">
+    <p class="meta-bar">
+      <span class="badge online">Management unlocked</span>
+      <span class="badge ok" style="background:#d5f5e3;color:#1e8449;">Live CSV current</span>
+      <span class="muted">Disaster recovery — PIN required for import</span>
+    </p>
+
+    <h1>Live CSV &amp; recovery</h1>
+    <p class="lead">
+      A <strong>current CSV snapshot is maintained automatically</strong> on this station whenever race data changes
+      (laps, racers, tags, etc.). No manual export step is required to stay recoverable if the network drops
+      or this laptop fails — copy the live file to a replacement machine and import.
+    </p>
+
+    <div class="grid-2">
+      <section class="panel">
+        <h2>Live CSV (always up to date)</h2>
+        <p><strong>Path:</strong> <code>…/data/events/bluffet-2026/live-snapshot.csv</code></p>
+        <table>
+          <tbody>
+            <tr><th>Last written</th><td>2026-08-01 11:04:02 (just now)</td></tr>
+            <tr><th>Trigger</th><td>Auto after each lap / racer / tag change</td></tr>
+            <tr><th>Size</th><td>~2.1 MB</td></tr>
+            <tr><th>Network needed?</th><td>No — local file</td></tr>
+          </tbody>
+        </table>
+        <p class="muted" style="margin-top: 0.75rem;">
+          Optional: copy/download the live file for USB stick or cloud folder backup.
+          This is a convenience copy of the already-maintained snapshot — not a separate “export job.”
+        </p>
+        <div class="row">
+          <button type="button" class="btn secondary">Open folder</button>
+          <button type="button" class="btn secondary">Copy live CSV</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Import on replacement laptop</h2>
+        <label>CSV file (use the live snapshot from the failed/healthy station)
+          <input type="file" accept=".csv,text/csv" />
+        </label>
+        <label style="flex-direction: row; align-items: flex-start; gap: 0.5rem;">
+          <input type="checkbox" name="confirm" />
+          <span>I understand this replaces local data for the event in this file on <strong>this laptop only</strong>.</span>
+        </label>
+        <div class="row">
+          <button type="button" class="btn danger">Import &amp; restore</button>
+        </div>
+        <p class="muted">After import: arm station → continue scanning with prior lap counts. New live CSV writing resumes automatically.</p>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h2>Last import summary <span class="muted">(sample)</span></h2>
+      <table>
+        <tbody>
+          <tr><th>Event</th><td>All You Can East Bluffet</td></tr>
+          <tr><th>Races</th><td>3</td></tr>
+          <tr><th>Racers</th><td>100</td></tr>
+          <tr><th>Tag associations</th><td>112</td></tr>
+          <tr><th>Timing records</th><td>1,847</td></tr>
+          <tr><th>Imported at</th><td>2026-08-01 10:14:02</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="notes">
+      <h2>Approved</h2>
+      <p>
+        <strong>Option A — side-by-side layout</strong>, with the critical change:
+        maintain a <strong>live current CSV at all times</strong> (no export step required for continuity when offline or on laptop failure).
+      </p>
+    </section>
+  </div>
+</body>
+</html>
