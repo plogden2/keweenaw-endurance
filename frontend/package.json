@@ -11,10 +11,13 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:ci": "vue-tsc --noEmit && vitest run --coverage",
+    "test:e2e": "playwright test --config=e2e/playwright.config.ts",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
     "format": "prettier --write src/"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@fontsource/yuji-mai": "^5.2.7",
     "axios": "^1.6.2",
     "chart.js": "^4.5.1",
     "html2canvas": "^1.4.1",
@@ -23,6 +26,7 @@
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^20.11.0",
     "@vitejs/plugin-vue": "^4.5.2",
     "@vitest/coverage-v8": "^1.1.0",

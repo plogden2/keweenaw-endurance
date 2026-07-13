@@ -31,6 +31,7 @@ export interface Race {
 export interface Participant {
   id: string
   race_id: string
+  category_id?: string
   bib_number: string
   first_name: string
   last_name: string
@@ -38,7 +39,28 @@ export interface Participant {
   age?: number
   location?: string
   rfid_tag_uid?: string
+  tag_uids?: string[]
   status: ParticipantStatus
+  created_at?: string
+  category?: Category
+}
+
+export interface Category {
+  id: string
+  race_id: string
+  name: string
+  category_type: string
+  age_min?: number
+  age_max?: number
+  gender_filter?: string
+  display_order?: number
+}
+
+export interface RfidTagAssociation {
+  id: string
+  participant_id: string
+  tag_uid: string
+  active: boolean
   created_at?: string
 }
 
@@ -79,12 +101,22 @@ export type CreateRacePayload = Pick<
 
 export type UpdateRacePayload = Partial<Omit<CreateRacePayload, 'event_id'>>
 
-export type CreateParticipantPayload = Pick<
-  Participant,
-  'race_id' | 'bib_number' | 'first_name' | 'last_name' | 'gender' | 'age' | 'location' | 'rfid_tag_uid' | 'status'
->
+export type CreateParticipantPayload = {
+  race_id?: string
+  bib_number?: string
+  first_name: string
+  last_name: string
+  gender?: string
+  age?: number
+  location?: string
+  rfid_tag_uid?: string
+  status?: ParticipantStatus
+  category_id?: string
+}
 
-export type UpdateParticipantPayload = Partial<Omit<CreateParticipantPayload, 'race_id'>>
+export type UpdateParticipantPayload = Partial<
+  Omit<CreateParticipantPayload, 'race_id'>
+>
 
 export type CheckpointType = 'start' | 'finish' | 'intermediate'
 export type SyncStatus = 'synced' | 'pending_sync' | 'failed_sync'

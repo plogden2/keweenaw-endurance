@@ -4,6 +4,7 @@ import (
 	"github.com/keweenaw-endurance/backend/internal/cache"
 	"github.com/keweenaw-endurance/backend/internal/config"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
+	"github.com/keweenaw-endurance/backend/internal/services/scan"
 	"gorm.io/gorm"
 )
 
@@ -19,6 +20,10 @@ type Services struct {
 	Timing       *TimingService
 	Results      *ResultsService
 	RFID         *RFIDService
+	Scan         *scan.ScanService
+	Stations     *StationService
+	Sync         *SyncService
+	CSV          *CSVExportService
 }
 
 func NewServices(db *gorm.DB, cfg *config.Config) *Services {
@@ -26,6 +31,15 @@ func NewServices(db *gorm.DB, cfg *config.Config) *Services {
 }
 
 func NewServicesWithReader(db *gorm.DB, cfg *config.Config, reader rfid.Reader) *Services {
+	syncSvc := NewSyncService(db, cfg)
+	dataDir := "data"
+	if cfg != nil && cfg.DataDir != "" {
+		dataDir = cfg.DataDir
+	}
+	csvSvc := NewCSVExportService(db, dataDir)
+	scanSvc := scan.NewScanService(db, syncSvc)
+	scanSvc.SetOnEventChange(csvSvc.RefreshEvent)
+
 	return &Services{
 		DB:           db,
 		Config:       cfg,
@@ -38,5 +52,9 @@ func NewServicesWithReader(db *gorm.DB, cfg *config.Config, reader rfid.Reader) 
 		Timing:       NewTimingService(db),
 		Results:      NewResultsService(db, cache.NewLeaderboardCache(cfg.Redis)),
 		RFID:         NewRFIDService(db, reader),
+		Scan:         scanSvc,
+		Stations:     NewStationService(db),
+		Sync:         syncSvc,
+		CSV:          csvSvc,
 	}
 }

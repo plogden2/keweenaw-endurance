@@ -119,10 +119,59 @@ func TestParticipantService_ListByRace(t *testing.T) {
 	}
 
 	raceID := race.ID.UUID()
-	participants, total, err := svc.ListParticipants(1, 10, &raceID)
+	participants, total, err := svc.ListParticipants(1, 10, &raceID, "")
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), total)
 	assert.Len(t, participants, 3)
+}
+
+func TestParticipantService_SequentialBibDefault(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	svc := NewParticipantService(db)
+
+	p1, err := svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, FirstName: "Auto", LastName: "One",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "1", p1.BibNumber)
+
+	_, err = svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "10", FirstName: "Ten", LastName: "Runner",
+	})
+	require.NoError(t, err)
+
+	p3, err := svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, FirstName: "Auto", LastName: "Eleven",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "11", p3.BibNumber)
+}
+
+func TestParticipantService_SearchByQuery(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	svc := NewParticipantService(db)
+
+	_, err := svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "12", FirstName: "Alex", LastName: "Rivera",
+	})
+	require.NoError(t, err)
+	_, err = svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "18", FirstName: "Jordan", LastName: "Lee",
+	})
+	require.NoError(t, err)
+
+	raceID := race.ID.UUID()
+	found, total, err := svc.ListParticipants(1, 50, &raceID, "rivera")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	assert.Equal(t, "Alex", found[0].FirstName)
+
+	found, total, err = svc.ListParticipants(1, 50, &raceID, "18")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), total)
+	assert.Equal(t, "Jordan", found[0].FirstName)
 }
 
 func TestParticipantService_DeleteNotFound(t *testing.T) {

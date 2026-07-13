@@ -63,6 +63,8 @@ func Migrate(db *gorm.DB) error {
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
 		&models.Category{},
+		&models.RFIDTagAssociation{},
+		&models.ReaderStation{},
 	)
 }
 

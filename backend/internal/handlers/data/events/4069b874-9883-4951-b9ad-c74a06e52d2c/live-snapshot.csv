@@ -1,0 +1,16 @@
+#SECTION,event
+id,name,event_date,location,status
+4069b874-9883-4951-b9ad-c74a06e52d2c,Parent Event,2026-08-12,,upcoming
+#SECTION,races
+id,event_id,name,race_type,duration_minutes,start_time,status
+a995f707-58dd-433d-913e-a91d2c3ea495,4069b874-9883-4951-b9ad-c74a06e52d2c,Marathon,time_based,0,,scheduled
+#SECTION,categories
+id,race_id,name,category_type,gender_filter,display_order
+#SECTION,participants
+id,race_id,bib_number,first_name,last_name,gender,status,category_id
+#SECTION,tags
+id,participant_id,tag_uid,created_at
+#SECTION,checkpoints
+id,race_id,name,checkpoint_type,distance_from_start_km,is_active
+#SECTION,timing_records
+id,participant_id,checkpoint_id,timestamp,local_timestamp,device_id,sync_status,record_type,source_lap_id,station_id

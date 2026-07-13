@@ -20,6 +20,12 @@ docker compose up
 - Backend API: http://localhost:8080
 - Health check: http://localhost:8080/health
 
+### RFID race scanner
+
+For the Proxmark3 / finish-line scanner feature (demo seed, inject taps, live CSV, e2e), see:
+
+**[specs/002-rfid-race-scanner/quickstart.md](specs/002-rfid-race-scanner/quickstart.md)**
+
 ### Run backend tests
 
 ```bash
@@ -69,4 +75,6 @@ Base URL: `http://localhost:8080/api`
 
 ## Spec Kit
 
-Feature specs and tasks live under `specs/001-race-timing/`. See `.specify/feature.json` for the active feature directory.
+Feature specs and tasks live under `specs/` (active: `specs/002-rfid-race-scanner/`). See `.specify/feature.json` for the active feature directory.
+
+RFID scanner day-of ops: [quickstart.md](specs/002-rfid-race-scanner/quickstart.md).

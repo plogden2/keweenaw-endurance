@@ -17,7 +17,8 @@ func testAuthConfig() *config.Config {
 			RefreshTokenTTL: time.Hour * 24 * 7,
 		},
 		Auth: config.AuthConfig{
-			Users: "admin:admin123:admin,timer:timer123:timer,viewer:viewer123:viewer",
+			Users:        "admin:admin123:admin,timer:timer123:timer,viewer:viewer123:viewer",
+			OrganizerPIN: "1738",
 		},
 	}
 }
@@ -30,6 +31,28 @@ func TestAuthService_LoginSuccess(t *testing.T) {
 	assert.NotEmpty(t, resp.Token)
 	assert.Equal(t, RoleAdmin, resp.Role)
 	assert.True(t, resp.ExpiresAt > time.Now().Unix())
+}
+
+func TestAuthService_ExchangePINSuccess(t *testing.T) {
+	svc := NewAuthService(testAuthConfig())
+
+	resp, err := svc.ExchangePIN("1738")
+	require.NoError(t, err)
+	assert.NotEmpty(t, resp.Token)
+	assert.Equal(t, RoleAdmin, resp.Role)
+	assert.True(t, resp.ExpiresAt > time.Now().Unix())
+
+	claims, err := svc.ValidateToken(resp.Token)
+	require.NoError(t, err)
+	assert.Equal(t, RoleAdmin, claims.Role)
+	assert.Equal(t, "organizer", claims.Username)
+}
+
+func TestAuthService_ExchangePINInvalid(t *testing.T) {
+	svc := NewAuthService(testAuthConfig())
+
+	_, err := svc.ExchangePIN("0000")
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
 }
 
 func TestAuthService_LoginInvalidCredentials(t *testing.T) {

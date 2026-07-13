@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prototype — Event Live</title>
+  <link rel="stylesheet" href="prototype.css" />
+  <style>
+    :root {
+      --cat-adv-men: #1a5276;
+      --cat-adv-women: #8e44ad;
+      --cat-int-men: #148f77;
+      --cat-int-women: #d35400;
+      --cat-kids-men: #2980b9;
+      --cat-kids-women: #c0392b;
+    }
+    .countdown {
+      font-variant-numeric: tabular-nums;
+      font-size: clamp(1.5rem, 3.5vw, 2.25rem);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin: 0;
+    }
+    .countdown-label { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.2rem; }
+    .race-tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+    .race-tabs button {
+      border: 1px solid var(--line);
+      background: #fff;
+      padding: 0.45rem 0.85rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .race-tabs button[aria-selected="true"] {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .place { font-weight: 700; width: 2.5rem; }
+    .cat-dot {
+      display: inline-block;
+      width: 0.65rem;
+      height: 0.65rem;
+      border-radius: 50%;
+      margin-right: 0.35rem;
+      vertical-align: middle;
+    }
+    .cat-adv-men { color: var(--cat-adv-men); }
+    .cat-adv-men .cat-dot, .legend .cat-adv-men { background: var(--cat-adv-men); }
+    .cat-adv-women { color: var(--cat-adv-women); }
+    .cat-adv-women .cat-dot, .legend .cat-adv-women { background: var(--cat-adv-women); }
+    .cat-int-men { color: var(--cat-int-men); }
+    .cat-int-men .cat-dot, .legend .cat-int-men { background: var(--cat-int-men); }
+    .cat-int-women { color: var(--cat-int-women); }
+    .cat-int-women .cat-dot, .legend .cat-int-women { background: var(--cat-int-women); }
+    .cat-kids-men { color: var(--cat-kids-men); }
+    .cat-kids-men .cat-dot, .legend .cat-kids-men { background: var(--cat-kids-men); }
+    .cat-kids-women { color: var(--cat-kids-women); }
+    .cat-kids-women .cat-dot, .legend .cat-kids-women { background: var(--cat-kids-women); }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 1.1rem;
+      font-size: 0.85rem;
+      margin: 0.5rem 0 1rem;
+      padding: 0.65rem 0.85rem;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .legend i {
+      display: inline-block;
+      width: 0.7rem;
+      height: 0.7rem;
+      border-radius: 50%;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .chart-wrap {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin-bottom: 1rem;
+      overflow-x: auto;
+    }
+    .chart-wrap svg { width: 100%; min-width: 480px; height: 220px; display: block; }
+    .side-by-side {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 900px) {
+      .side-by-side { grid-template-columns: 1fr; }
+    }
+    .name-cell { font-weight: 600; }
+    /* Fullscreen rotator */
+    .fs-root {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: #1c2833;
+      color: #ecf0f1;
+      padding: 1.5rem 2rem;
+      flex-direction: column;
+    }
+    .fs-root.active { display: flex; }
+    .fs-root .fs-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 1rem;
+    }
+    .fs-root h1 { color: #fff; font-size: 1.75rem; margin: 0; }
+    .fs-root .fs-meta { color: #aeb6bf; font-size: 0.95rem; }
+    .fs-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 1.25rem;
+      min-height: 0;
+    }
+    .fs-panel {
+      background: #273746;
+      border-radius: 8px;
+      padding: 1rem 1.15rem;
+      overflow: auto;
+    }
+    .fs-panel h2 { margin: 0 0 0.75rem; font-size: 1.2rem; color: #fff; }
+    .fs-root table { color: #ecf0f1; }
+    .fs-root th { color: #aeb6bf; border-color: #34495e; }
+    .fs-root td { border-color: #34495e; }
+    .fs-root .legend { background: #1c2833; border-color: #34495e; color: #ecf0f1; }
+    .fs-exit {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <nav class="topnav" aria-label="Prototype navigation" id="main-nav">
+    <strong>RFID Scanner Prototypes</strong>
+    <a href="racers.html">Racers</a>
+    <a href="event-live.html" aria-current="page">Event Live</a>
+    <a href="scan-popup.html">Scan Popup</a>
+    <a href="pin-unlock.html">PIN Unlock</a>
+    <a href="station-config.html">Station Config</a>
+    <a href="csv-import-export.html">CSV Recovery</a>
+  </nav>
+
+  <div class="wrap" id="normal-view">
+    <p class="meta-bar">
+      <span>All You Can East Bluffet — Aug 1, 2026</span>
+      <span class="badge online">Station online</span>
+      <span class="badge pending">0 pending sync</span>
+      <span class="muted">Public — no PIN</span>
+    </p>
+
+    <h1>Live race flow</h1>
+    <p class="lead">Tabs for 12h / 6h / 90-min. Default board is <strong>combined overall</strong> with category colors. Overlapping races share one chart. Fullscreen rotator cycles active races.</p>
+
+    <div class="toolbar">
+      <div class="race-tabs" role="tablist" aria-label="Races">
+        <button type="button" role="tab" data-tab="12" aria-selected="true">12 Hour</button>
+        <button type="button" role="tab" data-tab="6" aria-selected="false">6 Hour</button>
+        <button type="button" role="tab" data-tab="kids" aria-selected="false">90 Minute</button>
+        <button type="button" role="tab" data-tab="overlap" aria-selected="false">Overlap (12h + 6h)</button>
+      </div>
+      <button type="button" class="btn" id="start-rotate">Fullscreen rotate</button>
+    </div>
+
+    <div class="legend" id="legend-12" aria-label="Category legend">
+      <strong style="margin-right: 0.25rem;">Overall</strong>
+      <span><i class="cat-adv-men"></i> Advanced Men</span>
+      <span><i class="cat-adv-women"></i> Advanced Women</span>
+      <span><i class="cat-int-men"></i> Intermediate Men</span>
+      <span><i class="cat-int-women"></i> Intermediate Women</span>
+    </div>
+    <div class="legend" id="legend-kids" hidden aria-label="Category legend">
+      <strong style="margin-right: 0.25rem;">Overall</strong>
+      <span><i class="cat-kids-men"></i> Men</span>
+      <span><i class="cat-kids-women"></i> Women</span>
+    </div>
+
+    <label style="max-width: 18rem;">Category filter
+      <select id="cat-filter">
+        <option value="overall" selected>Combined overall (default)</option>
+        <option value="adv-men">Advanced Men only</option>
+        <option value="adv-women">Advanced Women only</option>
+        <option value="int-men">Intermediate Men only</option>
+        <option value="int-women">Intermediate Women only</option>
+      </select>
+    </label>
+
+    <!-- 12 Hour -->
+    <div class="tab-panel" data-panel="12">
+      <section class="panel">
+        <h2>12 Hour · starts 8:00 AM</h2>
+        <p class="countdown-label">Countdown</p>
+        <p class="countdown">00:42:17</p>
+      </section>
+      <div class="chart-wrap" aria-label="Lap progress chart">
+        <svg viewBox="0 0 640 220" role="img">
+          <title>Sample race flow — laps over time</title>
+          <text x="8" y="16" fill="#6c757d" font-size="12">Laps</text>
+          <line x1="40" y1="200" x2="620" y2="200" stroke="#dee2e6" />
+          <line x1="40" y1="20" x2="40" y2="200" stroke="#dee2e6" />
+          <polyline fill="none" stroke="#1a5276" stroke-width="2.5"
+            points="40,180 120,160 200,140 280,110 360,95 440,70 520,55 600,40" />
+          <polyline fill="none" stroke="#8e44ad" stroke-width="2.5"
+            points="40,185 120,170 200,155 280,130 360,115 440,100 520,85 600,75" />
+          <polyline fill="none" stroke="#148f77" stroke-width="2"
+            points="40,190 120,175 200,165 280,150 360,140 440,125 520,115 600,105" />
+          <polyline fill="none" stroke="#d35400" stroke-width="2"
+            points="40,192 120,180 200,170 280,160 360,150 440,140 520,130 600,120" />
+        </svg>
+      </div>
+      <section class="panel">
+        <h2>Leaderboard — Combined overall</h2>
+        <table>
+          <thead>
+            <tr><th>Place</th><th>Bib</th><th>Name</th><th>Category</th><th>Laps</th><th>Last</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="place">1</td><td>12</td>
+              <td class="name-cell cat-adv-men"><span class="cat-dot" style="background:var(--cat-adv-men)"></span>Alex Rivera</td>
+              <td>Advanced Men</td><td>14</td><td>11:02:41</td>
+            </tr>
+            <tr>
+              <td class="place">2</td><td>7</td>
+              <td class="name-cell cat-int-men"><span class="cat-dot" style="background:var(--cat-int-men)"></span>Chris Nguyen</td>
+              <td>Intermediate Men</td><td>14</td><td>11:03:02</td>
+            </tr>
+            <tr>
+              <td class="place">3</td><td>21</td>
+              <td class="name-cell cat-adv-women"><span class="cat-dot" style="background:var(--cat-adv-women)"></span>Pat Brooks</td>
+              <td>Advanced Women</td><td>13</td><td>11:01:18</td>
+            </tr>
+            <tr>
+              <td class="place">4</td><td>18</td>
+              <td class="name-cell cat-int-women"><span class="cat-dot" style="background:var(--cat-int-women)"></span>Jordan Lee</td>
+              <td>Intermediate Women</td><td>12</td><td>11:00:55</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <!-- 6 Hour -->
+    <div class="tab-panel" data-panel="6" hidden>
+      <section class="panel">
+        <h2>6 Hour · starts 8:00 AM</h2>
+        <p class="countdown-label">Countdown</p>
+        <p class="countdown">00:42:17</p>
+      </section>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 640 220" role="img">
+          <title>6 Hour race flow</title>
+          <line x1="40" y1="200" x2="620" y2="200" stroke="#dee2e6" />
+          <line x1="40" y1="20" x2="40" y2="200" stroke="#dee2e6" />
+          <polyline fill="none" stroke="#1a5276" stroke-width="2.5"
+            points="40,170 150,140 260,100 370,80 480,60 600,45" />
+          <polyline fill="none" stroke="#8e44ad" stroke-width="2.5"
+            points="40,175 150,150 260,120 370,100 480,85 600,70" />
+        </svg>
+      </div>
+      <section class="panel">
+        <h2>Leaderboard — Combined overall</h2>
+        <p class="muted">Same overall + color coding pattern as 12 Hour.</p>
+      </section>
+    </div>
+
+    <!-- 90 Minute -->
+    <div class="tab-panel" data-panel="kids" hidden>
+      <section class="panel">
+        <h2>90 Minute · starts 3:00 PM</h2>
+        <p class="countdown-label">Countdown</p>
+        <p class="countdown">07:42:17</p>
+      </section>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 640 220" role="img">
+          <title>90 Minute race flow</title>
+          <line x1="40" y1="200" x2="620" y2="200" stroke="#dee2e6" />
+          <line x1="40" y1="20" x2="40" y2="200" stroke="#dee2e6" />
+          <polyline fill="none" stroke="#2980b9" stroke-width="2.5"
+            points="40,190 200,160 360,130 520,100 600,90" />
+          <polyline fill="none" stroke="#c0392b" stroke-width="2.5"
+            points="40,195 200,170 360,145 520,120 600,110" />
+        </svg>
+      </div>
+      <section class="panel">
+        <h2>Leaderboard — Combined overall</h2>
+        <table>
+          <thead>
+            <tr><th>Place</th><th>Bib</th><th>Name</th><th>Category</th><th>Laps</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="place">1</td><td>101</td>
+              <td class="name-cell"><span class="cat-dot" style="background:var(--cat-kids-men)"></span>Riley Chen</td>
+              <td>Men</td><td>—</td>
+            </tr>
+            <tr>
+              <td class="place">2</td><td>104</td>
+              <td class="name-cell"><span class="cat-dot" style="background:var(--cat-kids-women)"></span>Avery Kim</td>
+              <td>Women</td><td>—</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <!-- Overlap: 12h + 6h on one chart -->
+    <div class="tab-panel" data-panel="overlap" hidden>
+      <section class="panel">
+        <h2>Overlapping races — 12 Hour + 6 Hour</h2>
+        <p class="muted">Same start time: one combined chart with both durations (line style / label distinguishes race). Overall boards remain color-coded by category.</p>
+      </section>
+      <div class="chart-wrap">
+        <svg viewBox="0 0 640 220" role="img">
+          <title>Combined 12h and 6h flow</title>
+          <line x1="40" y1="200" x2="620" y2="200" stroke="#dee2e6" />
+          <line x1="40" y1="20" x2="40" y2="200" stroke="#dee2e6" />
+          <text x="450" y="36" fill="#1a5276" font-size="12">12h solid</text>
+          <text x="450" y="52" fill="#148f77" font-size="12">6h dashed</text>
+          <polyline fill="none" stroke="#1a5276" stroke-width="2.5"
+            points="40,180 120,160 200,140 280,110 360,95 440,70 520,55 600,40" />
+          <polyline fill="none" stroke="#148f77" stroke-width="2.5" stroke-dasharray="8 4"
+            points="40,170 120,145 200,115 280,90 360,75 440,55 520,40 600,30" />
+        </svg>
+      </div>
+      <div class="side-by-side">
+        <section class="panel">
+          <h2>12 Hour overall</h2>
+          <p class="muted">Color-coded combined board…</p>
+        </section>
+        <section class="panel">
+          <h2>6 Hour overall</h2>
+          <p class="muted">Color-coded combined board…</p>
+        </section>
+      </div>
+    </div>
+
+    <section class="notes">
+      <h2>Approved</h2>
+      <ul>
+        <li>Tabs: <strong>12 Hour</strong>, <strong>6 Hour</strong>, <strong>90 Minute</strong> (+ Overlap for concurrent races on one chart)</li>
+        <li>Default category: <strong>combined overall</strong> with color coding + legend on all boards</li>
+        <li><strong>Fullscreen rotate</strong>: cycles active races showing flow chart + leaderboard side-by-side</li>
+      </ul>
+    </section>
+  </div>
+
+  <!-- Fullscreen rotating display -->
+  <div class="fs-root" id="fs-root" aria-label="Fullscreen rotating race display">
+    <button type="button" class="btn secondary fs-exit" id="fs-exit">Exit (Esc)</button>
+    <div class="fs-top">
+      <div>
+        <h1 id="fs-title">12 Hour</h1>
+        <p class="fs-meta" id="fs-meta">Slide 1 of 2 · next in 8s</p>
+      </div>
+      <div class="legend" id="fs-legend">
+        <span><i class="cat-adv-men"></i> Adv Men</span>
+        <span><i class="cat-adv-women"></i> Adv Women</span>
+        <span><i class="cat-int-men"></i> Int Men</span>
+        <span><i class="cat-int-women"></i> Int Women</span>
+      </div>
+    </div>
+    <div class="fs-grid">
+      <div class="fs-panel">
+        <h2>Race flow</h2>
+        <div class="chart-wrap" style="background:#1c2833;border-color:#34495e;">
+          <svg viewBox="0 0 640 220" id="fs-chart">
+            <line x1="40" y1="200" x2="620" y2="200" stroke="#5d6d7e" />
+            <line x1="40" y1="20" x2="40" y2="200" stroke="#5d6d7e" />
+            <polyline id="fs-line" fill="none" stroke="#5dade2" stroke-width="3"
+              points="40,180 120,160 200,140 280,110 360,95 440,70 520,55 600,40" />
+          </svg>
+        </div>
+      </div>
+      <div class="fs-panel">
+        <h2>Leaderboard — Combined overall</h2>
+        <table>
+          <thead>
+            <tr><th>#</th><th>Bib</th><th>Name</th><th>Cat</th><th>Laps</th></tr>
+          </thead>
+          <tbody id="fs-board">
+            <tr>
+              <td>1</td><td>12</td>
+              <td><span class="cat-dot" style="background:var(--cat-adv-men)"></span>Alex Rivera</td>
+              <td>Adv M</td><td>14</td>
+            </tr>
+            <tr>
+              <td>2</td><td>7</td>
+              <td><span class="cat-dot" style="background:var(--cat-int-men)"></span>Chris Nguyen</td>
+              <td>Int M</td><td>14</td>
+            </tr>
+            <tr>
+              <td>3</td><td>21</td>
+              <td><span class="cat-dot" style="background:var(--cat-adv-women)"></span>Pat Brooks</td>
+              <td>Adv W</td><td>13</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const panels = document.querySelectorAll('.tab-panel');
+    const legend12 = document.getElementById('legend-12');
+    const legendKids = document.getElementById('legend-kids');
+    const catFilter = document.getElementById('cat-filter');
+
+    document.querySelectorAll('.race-tabs button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.race-tabs button').forEach((b) => b.setAttribute('aria-selected', 'false'));
+        btn.setAttribute('aria-selected', 'true');
+        const id = btn.dataset.tab;
+        panels.forEach((p) => { p.hidden = p.dataset.panel !== id; });
+        const kids = id === 'kids';
+        legend12.hidden = kids;
+        legendKids.hidden = !kids;
+        if (kids) {
+          catFilter.innerHTML = '<option value="overall" selected>Combined overall (default)</option><option value="men">Men only</option><option value="women">Women only</option>';
+        } else {
+          catFilter.innerHTML = '<option value="overall" selected>Combined overall (default)</option><option value="adv-men">Advanced Men only</option><option value="adv-women">Advanced Women only</option><option value="int-men">Intermediate Men only</option><option value="int-women">Intermediate Women only</option>';
+        }
+      });
+    });
+
+    const slides = [
+      { title: '12 Hour', meta: 'Active · Combined overall' },
+      { title: '6 Hour', meta: 'Active · Combined overall' },
+    ];
+    let slide = 0;
+    let rotateTimer;
+    const fs = document.getElementById('fs-root');
+    function showSlide() {
+      const s = slides[slide];
+      document.getElementById('fs-title').textContent = s.title;
+      document.getElementById('fs-meta').textContent = `Slide ${slide + 1} of ${slides.length} · ${s.meta} · next in 8s`;
+    }
+    function startRotate() {
+      fs.classList.add('active');
+      slide = 0;
+      showSlide();
+      clearInterval(rotateTimer);
+      rotateTimer = setInterval(() => {
+        slide = (slide + 1) % slides.length;
+        showSlide();
+      }, 8000);
+    }
+    function stopRotate() {
+      fs.classList.remove('active');
+      clearInterval(rotateTimer);
+    }
+    document.getElementById('start-rotate').onclick = startRotate;
+    document.getElementById('fs-exit').onclick = stopRotate;
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && fs.classList.contains('active')) stopRotate();
+    });
+  </script>
+</body>
+</html>

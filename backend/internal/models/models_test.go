@@ -15,7 +15,16 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 	
 	// Auto migrate all models
-	err = db.AutoMigrate(&Event{}, &Race{}, &Participant{}, &TimingCheckpoint{}, &TimingRecord{}, &Category{})
+	err = db.AutoMigrate(
+		&Event{},
+		&Race{},
+		&Participant{},
+		&TimingCheckpoint{},
+		&TimingRecord{},
+		&Category{},
+		&RFIDTagAssociation{},
+		&ReaderStation{},
+	)
 	require.NoError(t, err)
 	
 	return db
@@ -195,25 +204,37 @@ func TestParticipantModel(t *testing.T) {
 	require.NoError(t, err)
 	
 	t.Run("CreateParticipant", func(t *testing.T) {
-		participant := Participant{
-			RaceID:    race.ID,
-			BibNumber: "001",
-			FirstName: "John",
-			LastName:  "Doe",
-			Gender:    "male",
-			Age:       30,
-			RFIDTagUID: "RFID123456",
-			Status:    "registered",
+		category := Category{
+			RaceID:       race.ID,
+			Name:         "Open",
+			CategoryType: "overall",
 		}
-		
-		err := db.Create(&participant).Error
+		err := db.Create(&category).Error
 		require.NoError(t, err)
-		
+
+		categoryID := category.ID
+		participant := Participant{
+			RaceID:     race.ID,
+			CategoryID: &categoryID,
+			BibNumber:  "001",
+			FirstName:  "John",
+			LastName:   "Doe",
+			Gender:     "male",
+			Age:        30,
+			RFIDTagUID: "RFID123456",
+			Status:     "registered",
+		}
+
+		err = db.Create(&participant).Error
+		require.NoError(t, err)
+
 		// Verify UUID was generated
 		assert.False(t, participant.ID.IsZero())
-		
+
 		// Verify fields
 		assert.Equal(t, race.ID, participant.RaceID)
+		require.NotNil(t, participant.CategoryID)
+		assert.Equal(t, category.ID, *participant.CategoryID)
 		assert.Equal(t, "001", participant.BibNumber)
 		assert.Equal(t, "John", participant.FirstName)
 		assert.Equal(t, "Doe", participant.LastName)
@@ -403,13 +424,13 @@ func TestTimingRecordModel(t *testing.T) {
 			DeviceID:       "DEVICE_001",
 			SyncStatus:     "synced",
 		}
-		
+
 		err := db.Create(&record).Error
 		require.NoError(t, err)
-		
+
 		// Verify UUID was generated
 		assert.False(t, record.ID.IsZero())
-		
+
 		// Verify fields
 		assert.Equal(t, participant.ID, record.ParticipantID)
 		assert.Equal(t, checkpoint.ID, record.CheckpointID)
@@ -417,6 +438,40 @@ func TestTimingRecordModel(t *testing.T) {
 		assert.Equal(t, now.Unix(), record.LocalTimestamp.Unix())
 		assert.Equal(t, "DEVICE_001", record.DeviceID)
 		assert.Equal(t, "synced", record.SyncStatus)
+		assert.Equal(t, "rfid_lap", record.RecordType)
+		assert.Nil(t, record.SourceLapID)
+		assert.Nil(t, record.StationID)
+	})
+
+	t.Run("KaraokeBonusRecord", func(t *testing.T) {
+		now := time.Now()
+		sourceLap := TimingRecord{
+			ParticipantID:  participant.ID,
+			CheckpointID:   checkpoint.ID,
+			Timestamp:      now,
+			LocalTimestamp: now,
+			RecordType:     "rfid_lap",
+			SyncStatus:     "synced",
+		}
+		err := db.Create(&sourceLap).Error
+		require.NoError(t, err)
+
+		sourceLapID := sourceLap.ID
+		bonus := TimingRecord{
+			ParticipantID:  participant.ID,
+			CheckpointID:   checkpoint.ID,
+			Timestamp:      now,
+			LocalTimestamp: now,
+			RecordType:     "karaoke_bonus",
+			SourceLapID:    &sourceLapID,
+			SyncStatus:     "synced",
+		}
+		err = db.Create(&bonus).Error
+		require.NoError(t, err)
+
+		assert.Equal(t, "karaoke_bonus", bonus.RecordType)
+		require.NotNil(t, bonus.SourceLapID)
+		assert.Equal(t, sourceLap.ID, *bonus.SourceLapID)
 	})
 	
 	t.Run("DifferentSyncStatuses", func(t *testing.T) {
@@ -595,5 +650,211 @@ func TestModelUUIDGeneration(t *testing.T) {
 		err = db.Create(&category).Error
 		require.NoError(t, err)
 		assert.False(t, category.ID.IsZero())
+	})
+}
+
+func TestRFIDTagAssociationModel(t *testing.T) {
+	db := setupTestDB(t)
+
+	event := Event{
+		Name:      "Parent Event",
+		EventDate: time.Now(),
+		Status:    "upcoming",
+	}
+	err := db.Create(&event).Error
+	require.NoError(t, err)
+
+	race := Race{
+		EventID:  event.ID,
+		Name:     "Parent Race",
+		RaceType: "lap_based",
+		Status:   "scheduled",
+	}
+	err = db.Create(&race).Error
+	require.NoError(t, err)
+
+	participant := Participant{
+		RaceID:    race.ID,
+		BibNumber: "100",
+		FirstName: "Tag",
+		LastName:  "Owner",
+		Status:    "registered",
+	}
+	err = db.Create(&participant).Error
+	require.NoError(t, err)
+
+	t.Run("CreateRFIDTagAssociation", func(t *testing.T) {
+		assoc := RFIDTagAssociation{
+			ParticipantID: participant.ID,
+			TagUID:        "DEMO-TAG-0001",
+			Active:        true,
+		}
+		err := db.Create(&assoc).Error
+		require.NoError(t, err)
+
+		assert.False(t, assoc.ID.IsZero())
+		assert.Equal(t, participant.ID, assoc.ParticipantID)
+		assert.Equal(t, "DEMO-TAG-0001", assoc.TagUID)
+		assert.True(t, assoc.Active)
+		assert.False(t, assoc.CreatedAt.IsZero())
+	})
+
+	t.Run("UniqueTagUID", func(t *testing.T) {
+		assoc1 := RFIDTagAssociation{
+			ParticipantID: participant.ID,
+			TagUID:        "UNIQUE-TAG-ABC",
+			Active:        true,
+		}
+		err := db.Create(&assoc1).Error
+		require.NoError(t, err)
+
+		assoc2 := RFIDTagAssociation{
+			ParticipantID: participant.ID,
+			TagUID:        "UNIQUE-TAG-ABC",
+			Active:        true,
+		}
+		err = db.Create(&assoc2).Error
+		assert.Error(t, err)
+	})
+
+	t.Run("MultipleTagsPerParticipant", func(t *testing.T) {
+		err := db.Create(&RFIDTagAssociation{
+			ParticipantID: participant.ID,
+			TagUID:        "MULTI-TAG-1",
+			Active:        true,
+		}).Error
+		require.NoError(t, err)
+
+		err = db.Create(&RFIDTagAssociation{
+			ParticipantID: participant.ID,
+			TagUID:        "MULTI-TAG-2",
+			Active:        true,
+		}).Error
+		require.NoError(t, err)
+
+		var loaded Participant
+		err = db.Preload("TagAssociations").First(&loaded, participant.ID).Error
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, len(loaded.TagAssociations), 2)
+	})
+}
+
+func TestReaderStationModel(t *testing.T) {
+	db := setupTestDB(t)
+
+	event := Event{
+		Name:      "Station Event",
+		EventDate: time.Now(),
+		Status:    "upcoming",
+	}
+	err := db.Create(&event).Error
+	require.NoError(t, err)
+
+	race := Race{
+		EventID:  event.ID,
+		Name:     "Station Race",
+		RaceType: "lap_based",
+		Status:   "scheduled",
+	}
+	err = db.Create(&race).Error
+	require.NoError(t, err)
+
+	checkpoint := TimingCheckpoint{
+		RaceID:         race.ID,
+		Name:           "CP1",
+		CheckpointType: "intermediate",
+	}
+	err = db.Create(&checkpoint).Error
+	require.NoError(t, err)
+
+	t.Run("CreateFinishStation", func(t *testing.T) {
+		station := ReaderStation{
+			EventID:  event.ID,
+			Name:     "Finish Line",
+			DeviceID: "proxmark-1",
+		}
+		err := db.Create(&station).Error
+		require.NoError(t, err)
+
+		assert.False(t, station.ID.IsZero())
+		assert.Equal(t, event.ID, station.EventID)
+		assert.Equal(t, "finish", station.Mode)
+		assert.Equal(t, "Finish Line", station.Name)
+		assert.Equal(t, "proxmark-1", station.DeviceID)
+		assert.Nil(t, station.CheckpointID)
+		assert.Nil(t, station.LastSeenAt)
+	})
+
+	t.Run("CreateCheckpointStation", func(t *testing.T) {
+		checkpointID := checkpoint.ID
+		now := time.Now()
+		station := ReaderStation{
+			EventID:       event.ID,
+			Mode:          "checkpoint",
+			CheckpointID:  &checkpointID,
+			SequenceOrder: 1,
+			Name:          "Aid Station",
+			DeviceID:      "proxmark-2",
+			LastSeenAt:    &now,
+		}
+		err := db.Create(&station).Error
+		require.NoError(t, err)
+
+		assert.Equal(t, "checkpoint", station.Mode)
+		require.NotNil(t, station.CheckpointID)
+		assert.Equal(t, checkpoint.ID, *station.CheckpointID)
+		assert.Equal(t, 1, station.SequenceOrder)
+		require.NotNil(t, station.LastSeenAt)
+	})
+
+	t.Run("StationLinkedToTimingRecord", func(t *testing.T) {
+		station := ReaderStation{
+			EventID:  event.ID,
+			Name:     "Linked Station",
+			DeviceID: "proxmark-3",
+		}
+		err := db.Create(&station).Error
+		require.NoError(t, err)
+
+		participant := Participant{
+			RaceID:    race.ID,
+			BibNumber: "200",
+			FirstName: "Lap",
+			LastName:  "Runner",
+			Status:    "registered",
+		}
+		err = db.Create(&participant).Error
+		require.NoError(t, err)
+
+		stationID := station.ID
+		now := time.Now()
+		record := TimingRecord{
+			ParticipantID:  participant.ID,
+			CheckpointID:   checkpoint.ID,
+			Timestamp:      now,
+			LocalTimestamp: now,
+			RecordType:     "checkpoint_pass",
+			StationID:      &stationID,
+			SyncStatus:     "synced",
+		}
+		err = db.Create(&record).Error
+		require.NoError(t, err)
+
+		require.NotNil(t, record.StationID)
+		assert.Equal(t, station.ID, *record.StationID)
+		assert.Equal(t, "checkpoint_pass", record.RecordType)
+	})
+
+	t.Run("EventReaderStationsRelationship", func(t *testing.T) {
+		err := db.Create(&ReaderStation{
+			EventID: event.ID,
+			Name:    "Rel Station A",
+		}).Error
+		require.NoError(t, err)
+
+		var loaded Event
+		err = db.Preload("ReaderStations").First(&loaded, event.ID).Error
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, len(loaded.ReaderStations), 1)
 	})
 }

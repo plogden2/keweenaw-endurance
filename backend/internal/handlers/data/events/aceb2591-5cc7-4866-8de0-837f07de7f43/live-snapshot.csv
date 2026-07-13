@@ -1,0 +1,16 @@
+#SECTION,event
+id,name,event_date,location,status
+aceb2591-5cc7-4866-8de0-837f07de7f43,PIN Race Event,2026-08-12,,upcoming
+#SECTION,races
+id,event_id,name,race_type,duration_minutes,start_time,status
+75b79e8b-6511-40ba-8ebb-c5b55f11f703,aceb2591-5cc7-4866-8de0-837f07de7f43,PIN Lap Race,lap_based,360,2026-07-12T20:57:12Z,cancelled
+#SECTION,categories
+id,race_id,name,category_type,gender_filter,display_order
+#SECTION,participants
+id,race_id,bib_number,first_name,last_name,gender,status,category_id
+#SECTION,tags
+id,participant_id,tag_uid,created_at
+#SECTION,checkpoints
+id,race_id,name,checkpoint_type,distance_from_start_km,is_active
+#SECTION,timing_records
+id,participant_id,checkpoint_id,timestamp,local_timestamp,device_id,sync_status,record_type,source_lap_id,station_id

@@ -140,6 +140,46 @@ func TestResultsService_Leaderboard(t *testing.T) {
 	assert.Equal(t, "Jane", leaderboard[0].FirstName)
 }
 
+func TestResultsService_OverallLeaderboardIncludesKaraokeBonus(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	race, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "12 Hour", RaceType: "lap_based", DurationMinutes: 720,
+		Status: "active", StartTime: time.Now().Add(-time.Hour),
+	})
+	require.NoError(t, err)
+	finish := createCheckpoint(t, db, race.ID, "Finish", "finish")
+
+	partSvc := NewParticipantService(db)
+	p1, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "10", FirstName: "Alex", LastName: "Rivera",
+	})
+	require.NoError(t, err)
+
+	base := time.Now().UTC().Truncate(time.Second)
+	source := &models.TimingRecord{
+		ParticipantID: p1.ID, CheckpointID: finish.ID,
+		Timestamp: base, LocalTimestamp: base,
+		RecordType: "rfid_lap", SyncStatus: "synced",
+	}
+	require.NoError(t, db.Create(source).Error)
+	sourceID := source.ID
+	require.NoError(t, db.Create(&models.TimingRecord{
+		ParticipantID: p1.ID, CheckpointID: finish.ID,
+		Timestamp: base.Add(time.Minute), LocalTimestamp: base.Add(time.Minute),
+		RecordType: "karaoke_bonus", SourceLapID: &sourceID, SyncStatus: "synced",
+	}).Error)
+
+	resultsSvc := NewResultsService(db, nil)
+	live, err := resultsSvc.GetEventLive(event.ID.UUID(), nil)
+	require.NoError(t, err)
+	require.Len(t, live.Races, 1)
+	require.Len(t, live.Races[0].LeaderboardOverall, 1)
+	assert.Equal(t, 2, live.Races[0].LeaderboardOverall[0].Laps)
+	assert.Equal(t, 1, live.Races[0].LeaderboardOverall[0].Place)
+}
+
 func TestResultsService_GetLiveTiming(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)

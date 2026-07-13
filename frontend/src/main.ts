@@ -4,7 +4,12 @@ import { registerSW } from 'virtual:pwa-register'
 import router from './router'
 import App from './App.vue'
 import { initOfflineQueue } from '@/services/offlineQueue'
+import '@fontsource/ibm-plex-sans/400.css'
+import '@fontsource/ibm-plex-sans/600.css'
+import '@fontsource/ibm-plex-sans/700.css'
+import '@fontsource/yuji-mai/400.css'
 import './assets/main.css'
+import './themes/bluffet.css'
 
 initOfflineQueue()
 
@@ -22,4 +27,4 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 
-app.mount('#app')
+app.mount('#app-host')

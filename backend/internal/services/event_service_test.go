@@ -24,6 +24,8 @@ func setupServiceTestDB(t *testing.T) *gorm.DB {
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
 		&models.Category{},
+		&models.RFIDTagAssociation{},
+		&models.ReaderStation{},
 	))
 	return db
 }

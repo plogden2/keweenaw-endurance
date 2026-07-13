@@ -7,16 +7,20 @@
     </p>
     <div v-else class="chart-panel">
       <canvas ref="canvasRef" data-testid="race-flow-canvas" />
-      <div class="legend-panel" data-testid="race-flow-legend">
+      <div class="legend-panel" data-testid="race-flow-legend" aria-label="Participant legend">
         <div class="legend-controls">
           <div class="legend-controls-row">
-            <input
-              v-model="searchQuery"
-              type="search"
-              class="legend-search"
-              placeholder="Search by bib or name…"
-              data-testid="race-flow-legend-search"
-            />
+            <label class="legend-search-label">
+              <span class="sr-only">Search legend by bib or name</span>
+              <input
+                v-model="searchQuery"
+                type="search"
+                class="legend-search"
+                placeholder="Search by bib or name…"
+                data-testid="race-flow-legend-search"
+                aria-label="Search legend by bib or name"
+              />
+            </label>
             <button
               type="button"
               class="select-all-btn"
@@ -925,9 +929,14 @@ canvas {
   align-items: center;
 }
 
-.legend-search {
+.legend-search-label {
   flex: 1 1 220px;
   min-width: 180px;
+  display: block;
+}
+
+.legend-search {
+  width: 100%;
   padding: 0.45rem 0.65rem;
   border: 1px solid #ced4da;
   border-radius: 4px;

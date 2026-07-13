@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
-import { apiClient, eventsApi, racesApi, participantsApi } from './api'
+import {
+  apiClient,
+  eventsApi,
+  racesApi,
+  participantsApi,
+  raceParticipantsApi,
+  scansApi,
+  eventsLiveApi,
+  rfidStreamUrl,
+  setAuthToken,
+} from './api'
 
 vi.mock('axios', () => {
   const create = vi.fn(() => ({
@@ -8,7 +18,10 @@ vi.mock('axios', () => {
     put: vi.fn(),
     delete: vi.fn(),
     defaults: {
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        common: {} as Record<string, string>,
+      },
     },
   }))
   return { default: { create } }
@@ -126,5 +139,79 @@ describe('participantsApi', () => {
     expect(apiClient.post).toHaveBeenCalledWith('/api/participants', payload)
     expect(apiClient.put).toHaveBeenCalledWith('/api/participants/p-1', payload)
     expect(apiClient.delete).toHaveBeenCalledWith('/api/participants/p-1')
+  })
+})
+
+describe('raceParticipantsApi', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('lists and creates race participants and manages tags', async () => {
+    ;(apiClient.get as Mock).mockResolvedValue({ data: { data: [] } })
+    ;(apiClient.post as Mock).mockResolvedValue({ data: {} })
+
+    await raceParticipantsApi.list('race-1', { q: 'alex', limit: 200 })
+    await raceParticipantsApi.create('race-1', {
+      first_name: 'E2E',
+      last_name: 'Racer',
+      category_id: 'cat-1',
+    })
+    await raceParticipantsApi.listTags('race-1', 'p-1')
+    await raceParticipantsApi.addTag('race-1', 'p-1', 'TAG-A')
+    await raceParticipantsApi.listCategories('race-1')
+
+    expect(apiClient.get).toHaveBeenCalledWith('/api/races/race-1/participants', {
+      params: { q: 'alex', limit: 200 },
+    })
+    expect(apiClient.post).toHaveBeenCalledWith('/api/races/race-1/participants', {
+      first_name: 'E2E',
+      last_name: 'Racer',
+      category_id: 'cat-1',
+    })
+    expect(apiClient.get).toHaveBeenCalledWith('/api/races/race-1/participants/p-1/tags')
+    expect(apiClient.post).toHaveBeenCalledWith('/api/races/race-1/participants/p-1/tags', {
+      tag_uid: 'TAG-A',
+    })
+    expect(apiClient.get).toHaveBeenCalledWith('/api/races/race-1/categories', {
+      params: { limit: 100 },
+    })
+  })
+})
+
+describe('RFID scanner APIs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('posts event scans', async () => {
+    ;(apiClient.post as Mock).mockResolvedValue({ data: { result: 'lap' } })
+    await scansApi.postScan('evt-1', {
+      tag_uid: 'TAG-1',
+      device_id: 'laptop-1',
+      local_timestamp: '2026-08-01T12:00:00Z',
+    })
+    expect(apiClient.post).toHaveBeenCalledWith('/api/events/evt-1/scans', {
+      tag_uid: 'TAG-1',
+      device_id: 'laptop-1',
+      local_timestamp: '2026-08-01T12:00:00Z',
+    })
+  })
+
+  it('fetches event live payload', async () => {
+    ;(apiClient.get as Mock).mockResolvedValue({ data: { races: [] } })
+    await eventsLiveApi.getLive('evt-1', { category_id: 'cat-1' })
+    expect(apiClient.get).toHaveBeenCalledWith('/api/events/evt-1/live', {
+      params: { category_id: 'cat-1' },
+    })
+  })
+
+  it('builds websocket stream URLs and sets auth header', () => {
+    expect(rfidStreamUrl('http://localhost:8080')).toBe('ws://localhost:8080/api/rfid/stream')
+    expect(rfidStreamUrl('https://api.example.com')).toBe('wss://api.example.com/api/rfid/stream')
+    setAuthToken('tok')
+    expect(apiClient.defaults.headers.common.Authorization).toBe('Bearer tok')
+    setAuthToken(null)
+    expect(apiClient.defaults.headers.common.Authorization).toBeUndefined()
   })
 })

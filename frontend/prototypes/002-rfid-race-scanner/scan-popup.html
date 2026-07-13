@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prototype — Scan Popup</title>
+  <link rel="stylesheet" href="prototype.css" />
+  <style>
+    .stage {
+      min-height: 70vh;
+      position: relative;
+      background: linear-gradient(160deg, #dfe6e9 0%, #f4f6f8 55%);
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      padding: 1.5rem;
+    }
+    .backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(44, 62, 80, 0.45);
+      border-radius: 8px;
+    }
+    .modal {
+      position: relative;
+      z-index: 1;
+      max-width: 28rem;
+      margin: 4rem auto 0;
+      background: #fff;
+      border-radius: 8px;
+      padding: 1.5rem 1.5rem 1.25rem;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+      text-align: center;
+    }
+    .modal .name { font-size: 1.6rem; font-weight: 700; margin: 0.25rem 0; }
+    .modal .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin: 1.25rem 0;
+      text-align: left;
+    }
+    .modal .stat {
+      background: #f4f6f8;
+      border-radius: 6px;
+      padding: 0.75rem;
+    }
+    .modal .stat span { display: block; color: var(--muted); font-size: 0.8rem; }
+    .modal .stat strong { font-size: 1.5rem; }
+    .karaoke-done {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      background: #d5f5e3;
+      color: var(--ok);
+      font-weight: 600;
+    }
+    .variants { margin-top: 1.5rem; }
+    .toast {
+      max-width: 28rem;
+      margin: 1rem auto;
+      padding: 0.85rem 1rem;
+      border-radius: 6px;
+      background: #fdebd0;
+      color: #7d6608;
+      text-align: left;
+    }
+    .demo-controls { margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <nav class="topnav" aria-label="Prototype navigation">
+    <strong>RFID Scanner Prototypes</strong>
+    <a href="racers.html">Racers</a>
+    <a href="event-live.html">Event Live</a>
+    <a href="scan-popup.html" aria-current="page">Scan Popup</a>
+    <a href="pin-unlock.html">PIN Unlock</a>
+    <a href="station-config.html">Station Config</a>
+    <a href="csv-import-export.html">CSV Recovery</a>
+  </nav>
+
+  <div class="wrap">
+    <h1>Scan confirmation popup</h1>
+    <p class="lead">Scored lap feedback. Sound plays without on-screen text. One karaoke bonus per scan — button becomes a confirmation once used.</p>
+
+    <p class="demo-controls muted">
+      Demo:
+      <button type="button" class="btn secondary" id="demo-fresh">Fresh scan</button>
+      <button type="button" class="btn secondary" id="demo-done">Already has karaoke</button>
+    </p>
+
+    <div class="stage" aria-label="Live page with scan overlay">
+      <p class="muted">Underlying page (Event Live) stays visible behind the overlay.</p>
+      <div class="backdrop" aria-hidden="true"></div>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="scan-name">
+        <p class="muted">Lap recorded · 12 Hour · Advanced Men</p>
+        <p class="name" id="scan-name">Alex Rivera</p>
+        <p class="muted">Bib #12</p>
+        <div class="stats">
+          <div class="stat"><span>Placement</span><strong id="place">3</strong></div>
+          <div class="stat"><span>Laps</span><strong id="laps">14</strong></div>
+        </div>
+        <div class="row" style="justify-content: center;" id="karaoke-slot">
+          <button type="button" class="btn ok" id="karaoke">+ Karaoke bonus lap</button>
+          <button type="button" class="btn secondary">Dismiss</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="variants">
+      <h2>Other states</h2>
+      <div class="toast" role="status"><strong>Cooldown:</strong> Jordan Lee — try again in 0:42</div>
+      <div class="toast" style="background: #d6eaf8; color: #1a5276;" role="status">
+        <strong>Test read (pre-start):</strong> Sam Ortiz identified — race not started, no lap counted
+      </div>
+      <div class="toast" style="background: #fadbd8; color: #922b21;" role="status">
+        <strong>Unknown tag:</strong> No racer associated with this chip
+      </div>
+    </div>
+
+    <section class="notes">
+      <h2>Approved</h2>
+      <p>No “playing sound” label. If karaoke already recorded for this scan, show that status instead of the add button (only one bonus lap).</p>
+    </section>
+  </div>
+  <script>
+    const slot = document.getElementById('karaoke-slot');
+    const lapsEl = document.getElementById('laps');
+    const placeEl = document.getElementById('place');
+
+    function renderFresh() {
+      lapsEl.textContent = '14';
+      placeEl.textContent = '3';
+      slot.innerHTML = `
+        <button type="button" class="btn ok" id="karaoke">+ Karaoke bonus lap</button>
+        <button type="button" class="btn secondary">Dismiss</button>`;
+      document.getElementById('karaoke').addEventListener('click', () => {
+        lapsEl.textContent = '15';
+        renderDone();
+      });
+    }
+
+    function renderDone() {
+      slot.innerHTML = `
+        <span class="karaoke-done" role="status">Karaoke bonus lap recorded</span>
+        <button type="button" class="btn secondary">Dismiss</button>`;
+    }
+
+    document.getElementById('demo-fresh').onclick = renderFresh;
+    document.getElementById('demo-done').onclick = () => {
+      lapsEl.textContent = '15';
+      renderDone();
+    };
+    renderFresh();
+  </script>
+</body>
+</html>
