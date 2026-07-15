@@ -195,6 +195,19 @@ func (s *RFIDService) ensureLogicalTagUUID(participantID uuid.UUID) (string, err
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", err
 	}
+
+	partSvc := NewParticipantService(s.db)
+	participant, err := partSvc.GetParticipant(participantID)
+	if err != nil {
+		return "", err
+	}
+	if legacy := strings.TrimSpace(participant.RFIDTagUID); legacy != "" {
+		if _, err := s.AssociateTag(participantID, legacy); err != nil {
+			return "", err
+		}
+		return legacy, nil
+	}
+
 	logical := uuid.New().String()
 	if _, err := s.AssociateTag(participantID, logical); err != nil {
 		return "", err

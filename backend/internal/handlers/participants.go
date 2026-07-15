@@ -276,14 +276,22 @@ func (h *Handlers) PostParticipantTag(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req) // body optional; default programs logical UUID onto chip
 
 	if req.TagUID != "" {
-		assoc, err := h.services.RFID.AssociateTag(participantID, req.TagUID)
+		if _, err := h.services.RFID.AssociateTag(participantID, req.TagUID); err != nil {
+			respondServiceError(c, err)
+			return
+		}
+		participant, err := h.services.Participants.GetParticipant(participantID)
 		if err != nil {
 			respondServiceError(c, err)
 			return
 		}
 		raceID, _ := h.resolveRaceID(c.Param("id"))
 		h.refreshLiveCSVForRace(raceID)
-		c.JSON(http.StatusCreated, assoc)
+		c.JSON(http.StatusCreated, gin.H{
+			"tag_uid":        participant.RFIDTagUID,
+			"participant_id": participant.ID,
+			"tag_uids":       participant.TagUIDs,
+		})
 		return
 	}
 

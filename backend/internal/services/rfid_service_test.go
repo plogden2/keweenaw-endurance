@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -145,6 +146,63 @@ func TestRFIDService_MultiTagAssociationCRUD(t *testing.T) {
 	}
 	require.NotNil(t, multi)
 	assert.ElementsMatch(t, []string{"TAG-A", "TAG-B"}, multi.TagUIDs)
+}
+
+func TestRFIDService_WriteTag_ReusesLegacyRFIDTagUID(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+
+	const legacyUID = "550e8400-e29b-41d4-a716-446655440099"
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "19", FirstName: "Legacy", LastName: "Column",
+		RFIDTagUID: legacyUID,
+	})
+	require.NoError(t, err)
+
+	mock := rfid.NewMockReader()
+	svc := NewRFIDService(db, mock)
+
+	updated, err := svc.WriteTag(participant.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, legacyUID, updated.RFIDTagUID)
+	assert.Equal(t, []string{legacyUID}, updated.TagUIDs)
+
+	uid, err := mock.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, strings.ToLower(legacyUID), uid)
+}
+
+func TestRFIDService_WriteTag_RetriesSameLogicalAfterWriteFailure(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "20", FirstName: "Retry", LastName: "Write",
+	})
+	require.NoError(t, err)
+
+	mock := rfid.NewMockReader()
+	svc := NewRFIDService(db, mock)
+
+	mock.WriteErr = errors.New("hardware write failed")
+	_, err = svc.WriteTag(participant.ID.UUID())
+	require.Error(t, err)
+
+	afterFail, err := partSvc.GetParticipant(participant.ID.UUID())
+	require.NoError(t, err)
+	require.NotEmpty(t, afterFail.RFIDTagUID)
+	firstLogical := afterFail.RFIDTagUID
+
+	mock.WriteErr = nil
+	written, err := svc.WriteTag(participant.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, firstLogical, written.RFIDTagUID)
+
+	uid, err := mock.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, strings.ToLower(firstLogical), uid)
 }
 
 func TestRFIDService_WriteTag_HardwareUnavailable(t *testing.T) {
