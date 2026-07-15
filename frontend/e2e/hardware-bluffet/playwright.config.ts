@@ -1,6 +1,13 @@
 import { defineConfig, devices } from '@playwright/test'
 import path from 'node:path'
 
+// `BLUFFET_HW_ARTIFACT_DIR` must be set BEFORE this config loads (env vars set
+// from inside the spec, e.g. in a `test.beforeAll`, are too late for Node's
+// module evaluation). `npm run test:e2e:bluffet-hardware` goes through
+// `scripts/run-bluffet-hardware.mjs`, which creates the run dir and exports
+// this var before spawning Playwright — the spec's `createRunDir` then reuses
+// the same dir/runId instead of inventing a second one. Falls back to
+// `current/` only for ad-hoc `npx playwright test` invocations.
 const artifactDir =
   process.env.BLUFFET_HW_ARTIFACT_DIR ??
   path.join('..', '..', 'e2e-artifacts', 'bluffet-hardware', 'current')

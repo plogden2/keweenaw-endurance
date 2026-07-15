@@ -25,12 +25,24 @@ export type RunStatus = {
   healthy: boolean
 }
 
+/**
+ * Creates (or reuses) the artifact directory for a run.
+ *
+ * `BLUFFET_HW_ARTIFACT_DIR`, if already set, wins — the
+ * `scripts/run-bluffet-hardware.mjs` runner creates the run dir and exports
+ * this env var *before* spawning Playwright so `playwright.config.ts` (which
+ * reads it at module-load time for the JSON reporter's `outputFile`) and this
+ * function agree on one runId/dir instead of each inventing their own.
+ */
 export function createRunDir(root = path.join(process.cwd(), '..', '..', 'e2e-artifacts', 'bluffet-hardware')) {
-  const runId = new Date().toISOString().replace(/[:.]/g, '-')
-  const dir = path.join(root, runId)
+  const existingDir = process.env.BLUFFET_HW_ARTIFACT_DIR
+  const dir = existingDir || path.join(root, new Date().toISOString().replace(/[:.]/g, '-'))
+  const runId = path.basename(dir)
   fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(path.join(dir, 'issues.jsonl'), '')
-  fs.writeFileSync(path.join(dir, 'issues.md'), '# Issues\n\n')
+  const issuesJsonl = path.join(dir, 'issues.jsonl')
+  const issuesMd = path.join(dir, 'issues.md')
+  if (!fs.existsSync(issuesJsonl)) fs.writeFileSync(issuesJsonl, '')
+  if (!fs.existsSync(issuesMd)) fs.writeFileSync(issuesMd, '# Issues\n\n')
   return { runId, dir }
 }
 

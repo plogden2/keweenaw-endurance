@@ -17,12 +17,19 @@ import { fileURLToPath } from 'node:url'
 import { API_BASE, BLUFFET, armFinishStation, getBluffetEvent, pinLogin, pinToken } from '../fixtures/rfid'
 import { appendIssue, createRunDir, writeStatus, type Issue, type IssueSeverity, type RunStatus } from './lib/artifacts'
 import { sampleLapDelayMs, sleep } from './lib/clock'
-import { dueRacers, initLapState, removeRacer, scheduleNext, type LapState } from './lib/lapEngine'
+import { addRacersToLapState, dueRacers, initLapState, removeRacer, scheduleNext, type LapState } from './lib/lapEngine'
 import { programRacerAndAwaitLap } from './lib/proxmark'
 import { loadSeededRacers, pickDnfs, pickNoShows, type Racer } from './lib/roster'
 import { addLateSignup, finishCheckpointId, firstCategoryId, setCompressedStartTimes } from './lib/setup'
 import { crashAndReopenReader, endApiOutage, startApiOutage, type VideoContext } from './lib/chaos'
-import { awaitCatchUp, churnOnce, pickFriends, snapshotVisibleLaps, type Spectator } from './lib/spectators'
+import {
+  awaitCatchUp,
+  churnOnce,
+  pickFriends,
+  serverLapsTotal,
+  snapshotVisibleLaps,
+  type Spectator,
+} from './lib/spectators'
 
 // REPO_ROOT resolved from this file's own path — NOT process.cwd(), which
 // depends on where `npm run test:e2e:bluffet-hardware` happens to be invoked
@@ -42,6 +49,7 @@ const DNF_WINDOW_START_MS = 3 * 60_000
 const DNF_WINDOW_END_MS = 18 * 60_000
 const DNF_COUNT = 10
 const READER_CRASH_OFFSET_MS = 12 * 60_000
+const KIDS_START_OFFSET_MS = 20 * 60_000
 const OUTAGE_START_OFFSET_MS = 14 * 60_000
 const OUTAGE_DURATION_MS = 5 * 60_000
 const RACE_END_OFFSET_MS = 30 * 60_000
@@ -244,8 +252,15 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
         )
       }
 
+      // 9 no-shows are picked from the FULL seeded field (all 3 races) — a
+      // kids racer can be a no-show same as a 30/15-minute racer. Only the
+      // survivors are split by race: the 30/15-minute rotation starts at
+      // T+0, but kids racers are held out of `lapState` until their own
+      // start_time arrives at T+20 (see the T+20 gate in the main loop).
       const noShowIds = pickNoShows(racers, 9)
       const activeRacers: Racer[] = racers.filter((r) => !noShowIds.has(r.id))
+      const nonKidsActiveRacers = activeRacers.filter((r) => r.raceId !== BLUFFET.races.kids.id)
+      const kidsActiveRacers = activeRacers.filter((r) => r.raceId === BLUFFET.races.kids.id)
       const racerById = new Map<string, Racer>(racers.map((r) => [r.id, r]))
 
       // Spectators: 5 "friends" each, laptop from the 12h field, iphone from the
@@ -333,7 +348,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
       // ---------------------------------------------------------------
       // Pre-race: verify the write-tag path once, then 2 last-minute signups.
       // ---------------------------------------------------------------
-      const probe = activeRacers[0]
+      const probe = nonKidsActiveRacers[0]
       if (probe) {
         try {
           await programRacerAndAwaitLap({
@@ -377,6 +392,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
           logicalTagUuid: '',
         }
         activeRacers.push(racer)
+        nonKidsActiveRacers.push(racer)
         racerById.set(racer.id, racer)
       } catch (err) {
         await issue('critical', 'Late signup #1 failed', String(err))
@@ -397,6 +413,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
           logicalTagUuid: '',
         }
         activeRacers.push(racer)
+        nonKidsActiveRacers.push(racer)
         racerById.set(racer.id, racer)
       } catch (err) {
         await issue('critical', 'Late signup #2 failed', String(err))
@@ -410,9 +427,15 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
       writeStatusNow()
 
       const readerVideoPaths: string[] = []
-      let lapState: LapState = initLapState(activeRacers.map((r) => r.id), Date.now())
+      // Only the 30/15-minute rotation starts at T+0. Kids join at T+20 (see
+      // the KIDS_START_OFFSET_MS gate below) via addRacersToLapState, which
+      // preserves `scored` and existing nextDue entries instead of
+      // re-initializing the whole map.
+      let lapState: LapState = initLapState(nonKidsActiveRacers.map((r) => r.id), Date.now())
 
-      const dnfIds = [...pickDnfs(activeRacers.map((r) => r.id), DNF_COUNT)]
+      // DNFs are drawn from the 30/15-minute field only — the entire DNF
+      // window (T+3:00 → T+18:00) elapses before the kids race even starts.
+      const dnfIds = [...pickDnfs(nonKidsActiveRacers.map((r) => r.id), DNF_COUNT)]
       const dnfWindowMs = DNF_WINDOW_END_MS - DNF_WINDOW_START_MS
       const dnfSchedule = dnfIds.map((id, i) => ({
         id,
@@ -420,6 +443,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
       }))
 
       let signup3Done = false
+      let kidsStarted = false
       let crashDone = false
       let outageStarted = false
       let outageEnded = false
@@ -472,11 +496,25 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
               logicalTagUuid: '',
             }
             activeRacers.push(racer)
+            nonKidsActiveRacers.push(racer)
             racerById.set(racer.id, racer)
             lapState.nextDue.set(racer.id, Date.now() + sampleLapDelayMs())
           } catch (err) {
             await issue('critical', 'Late signup #3 (T+2:00) failed', String(err))
           }
+        }
+
+        // --- T+20: kids race start_time arrives — join its field into rotation ---
+        // (No kids late signups exist in this timeline; if one is ever added,
+        // it must be held back the same way until this flag flips.)
+        if (!kidsStarted && now >= tZero.getTime() + KIDS_START_OFFSET_MS) {
+          kidsStarted = true
+          addRacersToLapState(lapState, kidsActiveRacers.map((r) => r.id), now)
+          await issue(
+            'idea',
+            'Kids race joined lap rotation at T+20',
+            `${kidsActiveRacers.length} kids racers added to the active lap rotation.`,
+          )
         }
 
         // --- DNF drip: ~10 racers drop out of rotation across the mid-race window ---
@@ -546,6 +584,13 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
         await sleep(TICK_MS)
       }
 
+      /** Always-online ground truth across every race currently in play (kids counts as 0 laps before T+20). */
+      async function totalScoredLaps(): Promise<number> {
+        const raceIds = [BLUFFET.races.twelveHour.id, BLUFFET.races.sixHour.id, BLUFFET.races.kids.id]
+        const totals = await Promise.all(raceIds.map((id) => serverLapsTotal(request, id).catch(() => 0)))
+        return totals.reduce((a, b) => a + b, 0)
+      }
+
       async function performReaderCrash() {
         state.chaos.readerDown = true
         writeStatusNow()
@@ -554,6 +599,8 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
           'Reader crash chaos triggered',
           'Closing the reader browser context mid-race to simulate a hard crash; reopening with a fresh context.',
         )
+
+        const preCrashLaps = await totalScoredLaps().catch(() => -1)
 
         const manualPicks = activeRacers.filter((r) => lapState.nextDue.has(r.id) && r.bib).slice(0, 2)
         const oldSegmentPath = await closeAndCollectVideoPath(reader)
@@ -565,6 +612,29 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
           await issue('critical', 'Reader failed to reopen after crash', String(err))
           state.chaos.readerDown = false
           return
+        }
+
+        // Assert no committed lap data was lost across the close/reopen —
+        // BEFORE manual entry adds any recovery laps, so this only measures
+        // whether the crash itself dropped previously-scored history.
+        if (preCrashLaps >= 0) {
+          const postReopenLaps = await totalScoredLaps().catch(() => preCrashLaps)
+          if (postReopenLaps < preCrashLaps) {
+            await issue(
+              'critical',
+              'Lap data lost across reader crash/reopen',
+              `Server-side scored lap total dropped from ${preCrashLaps} (pre-crash) to ${postReopenLaps} ` +
+                '(post-reopen) — previously committed laps disappeared. Manual-entry recovery laps have not ' +
+                'been added yet at this point, so this is not explained by the recovery step itself.',
+              { screenshot: await screenshotFor('reader-crash-lap-loss', reader.page) },
+            )
+          }
+        } else {
+          await issue(
+            'minor',
+            'Could not verify lap-loss across reader crash',
+            'Pre-crash server lap total could not be fetched, so post-reopen comparison was skipped.',
+          )
         }
 
         for (const r of manualPicks) {
