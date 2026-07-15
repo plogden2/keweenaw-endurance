@@ -2,6 +2,8 @@ package rfid
 
 import (
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -11,45 +13,102 @@ import (
 
 // TestHardwareProxmark3Smoke exercises a real Proxmark3 CLI read/write round-trip.
 //
-// Skipped unless RFID_HARDWARE=true (never required in CI). Attach a blank NTAG/MIFARE
-// Ultralight tag on the reader before running.
+// Skipped unless RFID_HARDWARE=true (never required in CI). Place an NTAG /
+// MIFARE Ultralight (ISO14443-A) tag on the HF antenna before running.
 //
-// Full manual acceptance (stack + UI):
-//  1. Place tag on reader
-//  2. PIN auth → POST /api/rfid/write-tag {"participant_id":"<seeded racer id>"}
-//  3. Confirm Poll / live WebSocket delivers that racer's logical UUID
-//  4. Confirm lap or test-read popup in the SPA
+// Windows (this machine):
 //
-// Run from backend/:
+//	$env:RFID_HARDWARE="true"
+//	$env:PROXMARK3_CLI="C:\Users\gener\sdk\ProxSpace\pm3\proxmark3\client\proxmark3.exe"
+//	$env:PROXMARK3_PORT="COM3"
+//	$env:PATH="C:\Users\gener\sdk\ProxSpace\msys2\mingw64\bin;$env:PATH"
+//	go test ./internal/rfid -run 'TestHardware' -count=1 -v
 //
-//	RFID_HARDWARE=true go test ./internal/rfid -run TestHardwareProxmark3Smoke -v
-//
-// Optional: PROXMARK3_CLI, PROXMARK3_PORT, PROXMARK3_SMOKE_UUID (defaults to a test UUID).
-func TestHardwareProxmark3Smoke(t *testing.T) {
-	if !envBool("RFID_HARDWARE") {
-		t.Skip("skipping hardware smoke: set RFID_HARDWARE=true with Proxmark3 attached")
+// Or use scripts/pm3.cmd from the repo root for manual CLI checks.
+func TestHardwareProxmark3DetectTag(t *testing.T) {
+	reader := requireHardwareReader(t)
+
+	present, stdout, err := reader.DetectISO14443A()
+	require.NoError(t, err, "hf 14a reader failed; stdout:\n%s", stdout)
+	if !present {
+		t.Fatalf("no ISO14443-A tag detected on the HF antenna.\n"+
+			"Place an NTAG213/215/216 or MIFARE Ultralight on the Proxmark HF coil and re-run.\n"+
+			"CLI output:\n%s", stdout)
 	}
+	t.Logf("tag present:\n%s", stdout)
+}
+
+func TestHardwareProxmark3Smoke(t *testing.T) {
+	reader := requireHardwareReader(t)
+
+	present, stdout, err := reader.DetectISO14443A()
+	require.NoError(t, err, "detect failed; stdout:\n%s", stdout)
+	require.True(t, present, "no ISO14443-A tag on antenna; stdout:\n%s", stdout)
 
 	logicalUUID := strings.TrimSpace(os.Getenv("PROXMARK3_SMOKE_UUID"))
 	if logicalUUID == "" {
 		logicalUUID = "550e8400-e29b-41d4-a716-446655440099"
 	}
 
-	cliPath := os.Getenv("PROXMARK3_CLI")
-	if cliPath == "" {
-		cliPath = "pm3"
-	}
-
-	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
-		CLIPath: cliPath,
-		Port:    os.Getenv("PROXMARK3_PORT"),
-		Enabled: true,
-	})
-	require.True(t, reader.IsAvailable(), "CLI Proxmark reader must be enabled")
-
 	require.NoError(t, reader.WriteLogicalUUID(logicalUUID), "write logical UUID to tag on reader")
 
 	got, err := reader.Poll()
 	require.NoError(t, err, "poll user memory from tag on reader")
 	assert.Equal(t, strings.ToLower(logicalUUID), strings.ToLower(got))
+}
+
+func TestHardwareProxmark3RewriteSameUUID(t *testing.T) {
+	reader := requireHardwareReader(t)
+
+	present, stdout, err := reader.DetectISO14443A()
+	require.NoError(t, err, "detect failed; stdout:\n%s", stdout)
+	require.True(t, present, "no ISO14443-A tag on antenna; stdout:\n%s", stdout)
+
+	logicalUUID := "1441674d-a011-471a-a601-722b88b117f5"
+	require.NoError(t, reader.WriteLogicalUUID(logicalUUID))
+	got1, err := reader.Poll()
+	require.NoError(t, err)
+	require.Equal(t, logicalUUID, strings.ToLower(got1))
+
+	// Replacement-tag model: re-program the same logical UUID onto the chip.
+	require.NoError(t, reader.WriteLogicalUUID(logicalUUID))
+	got2, err := reader.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, logicalUUID, strings.ToLower(got2))
+}
+
+func requireHardwareReader(t *testing.T) *CLIProxmarkReader {
+	t.Helper()
+	if !envBool("RFID_HARDWARE") {
+		t.Skip("skipping hardware test: set RFID_HARDWARE=true with Proxmark3 + HF tag attached")
+	}
+
+	cliPath := os.Getenv("PROXMARK3_CLI")
+	if cliPath == "" {
+		cliPath = "pm3"
+	}
+	port := os.Getenv("PROXMARK3_PORT")
+	if port == "" && runtime.GOOS == "windows" {
+		port = "COM3"
+	}
+
+	// Ensure mingw DLLs resolve when using a ProxSpace-built Windows client.
+	if runtime.GOOS == "windows" {
+		if mingw := os.Getenv("PROXMARK3_MINGW_BIN"); mingw != "" {
+			os.Setenv("PATH", mingw+string(os.PathListSeparator)+os.Getenv("PATH"))
+		} else if strings.Contains(strings.ToLower(cliPath), "proxspace") {
+			candidate := filepath.Clean(filepath.Join(filepath.Dir(cliPath), "..", "..", "..", "msys2", "mingw64", "bin"))
+			if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+				os.Setenv("PATH", candidate+string(os.PathListSeparator)+os.Getenv("PATH"))
+			}
+		}
+	}
+
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		CLIPath: cliPath,
+		Port:    port,
+		Enabled: true,
+	})
+	require.True(t, reader.IsAvailable(), "CLI Proxmark reader must be enabled")
+	return reader
 }

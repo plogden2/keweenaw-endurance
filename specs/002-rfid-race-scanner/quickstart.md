@@ -154,10 +154,23 @@ Replacement tag: program the **same** racer again — logical UUID is rewritten 
 
 ```bash
 cd backend
-RFID_HARDWARE=true go test ./internal/rfid -run TestHardwareProxmark3Smoke -v
+RFID_HARDWARE=true go test ./internal/rfid -run TestHardware -v
 ```
 
-Skipped when `RFID_HARDWARE` is unset/false. Optional: `PROXMARK3_SMOKE_UUID` for the round-trip UUID.
+**Windows (native COM, this lab setup):** Proxmark on COM3; ProxSpace-built client:
+
+```powershell
+$env:RFID_HARDWARE = "true"
+$env:PROXMARK3_CLI = "C:\Users\gener\sdk\ProxSpace\pm3\proxmark3\client\proxmark3.exe"
+$env:PROXMARK3_PORT = "COM3"
+$env:PROXMARK3_MINGW_BIN = "C:\Users\gener\sdk\ProxSpace\msys2\mingw64\bin"
+cd backend
+go test ./internal/rfid -run TestHardware -count=1 -v
+```
+
+Manual CLI: `.\scripts\pm3.cmd -c "hf 14a reader"` then `hf mfu info`. Logical UUID I/O uses Ultralight **pages 4–7** (`hf mfu wrbl/rdbl -b 4..7`).
+
+Skipped when `RFID_HARDWARE` is unset/false. Optional: `PROXMARK3_SMOKE_UUID` for the round-trip UUID. Requires an **ISO14443-A** NTAG/Ultralight on the HF coil (LF tags will not pass).
 
 ### Coverage exclusion (FR-029)
 
