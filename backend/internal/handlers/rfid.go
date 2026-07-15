@@ -28,6 +28,8 @@ func (h *Handlers) WriteRFIDTag(c *gin.Context) {
 
 	participant, err := h.services.RFID.WriteTag(participantID)
 	if err != nil {
+		// Surface hardware/CLI detail in logs — respondServiceError masks 500 bodies.
+		c.Error(err)
 		respondServiceError(c, err)
 		return
 	}

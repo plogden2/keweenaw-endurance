@@ -3,9 +3,13 @@ package rfid
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,11 +35,14 @@ type CLIProxmarkConfig struct {
 }
 
 // CLIProxmarkReader reads and writes logical UUIDs via the Proxmark3 CLI.
+// A mutex serializes all CLI invocations so Poll and WriteTag cannot race on
+// the serial port (each pm3 process needs exclusive COM access).
 type CLIProxmarkReader struct {
 	cliPath string
 	port    string
 	enabled bool
 	runner  CLICommandRunner
+	mu      sync.Mutex
 }
 
 func NewCLIProxmarkReader(cfg CLIProxmarkConfig) *CLIProxmarkReader {
@@ -56,6 +63,7 @@ func NewCLIProxmarkReader(cfg CLIProxmarkConfig) *CLIProxmarkReader {
 }
 
 func defaultCLICommandRunner(cliPath, port string) CLICommandRunner {
+	mingwBin := proxmarkMingwBin(cliPath)
 	return func(command string) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), proxmarkCLIExecTimeout)
 		defer cancel()
@@ -67,6 +75,9 @@ func defaultCLICommandRunner(cliPath, port string) CLICommandRunner {
 		args = append(args, "-f", "--incognito", "-c", command)
 
 		cmd := exec.CommandContext(ctx, cliPath, args...)
+		if mingwBin != "" {
+			cmd.Env = withPrependedPath(os.Environ(), mingwBin)
+		}
 		out, err := cmd.CombinedOutput()
 		if ctx.Err() == context.DeadlineExceeded {
 			return string(out), fmt.Errorf("proxmark3 cli %q: timed out after %s", command, proxmarkCLIExecTimeout)
@@ -76,6 +87,43 @@ func defaultCLICommandRunner(cliPath, port string) CLICommandRunner {
 		}
 		return string(out), nil
 	}
+}
+
+// proxmarkMingwBin returns the mingw64 bin dir needed for ProxSpace-built
+// Windows clients to resolve DLLs when spawned from Go.
+func proxmarkMingwBin(cliPath string) string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	if mingw := os.Getenv("PROXMARK3_MINGW_BIN"); mingw != "" {
+		return mingw
+	}
+	if !strings.Contains(strings.ToLower(cliPath), "proxspace") {
+		return ""
+	}
+	candidate := filepath.Clean(filepath.Join(filepath.Dir(cliPath), "..", "..", "..", "msys2", "mingw64", "bin"))
+	if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+		return candidate
+	}
+	return ""
+}
+
+func withPrependedPath(environ []string, dir string) []string {
+	newPath := dir + string(os.PathListSeparator) + os.Getenv("PATH")
+	out := make([]string, 0, len(environ)+1)
+	replaced := false
+	for _, e := range environ {
+		if strings.HasPrefix(strings.ToUpper(e), "PATH=") {
+			out = append(out, "PATH="+newPath)
+			replaced = true
+			continue
+		}
+		out = append(out, e)
+	}
+	if !replaced {
+		out = append(out, "PATH="+newPath)
+	}
+	return out
 }
 
 func (r *CLIProxmarkReader) IsAvailable() bool {
@@ -90,6 +138,8 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 	if err != nil {
 		return err
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	// Ultralight/NTAG pages are 4 bytes. A 16-byte "compatibility write" only
 	// commits the first 4 bytes on these cards — write four pages explicitly.
 	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
@@ -108,6 +158,8 @@ func (r *CLIProxmarkReader) Poll() (string, error) {
 	if !r.IsAvailable() {
 		return "", ErrHardwareUnavailable
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	raw := make([]byte, 0, 16)
 	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
 		page := proxmarkUserMemoryStartPage + i
@@ -140,6 +192,8 @@ func (r *CLIProxmarkReader) DetectISO14443A() (present bool, stdout string, err 
 	if !r.IsAvailable() {
 		return false, "", ErrHardwareUnavailable
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	stdout, runErr := r.runner("hf 14a reader")
 	lower := strings.ToLower(stdout)
 	// Require "uid:" (with colon) — bare "uid" false-positives on paths containing "uuid".
