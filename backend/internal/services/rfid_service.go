@@ -171,13 +171,12 @@ func (s *RFIDService) WriteTag(participantID uuid.UUID, tagUID string) (*models.
 	}
 
 	partSvc := NewParticipantService(s.db)
-	participant, err := partSvc.GetParticipant(participantID)
-	if err != nil {
+	if _, err := partSvc.GetParticipant(participantID); err != nil {
 		return nil, err
 	}
 
 	device := rfid.NewProxmark3(s.reader)
-	if err := device.WriteTag(tagUID, participant.ID.Short()); err != nil {
+	if err := device.WriteLogicalUUID(tagUID); err != nil {
 		return nil, err
 	}
 

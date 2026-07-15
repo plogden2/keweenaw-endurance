@@ -7,6 +7,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMockReader_WriteLogicalUUIDAndPoll(t *testing.T) {
+	m := NewMockReader()
+	const logicalUUID = "550e8400-e29b-41d4-a716-446655440001"
+
+	require.NoError(t, m.WriteLogicalUUID(logicalUUID))
+
+	uid, err := m.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, logicalUUID, uid)
+}
+
+func TestMockReader_WriteLogicalUUIDRejectsNonUUID(t *testing.T) {
+	m := NewMockReader()
+	err := m.WriteLogicalUUID("NEW-TAG-001")
+	require.Error(t, err)
+
+	uid, pollErr := m.Poll()
+	require.NoError(t, pollErr)
+	assert.Empty(t, uid)
+}
+
 func TestMockReader_PollEmpty(t *testing.T) {
 	m := NewMockReader()
 	uid, err := m.Poll()
@@ -21,11 +42,11 @@ func TestMockReader_PushUIDAndPoll(t *testing.T) {
 
 	uid, err := m.Poll()
 	require.NoError(t, err)
-	assert.Equal(t, "TAG-A", uid)
+	assert.Equal(t, "tag-a", uid)
 
 	uid, err = m.Poll()
 	require.NoError(t, err)
-	assert.Equal(t, "TAG-B", uid)
+	assert.Equal(t, "tag-b", uid)
 
 	uid, err = m.Poll()
 	require.NoError(t, err)
@@ -48,7 +69,7 @@ func TestProxmark3_PollDelegates(t *testing.T) {
 
 	uid, err := pm.Poll()
 	require.NoError(t, err)
-	assert.Equal(t, "HW-1", uid)
+	assert.Equal(t, "hw-1", uid)
 	assert.True(t, pm.IsAvailable())
 }
 

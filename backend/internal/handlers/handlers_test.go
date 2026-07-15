@@ -675,9 +675,10 @@ func TestRFIDHandlers_WriteTag(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	const tagUUID = "550e8400-e29b-41d4-a716-446655440003"
 	body := map[string]string{
 		"participant_id": participant.ID.Short(),
-		"tag_uid":        "NEW-HW-TAG",
+		"tag_uid":        tagUUID,
 	}
 	payload, _ := json.Marshal(body)
 
@@ -690,7 +691,7 @@ func TestRFIDHandlers_WriteTag(t *testing.T) {
 
 	var updated models.Participant
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updated))
-	assert.Equal(t, "NEW-HW-TAG", updated.RFIDTagUID)
+	assert.Equal(t, tagUUID, updated.RFIDTagUID)
 }
 
 func TestAuthHandlers_ExchangePIN(t *testing.T) {

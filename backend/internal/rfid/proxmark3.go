@@ -3,15 +3,19 @@ package rfid
 import (
 	"errors"
 	"os"
+	"strings"
 	"sync"
 )
 
 var ErrHardwareUnavailable = errors.New("rfid hardware unavailable")
 
 // Reader abstracts Proxmark3 (or compatible) RFID hardware.
+// Identity is always a logical UUID stored in user memory — never the silicon UID.
 type Reader interface {
-	WriteTag(tagUID, participantID string) error
-	Poll() (tagUID string, err error)
+	// WriteLogicalUUID programs the chip currently on the antenna with the racer's logical UUID.
+	WriteLogicalUUID(logicalUUID string) error
+	// Poll reads user memory and returns the logical UUID, or "" if no tag / empty.
+	Poll() (logicalUUID string, err error)
 	IsAvailable() bool
 }
 
@@ -24,11 +28,11 @@ func NewProxmark3(reader Reader) *Proxmark3 {
 	return &Proxmark3{reader: reader}
 }
 
-func (p *Proxmark3) WriteTag(tagUID, participantID string) error {
+func (p *Proxmark3) WriteLogicalUUID(logicalUUID string) error {
 	if p == nil || p.reader == nil || !p.reader.IsAvailable() {
 		return ErrHardwareUnavailable
 	}
-	return p.reader.WriteTag(tagUID, participantID)
+	return p.reader.WriteLogicalUUID(logicalUUID)
 }
 
 func (p *Proxmark3) Poll() (string, error) {
@@ -42,43 +46,39 @@ func (p *Proxmark3) IsAvailable() bool {
 	return p != nil && p.reader != nil && p.reader.IsAvailable()
 }
 
-// MockReader records writes and serves scripted UIDs for unit/e2e tests.
+// MockReader simulates a single chip's user memory for CI.
 type MockReader struct {
 	Available bool
 	WriteErr  error
-	LastUID   string
-	LastData  string
-
-	mu   sync.Mutex
-	uids []string
+	mu        sync.Mutex
+	memory    string   // last programmed logical UUID
+	queue     []string // inject/scripted polls (optional override)
 }
 
 func NewMockReader() *MockReader {
 	return &MockReader{Available: true}
 }
 
-func (m *MockReader) WriteTag(tagUID, participantID string) error {
+func (m *MockReader) WriteLogicalUUID(logicalUUID string) error {
 	if !m.Available {
 		return ErrHardwareUnavailable
 	}
 	if m.WriteErr != nil {
 		return m.WriteErr
 	}
-	m.LastUID = tagUID
-	m.LastData = participantID
+	if _, err := EncodeLogicalUUID(logicalUUID); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.memory = strings.ToLower(logicalUUID)
 	return nil
 }
 
-// PushUID enqueues a tag UID for a subsequent Poll.
-func (m *MockReader) PushUID(uid string) {
-	m.Enqueue(uid)
-}
-
-// Enqueue is an alias for PushUID.
-func (m *MockReader) Enqueue(uid string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.uids = append(m.uids, uid)
+// WriteTag is deprecated: use WriteLogicalUUID. Ignores siliconUID.
+func (m *MockReader) WriteTag(siliconUID, logicalUUID string) error {
+	_ = siliconUID
+	return m.WriteLogicalUUID(logicalUUID)
 }
 
 func (m *MockReader) Poll() (string, error) {
@@ -87,12 +87,24 @@ func (m *MockReader) Poll() (string, error) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if len(m.uids) == 0 {
-		return "", nil
+	if len(m.queue) > 0 {
+		uid := m.queue[0]
+		m.queue = m.queue[1:]
+		return uid, nil
 	}
-	uid := m.uids[0]
-	m.uids = m.uids[1:]
-	return uid, nil
+	return m.memory, nil
+}
+
+// PushUID enqueues a logical UUID for a subsequent Poll.
+func (m *MockReader) PushUID(uid string) {
+	m.Enqueue(uid)
+}
+
+// Enqueue injects a scripted poll result ahead of chip memory.
+func (m *MockReader) Enqueue(logicalUUID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.queue = append(m.queue, strings.ToLower(logicalUUID))
 }
 
 func (m *MockReader) IsAvailable() bool {
@@ -102,7 +114,7 @@ func (m *MockReader) IsAvailable() bool {
 // NoOpReader is used when no hardware is connected.
 type NoOpReader struct{}
 
-func (n *NoOpReader) WriteTag(string, string) error {
+func (n *NoOpReader) WriteLogicalUUID(string) error {
 	return ErrHardwareUnavailable
 }
 
