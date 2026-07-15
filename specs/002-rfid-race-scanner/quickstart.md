@@ -49,7 +49,7 @@ python database/seed/generate_bluffet_seed.py
 Get-Content database/seed/03-bluffet-2026.sql | docker compose exec -T postgres psql -U timing_user -d keweenaw_timing
 ```
 
-Expect: **All You Can East Bluffet** (`1441674d-a011-471a-a601-722b88b117f5`), 3 lap races (12h / 6h / 90-min kids), clarified categories, **100** racers with `DEMO-TAG-0001`…`0100`.
+Expect: **All You Can East Bluffet** (`1441674d-a011-471a-a601-722b88b117f5`), 3 lap races (12h / 6h / 90-min kids), clarified categories, **100** racers with deterministic logical RFID UUIDs (`uuid5` per `tag:{race}:{n}` — see `frontend/e2e/fixtures/rfid.ts`).
 
 The generator uses **deterministic UUIDs** (fixed event/race IDs matching `frontend/e2e/fixtures/rfid.ts` `BLUFFET`; child rows via uuid5). Regenerating SQL does not break e2e fixtures.
 
@@ -74,7 +74,7 @@ curl -s -X POST http://localhost:8080/api/auth/pin \
 ```bash
 curl -s -X POST http://localhost:8080/api/rfid/inject \
   -H "Content-Type: application/json" \
-  -d '{"tag_uid":"DEMO-TAG-0001"}'
+  -d '{"tag_uid":"23657b2d-aa08-5fe8-8553-e9e3affb4678"}'
 ```
 
 Expect: popup (name, overall place, laps), sound without on-screen sound label; karaoke button → “recorded” after one click; test-read if race still scheduled.
