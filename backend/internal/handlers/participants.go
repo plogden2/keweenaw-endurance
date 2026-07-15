@@ -273,16 +273,11 @@ func (h *Handlers) PostParticipantTag(c *gin.Context) {
 	}
 
 	var req participantTagRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+	_ = c.ShouldBindJSON(&req) // body optional; default programs logical UUID onto chip
 
-	// Prefer hardware write when available; fall back to association-only for typed UIDs.
-	participant, err := h.services.RFID.WriteTag(participantID, req.TagUID)
-	if err != nil {
-		assoc, assocErr := h.services.RFID.AssociateTag(participantID, req.TagUID)
-		if assocErr != nil {
+	if req.TagUID != "" {
+		assoc, err := h.services.RFID.AssociateTag(participantID, req.TagUID)
+		if err != nil {
 			respondServiceError(c, err)
 			return
 		}
@@ -291,9 +286,15 @@ func (h *Handlers) PostParticipantTag(c *gin.Context) {
 		c.JSON(http.StatusCreated, assoc)
 		return
 	}
+
+	participant, err := h.services.RFID.WriteTag(participantID)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
 	h.refreshLiveCSVForRace(participant.RaceID.UUID())
 	c.JSON(http.StatusCreated, gin.H{
-		"tag_uid":        req.TagUID,
+		"tag_uid":        participant.RFIDTagUID,
 		"participant_id": participant.ID,
 		"tag_uids":       participant.TagUIDs,
 	})

@@ -1,9 +1,11 @@
 package services
 
 import (
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
 	"github.com/stretchr/testify/assert"
@@ -45,15 +47,43 @@ func TestRFIDService_WriteTag(t *testing.T) {
 	mock := rfid.NewMockReader()
 	svc := NewRFIDService(db, mock)
 
-	const tagUUID = "550e8400-e29b-41d4-a716-446655440001"
-	updated, err := svc.WriteTag(participant.ID.UUID(), tagUUID)
+	updated, err := svc.WriteTag(participant.ID.UUID())
 	require.NoError(t, err)
-	assert.Equal(t, tagUUID, updated.RFIDTagUID)
-	assert.Equal(t, []string{tagUUID}, updated.TagUIDs)
+	require.NotEmpty(t, updated.RFIDTagUID)
+	_, parseErr := uuid.Parse(updated.RFIDTagUID)
+	require.NoError(t, parseErr)
+	assert.Equal(t, []string{updated.RFIDTagUID}, updated.TagUIDs)
 
 	uid, err := mock.Poll()
 	require.NoError(t, err)
-	assert.Equal(t, tagUUID, uid)
+	assert.Equal(t, strings.ToLower(updated.RFIDTagUID), uid)
+}
+
+func TestWriteTag_ProgramsLogicalUUIDWithoutSilicon(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+	p, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "99", FirstName: "Logical", LastName: "Write",
+	})
+	require.NoError(t, err)
+
+	mock := rfid.NewMockReader()
+	svc := NewRFIDService(db, mock)
+	logical := uuid.New().String()
+	_, err = svc.AssociateTag(p.ID.UUID(), logical)
+	require.NoError(t, err)
+
+	_, err = svc.WriteTag(p.ID.UUID())
+	require.NoError(t, err)
+
+	got, err := mock.Poll()
+	require.NoError(t, err)
+	require.Equal(t, strings.ToLower(logical), got)
+
+	found, err := svc.LookupParticipantByUID(got)
+	require.NoError(t, err)
+	require.Equal(t, p.ID, found.ID)
 }
 
 func TestRFIDService_MultiTagAssociationCRUD(t *testing.T) {
@@ -131,7 +161,7 @@ func TestRFIDService_WriteTag_HardwareUnavailable(t *testing.T) {
 	mock.Available = false
 	svc := NewRFIDService(db, mock)
 
-	_, err = svc.WriteTag(participant.ID.UUID(), "550e8400-e29b-41d4-a716-446655440002")
+	_, err = svc.WriteTag(participant.ID.UUID())
 	assert.ErrorIs(t, err, ErrHardwareUnavailable)
 }
 

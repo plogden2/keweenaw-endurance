@@ -75,12 +75,6 @@ func (m *MockReader) WriteLogicalUUID(logicalUUID string) error {
 	return nil
 }
 
-// WriteTag is deprecated: use WriteLogicalUUID. Ignores siliconUID.
-func (m *MockReader) WriteTag(siliconUID, logicalUUID string) error {
-	_ = siliconUID
-	return m.WriteLogicalUUID(logicalUUID)
-}
-
 func (m *MockReader) Poll() (string, error) {
 	if !m.Available {
 		return "", ErrHardwareUnavailable

@@ -26,7 +26,7 @@ func (h *Handlers) WriteRFIDTag(c *gin.Context) {
 		return
 	}
 
-	participant, err := h.services.RFID.WriteTag(participantID, req.TagUID)
+	participant, err := h.services.RFID.WriteTag(participantID)
 	if err != nil {
 		respondServiceError(c, err)
 		return

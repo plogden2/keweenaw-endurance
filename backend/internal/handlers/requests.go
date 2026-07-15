@@ -119,11 +119,11 @@ type updateTimingRecordRequest struct {
 
 type writeRFIDTagRequest struct {
 	ParticipantID string `json:"participant_id" binding:"required"`
-	TagUID        string `json:"tag_uid" binding:"required"`
 }
 
 type participantTagRequest struct {
-	TagUID string `json:"tag_uid" binding:"required"`
+	// Optional: associate a UID without hardware write (e.g. typed/demo tags).
+	TagUID string `json:"tag_uid"`
 }
 
 type injectRFIDTagRequest struct {
