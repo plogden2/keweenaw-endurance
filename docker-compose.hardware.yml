@@ -1,0 +1,30 @@
+version: '3.8'
+
+# Hardware overlay — use with the main stack:
+#   docker compose -f docker-compose.yml -f docker-compose.hardware.yml up
+#
+# Selects the real Proxmark3 CLI reader (RFID_HARDWARE=true) and disables mock inject.
+# Set PROXMARK3_CLI (default pm3) and PROXMARK3_PORT when the reader is not auto-detected.
+#
+# USB / serial passthrough (Linux or WSL2 after USBIPD attach):
+#   usbipd list
+#   usbipd bind --busid <BUSID>
+#   usbipd attach --wsl --busid <BUSID>
+# Then uncomment devices/group_add below and set PROXMARK3_PORT=/dev/ttyACM0 (or ttyUSB0).
+#
+# Windows Docker Desktop without WSL2 USBIPD cannot reliably expose COM ports to Linux
+# containers — run the backend natively on the host with RFID_HARDWARE=true, or use WSL2+USBIPD.
+# macOS: same limitation; prefer native backend or mock inject for container demos.
+
+services:
+  backend:
+    environment:
+      - RFID_INJECT=false
+      - RFID_HARDWARE=true
+      - PROXMARK3_ENABLED=true
+      - PROXMARK3_CLI=${PROXMARK3_CLI:-pm3}
+      - PROXMARK3_PORT=${PROXMARK3_PORT:-}
+    # devices:
+    #   - /dev/ttyACM0:/dev/ttyACM0
+    # group_add:
+    #   - dialout
