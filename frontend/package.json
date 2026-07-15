@@ -12,6 +12,7 @@
     "test:ui": "vitest --ui",
     "test:ci": "vue-tsc --noEmit && vitest run --coverage",
     "test:e2e": "playwright test --config=e2e/playwright.config.ts",
+    "test:e2e:bluffet-hardware": "playwright test --config=e2e/hardware-bluffet/playwright.config.ts",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
     "format": "prettier --write src/"
   },
