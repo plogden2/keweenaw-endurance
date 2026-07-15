@@ -20,7 +20,7 @@ import { sampleLapDelayMs, sleep } from './lib/clock'
 import { addRacersToLapState, dueRacers, initLapState, removeRacer, scheduleNext, type LapState } from './lib/lapEngine'
 import { programRacerAndAwaitLap } from './lib/proxmark'
 import { loadSeededRacers, pickDnfs, pickNoShows, type Racer } from './lib/roster'
-import { addLateSignup, finishCheckpointId, firstCategoryId, setCompressedStartTimes } from './lib/setup'
+import { addLateSignup, finishCheckpointId, firstCategoryId, refreshEmptyBibs, setCompressedStartTimes } from './lib/setup'
 import { crashAndReopenReader, endApiOutage, startApiOutage, type VideoContext } from './lib/chaos'
 import {
   awaitCatchUp,
@@ -198,6 +198,36 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
 
     let stopAll = false
     const background: Promise<void>[] = []
+    const readerVideoPaths: string[] = []
+    let reader: ReaderHandle | undefined
+    let laptopCtx: Awaited<ReturnType<typeof browser.newContext>> | undefined
+    let laptopPage: Page | undefined
+    let iphoneCtx: Awaited<ReturnType<typeof browser.newContext>> | undefined
+    let iphonePage: Page | undefined
+    let videosSalvaged = false
+
+    async function salvageVideos() {
+      if (videosSalvaged) return
+      videosSalvaged = true
+      try {
+        if (reader) {
+          const p = await closeAndCollectVideoPath(reader)
+          if (p) readerVideoPaths.push(p)
+          reader = undefined
+        }
+        await finalizeVideoFromPaths('reader', readerVideoPaths)
+        if (laptopCtx && laptopPage) {
+          const p = await closeAndCollectVideoPath({ context: laptopCtx, page: laptopPage })
+          await finalizeVideoFromPaths('spectator-laptop', p ? [p] : [])
+        }
+        if (iphoneCtx && iphonePage) {
+          const p = await closeAndCollectVideoPath({ context: iphoneCtx, page: iphonePage })
+          await finalizeVideoFromPaths('spectator-iphone', p ? [p] : [])
+        }
+      } catch {
+        // best-effort — don't mask the real failure
+      }
+    }
 
     try {
       // ---------------------------------------------------------------
@@ -212,30 +242,31 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
         viewport: VIDEO_SIZE,
         recordVideo: { dir: videoDir, size: VIDEO_SIZE },
       })
-      let reader: ReaderHandle = { context: readerContext, page: await readerContext.newPage() }
-      await reader.page.goto('/pin')
-      await pinLogin(reader.page)
-      await reader.page.goto('/station')
-      await reader.page
+      let readerSeg = { context: readerContext, page: await readerContext.newPage() }
+      reader = readerSeg
+      await readerSeg.page.goto('/pin')
+      await pinLogin(readerSeg.page)
+      await readerSeg.page.goto('/station')
+      await readerSeg.page
         .getByTestId('station-armed-indicator')
         .waitFor({ state: 'visible', timeout: 15_000 })
         .catch(() => {})
-      await reader.page.goto(`/events/${event.id}/live`)
-      await reader.page.getByTestId('live-view').waitFor({ state: 'visible', timeout: 20_000 })
+      await readerSeg.page.goto(`/events/${event.id}/live`)
+      await readerSeg.page.getByTestId('live-view').waitFor({ state: 'visible', timeout: 20_000 })
 
-      const laptopCtx = await browser.newContext({
+      laptopCtx = await browser.newContext({
         viewport: VIDEO_SIZE,
         recordVideo: { dir: videoDir, size: VIDEO_SIZE },
       })
-      const laptopPage = await laptopCtx.newPage()
+      laptopPage = await laptopCtx.newPage()
       await laptopPage.goto(`/events/${event.id}/live`)
       await laptopPage.getByTestId('live-view').waitFor({ state: 'visible', timeout: 20_000 })
 
-      const iphoneCtx = await browser.newContext({
+      iphoneCtx = await browser.newContext({
         ...devices['iPhone 13'],
         recordVideo: { dir: videoDir, size: VIDEO_SIZE },
       })
-      const iphonePage = await iphoneCtx.newPage()
+      iphonePage = await iphoneCtx.newPage()
       await iphonePage.goto(`/events/${event.id}/live`)
       await iphonePage.getByTestId('live-view').waitFor({ state: 'visible', timeout: 20_000 })
 
@@ -300,7 +331,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
       background.push(
         (async () => {
           while (!stopAll) {
-            const page = reader.page
+            const page = reader!.page
             try {
               const roll = Math.random()
               if (roll < 0.55) {
@@ -353,7 +384,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
         try {
           await programRacerAndAwaitLap({
             request,
-            readerPage: reader.page,
+            readerPage: reader!.page,
             participantId: probe.id,
             timeoutMs: 30_000,
             dismissAfter: true,
@@ -369,7 +400,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
             'critical',
             'Pre-race tag-write probe failed',
             String(err),
-            { screenshot: await screenshotFor('pre-race-probe', reader.page) },
+            { screenshot: await screenshotFor('pre-race-probe', reader!.page) },
           )
         }
       }
@@ -426,7 +457,6 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
       state.phase = 'racing'
       writeStatusNow()
 
-      const readerVideoPaths: string[] = []
       // Only the 30/15-minute rotation starts at T+0. Kids join at T+20 (see
       // the KIDS_START_OFFSET_MS gate below) via addRacersToLapState, which
       // preserves `scored` and existing nextDue entries instead of
@@ -460,7 +490,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
           try {
             await programRacerAndAwaitLap({
               request,
-              readerPage: reader.page,
+              readerPage: reader!.page,
               participantId: id,
               timeoutMs: 30_000,
               dismissAfter: true,
@@ -474,7 +504,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
               'critical',
               'Proxmark write-tag/read timeout',
               `bib=${racer?.bib ?? '?'} participant=${id}: ${String(err)}`,
-              { screenshot: await screenshotFor('proxmark-timeout', reader.page) },
+              { screenshot: await screenshotFor('proxmark-timeout', reader!.page) },
             )
           }
         }
@@ -602,8 +632,10 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
 
         const preCrashLaps = await totalScoredLaps().catch(() => -1)
 
-        const manualPicks = activeRacers.filter((r) => lapState.nextDue.has(r.id) && r.bib).slice(0, 2)
-        const oldSegmentPath = await closeAndCollectVideoPath(reader)
+        const inRotation = activeRacers.filter((r) => lapState.nextDue.has(r.id))
+        await refreshEmptyBibs(request, inRotation.filter((r) => !r.bib))
+        const manualPicks = inRotation.filter((r) => r.bib).slice(0, 2)
+        const oldSegmentPath = await closeAndCollectVideoPath(reader!)
         if (oldSegmentPath) readerVideoPaths.push(oldSegmentPath)
 
         try {
@@ -626,7 +658,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
               `Server-side scored lap total dropped from ${preCrashLaps} (pre-crash) to ${postReopenLaps} ` +
                 '(post-reopen) — previously committed laps disappeared. Manual-entry recovery laps have not ' +
                 'been added yet at this point, so this is not explained by the recovery step itself.',
-              { screenshot: await screenshotFor('reader-crash-lap-loss', reader.page) },
+              { screenshot: await screenshotFor('reader-crash-lap-loss', reader!.page) },
             )
           }
         } else {
@@ -681,23 +713,26 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
       stopAll = true
       await Promise.allSettled(background)
 
-      const finalReaderPath = await closeAndCollectVideoPath(reader)
-      if (finalReaderPath) readerVideoPaths.push(finalReaderPath)
-      await finalizeVideoFromPaths('reader', readerVideoPaths)
-
-      const laptopPath = await closeAndCollectVideoPath({ context: laptopCtx, page: laptopPage })
-      await finalizeVideoFromPaths('spectator-laptop', laptopPath ? [laptopPath] : [])
-
-      const iphonePath = await closeAndCollectVideoPath({ context: iphoneCtx, page: iphonePage })
-      await finalizeVideoFromPaths('spectator-iphone', iphonePath ? [iphonePath] : [])
-
-      state.phase = 'done'
+      state.phase = state.criticalCount > 0 ? 'failed' : 'done'
       writeStatusNow()
+
+      if (state.criticalCount > 0) {
+        throw new Error(
+          `Dress rehearsal recorded ${state.criticalCount} critical issue(s) — see ${path.join(runDir, 'issues.md')}`,
+        )
+      }
     } catch (err) {
-      await issue('critical', 'Orchestrator crashed', String(err))
       stopAll = true
       await Promise.allSettled(background)
+      const msg = String(err)
+      if (!msg.includes('critical issue')) {
+        await issue('critical', 'Orchestrator crashed', msg)
+        state.phase = 'failed'
+        writeStatusNow()
+      }
       throw err
+    } finally {
+      await salvageVideos()
     }
   })
 })

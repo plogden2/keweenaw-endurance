@@ -1,5 +1,6 @@
 import type { APIRequestContext } from '@playwright/test'
 import { API_BASE, BLUFFET, pinToken } from '../../fixtures/rfid'
+import type { Racer } from './roster'
 
 /**
  * Overwrite the shared 30/15-minute start time to now+2m; kids (5-minute) race
@@ -90,4 +91,42 @@ export async function addLateSignup(
   if (!res.ok()) throw new Error(`late signup: ${res.status()} ${await res.text()}`)
   const p = await res.json()
   return { id: p.id, raceId, firstName: name.first, lastName: name.last }
+}
+
+/**
+ * Late signups are created with `bib: ''` locally; the API assigns a bib
+ * asynchronously. Before manual-entry recovery (which needs bib_number),
+ * fetch each race's participant list and fill in any missing bibs by id.
+ */
+export async function refreshEmptyBibs(request: APIRequestContext, racers: Racer[]): Promise<void> {
+  const needsBib = racers.filter((r) => !r.bib)
+  if (needsBib.length === 0) return
+
+  const token = await pinToken(request)
+  const byRace = new Map<string, Racer[]>()
+  for (const r of needsBib) {
+    const list = byRace.get(r.raceId) ?? []
+    list.push(r)
+    byRace.set(r.raceId, list)
+  }
+
+  for (const [raceId, raceRacers] of byRace) {
+    const res = await request.get(`${API_BASE}/api/races/${raceId}/participants`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok()) continue
+    const body = await res.json()
+    const rows = body.data ?? body
+    if (!Array.isArray(rows)) continue
+    const bibById = new Map(
+      rows.map((p: { id: string; bib_number?: string; bibNumber?: string }) => [
+        p.id,
+        String(p.bib_number ?? p.bibNumber ?? ''),
+      ]),
+    )
+    for (const racer of raceRacers) {
+      const bib = bibById.get(racer.id)
+      if (bib) racer.bib = bib
+    }
+  }
 }
