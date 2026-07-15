@@ -1,10 +1,12 @@
 package rfid
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Proxmark3 CLI commands for NTAG/MIFARE Ultralight user-memory block 4.
@@ -12,6 +14,7 @@ import (
 const (
 	proxmarkReadUserBlockCmd  = "hf mfu rdbl --blk 4"
 	proxmarkWriteUserBlockFmt = "hf mfu wrbl --blk 4 -d %s"
+	proxmarkCLIExecTimeout    = 10 * time.Second
 )
 
 // CLICommandRunner executes the Proxmark3 CLI with the given pm3 subcommand string.
@@ -53,14 +56,20 @@ func NewCLIProxmarkReader(cfg CLIProxmarkConfig) *CLIProxmarkReader {
 
 func defaultCLICommandRunner(cliPath, port string) CLICommandRunner {
 	return func(command string) (string, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), proxmarkCLIExecTimeout)
+		defer cancel()
+
 		args := []string{}
 		if port != "" {
 			args = append(args, "-p", port)
 		}
 		args = append(args, "-c", command)
 
-		cmd := exec.Command(cliPath, args...)
+		cmd := exec.CommandContext(ctx, cliPath, args...)
 		out, err := cmd.CombinedOutput()
+		if ctx.Err() == context.DeadlineExceeded {
+			return string(out), fmt.Errorf("proxmark3 cli %q: timed out after %s", command, proxmarkCLIExecTimeout)
+		}
 		if err != nil {
 			return string(out), fmt.Errorf("proxmark3 cli %q: %w: %s", command, err, strings.TrimSpace(string(out)))
 		}

@@ -83,6 +83,19 @@ func TestCLIProxmarkReader_WriteUnavailable(t *testing.T) {
 	assert.ErrorIs(t, err, ErrHardwareUnavailable)
 }
 
+func TestCLIProxmarkReader_WriteRejectsInvalidUUID(t *testing.T) {
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Runner: func(command string) (string, error) {
+			t.Fatal("runner must not be invoked for invalid UUID")
+			return "", nil
+		},
+	})
+
+	err := reader.WriteLogicalUUID("DEMO-TAG-0001")
+	require.Error(t, err)
+}
+
 func TestCLIProxmarkReader_PollRunnerError(t *testing.T) {
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,

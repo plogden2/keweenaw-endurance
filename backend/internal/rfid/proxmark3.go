@@ -126,7 +126,7 @@ func DefaultReader() Reader {
 	if os.Getenv("GO_ENV") == "test" {
 		return NewMockReader()
 	}
-	if hw := os.Getenv("RFID_HARDWARE"); hw == "1" || strings.EqualFold(hw, "true") {
+	if envBool("RFID_HARDWARE") {
 		cli := os.Getenv("PROXMARK3_CLI")
 		if cli == "" {
 			cli = "pm3"
