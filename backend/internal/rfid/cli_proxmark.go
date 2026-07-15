@@ -140,16 +140,19 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// Ultralight/NTAG pages are 4 bytes. A 16-byte "compatibility write" only
-	// commits the first 4 bytes on these cards — write four pages explicitly.
+	// One pm3 process for all four pages — each spawn is expensive on Windows/COM.
+	parts := make([]string, 0, proxmarkLogicalUUIDPages)
 	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
 		page := proxmarkUserMemoryStartPage + i
 		off := i * proxmarkPageSize
 		hexData := fmt.Sprintf("%x", raw[off:off+proxmarkPageSize])
-		command := fmt.Sprintf("hf mfu wrbl -b %d -d %s", page, hexData)
-		if _, err := r.runner(command); err != nil {
-			return fmt.Errorf("write page %d: %w", page, err)
-		}
+		parts = append(parts, fmt.Sprintf("hf mfu wrbl -b %d -d %s", page, hexData))
+	}
+	if _, err := r.runner(strings.Join(parts, "; ")); err != nil {
+		return fmt.Errorf("write pages %d-%d: %w",
+			proxmarkUserMemoryStartPage,
+			proxmarkUserMemoryStartPage+proxmarkLogicalUUIDPages-1,
+			err)
 	}
 	return nil
 }
@@ -158,16 +161,26 @@ func (r *CLIProxmarkReader) Poll() (string, error) {
 	if !r.IsAvailable() {
 		return "", ErrHardwareUnavailable
 	}
-	r.mu.Lock()
+	// Skip this tick if a write holds the port — writes must not wait behind a
+	// full multi-page poll (Playwright write-tag timeout is otherwise too tight).
+	if !r.mu.TryLock() {
+		return "", nil
+	}
 	defer r.mu.Unlock()
+
+	parts := make([]string, 0, proxmarkLogicalUUIDPages)
+	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
+		page := proxmarkUserMemoryStartPage + i
+		parts = append(parts, fmt.Sprintf("hf mfu rdbl -b %d", page))
+	}
+	stdout, err := r.runner(strings.Join(parts, "; "))
+	if err != nil {
+		return "", fmt.Errorf("read pages: %w", err)
+	}
+
 	raw := make([]byte, 0, 16)
 	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
 		page := proxmarkUserMemoryStartPage + i
-		command := fmt.Sprintf("hf mfu rdbl -b %d", page)
-		stdout, err := r.runner(command)
-		if err != nil {
-			return "", fmt.Errorf("read page %d: %w", page, err)
-		}
 		pageBytes, err := parseReadPageOutput(stdout, page)
 		if err != nil {
 			return "", fmt.Errorf("read page %d: %w", page, err)
@@ -234,28 +247,44 @@ func parseReadPageOutput(stdout string, page int) ([]byte, error) {
 		return nil, nil
 	}
 
-	pageStr := fmt.Sprintf("%d", page)
-	pageHex := fmt.Sprintf("%02x", page)
+	// Match the page label only in the column before the first `|`, so hex
+	// nibbles like "4d" / "17" in later pages are not mistaken for page 4 / 7.
+	pageLabel := regexp.MustCompile(fmt.Sprintf(
+		`(?i)(?:^|[^0-9a-fx])(?:0x)?0*%d(?:/0x[0-9a-f]+)?(?:[^0-9a-f]|$)`,
+		page,
+	))
 	lines := strings.Split(stdout, "\n")
+	var dataFallback []byte
 	for _, line := range lines {
 		lower := strings.ToLower(line)
-		looksLikePageRow := strings.Contains(line, "|") &&
-			(strings.Contains(lower, pageStr) || strings.Contains(lower, pageHex) || strings.Contains(lower, "data"))
-		if !looksLikePageRow && !strings.Contains(lower, "data :") {
+		label, data, hasPipe := strings.Cut(line, "|")
+		if hasPipe {
+			if !pageLabel.MatchString(label) {
+				continue
+			}
+			if raw, ok := extractPipeColumnPage("|" + data); ok {
+				return raw, nil
+			}
+			if raw, ok := extractHexBytes(data); ok && len(raw) >= proxmarkPageSize {
+				return raw[:proxmarkPageSize], nil
+			}
 			continue
-		}
-		if raw, ok := extractPipeColumnPage(line); ok {
-			return raw, nil
 		}
 		if strings.Contains(lower, "data") {
 			if raw, ok := extractHexBytes(line); ok && len(raw) >= proxmarkPageSize {
-				return raw[:proxmarkPageSize], nil
+				// Prefer page-labeled rows; keep unlabeled "Data :" as last resort
+				// for single-page CLI dumps used in unit tests.
+				if pageLabel.MatchString(line) {
+					return raw[:proxmarkPageSize], nil
+				}
+				if dataFallback == nil {
+					dataFallback = raw[:proxmarkPageSize]
+				}
 			}
 		}
 	}
-
-	if raw, ok := extractPipeColumnPage(stdout); ok {
-		return raw, nil
+	if dataFallback != nil {
+		return dataFallback, nil
 	}
 
 	return nil, fmt.Errorf("parse read page: no hex payload in output")

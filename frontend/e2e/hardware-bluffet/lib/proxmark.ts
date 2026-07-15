@@ -22,9 +22,12 @@ export async function programRacerAndAwaitLap(opts: {
   await feedback.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {})
 
   const token = await pinToken(opts.request)
+  // Hardware write waits on the Proxmark mutex (and may queue behind a poll).
+  // Playwright's default API timeout (15s) is too tight for real CLI round-trips.
   const write = await opts.request.post(`${API_BASE}/api/rfid/write-tag`, {
     headers: { Authorization: `Bearer ${token}` },
     data: { participant_id: opts.participantId },
+    timeout: 90_000,
   })
   if (!write.ok()) {
     throw new Error(`write-tag failed: ${write.status()} ${await write.text()}`)
@@ -34,7 +37,7 @@ export async function programRacerAndAwaitLap(opts: {
   // Either proves write→Poll→WS→scan worked.
   await feedback.waitFor({
     state: 'visible',
-    timeout: opts.timeoutMs ?? 30_000,
+    timeout: opts.timeoutMs ?? 60_000,
   })
 
   if (opts.dismissAfter) {

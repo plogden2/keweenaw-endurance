@@ -386,7 +386,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
             request,
             readerPage: reader!.page,
             participantId: probe.id,
-            timeoutMs: 30_000,
+            timeoutMs: 60_000,
             dismissAfter: true,
           })
           state.lastProxmark = `pre-race probe ok (bib ${probe.bib})`
@@ -492,7 +492,7 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
               request,
               readerPage: reader!.page,
               participantId: id,
-              timeoutMs: 30_000,
+              timeoutMs: 60_000,
               dismissAfter: true,
             })
             scheduleNext(lapState, id, Date.now())
