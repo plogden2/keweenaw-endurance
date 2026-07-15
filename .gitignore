@@ -47,3 +47,6 @@ spec-kit/
 
 # Superpowers brainstorm sessions
 .superpowers/
+
+# Git worktrees
+.worktrees/
