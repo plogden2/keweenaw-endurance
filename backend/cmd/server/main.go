@@ -152,6 +152,7 @@ func main() {
 		rfid := api.Group("/rfid")
 		{
 			rfid.POST("/write-tag", append(adminOnly, handlers.WriteRFIDTag)...)
+			rfid.GET("/read-payload", append(adminOnly, handlers.ReadRFIDPayload)...)
 			rfid.GET("/scan/:uid", handlers.ScanRFIDTag)
 			rfid.GET("/stream", handlers.StreamRFIDTags)
 			rfid.POST("/inject", handlers.InjectRFIDTag)

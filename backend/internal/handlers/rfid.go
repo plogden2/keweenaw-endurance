@@ -57,6 +57,17 @@ func (h *Handlers) InjectRFIDTag(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"injected": true, "tag_uid": req.TagUID})
 }
 
+// ReadRFIDPayload handles GET /api/rfid/read-payload (admin-only).
+// Performs a single hardware Poll for harness/debug.
+func (h *Handlers) ReadRFIDPayload(c *gin.Context) {
+	logicalUUID, err := h.services.RFID.Poll()
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"logical_uuid": logicalUUID})
+}
+
 // StreamRFIDTags upgrades to WebSocket and fans out tag_read events.
 func (h *Handlers) StreamRFIDTags(c *gin.Context) {
 	conn, err := rfidUpgrader.Upgrade(c.Writer, c.Request, nil)
