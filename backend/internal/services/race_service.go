@@ -165,9 +165,13 @@ func (s *RaceService) DeleteRace(id uuid.UUID) error {
 
 // AutoStartDueRaces promotes scheduled races to active when start_time <= now.
 // Returns the number of races that were auto-started.
+//
+// start_time is stored as timestamp-without-time-zone holding UTC wall time
+// (ISO Z from the API). Always compare using UTC so local TZ offsets don't
+// delay auto-start by hours.
 func (s *RaceService) AutoStartDueRaces(now time.Time) (int, error) {
 	result := s.db.Model(&models.Race{}).
-		Where("status = ? AND start_time <= ?", "scheduled", now).
+		Where("status = ? AND start_time <= ?", "scheduled", now.UTC()).
 		Update("status", "active")
 	if result.Error != nil {
 		return 0, result.Error

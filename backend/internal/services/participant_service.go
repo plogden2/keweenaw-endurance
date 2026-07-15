@@ -145,6 +145,11 @@ func (s *ParticipantService) CreateParticipant(input *models.Participant) (*mode
 	if participant.Status == "" {
 		participant.Status = "registered"
 	}
+	if participant.Gender == "" {
+		// participants_gender_check rejects empty strings; late-signup UIs
+		// sometimes omit gender — default rather than 500 from Postgres.
+		participant.Gender = "other"
+	}
 
 	if err := s.db.Create(&participant).Error; err != nil {
 		return nil, err

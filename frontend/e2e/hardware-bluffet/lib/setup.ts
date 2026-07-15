@@ -86,7 +86,13 @@ export async function addLateSignup(
   const token = await pinToken(request)
   const res = await request.post(`${API_BASE}/api/races/${raceId}/participants`, {
     headers: { Authorization: `Bearer ${token}` },
-    data: { first_name: name.first, last_name: name.last, category_id: categoryId },
+    data: {
+      first_name: name.first,
+      last_name: name.last,
+      category_id: categoryId,
+      // DB check participants_gender_check rejects empty gender.
+      gender: 'other',
+    },
   })
   if (!res.ok()) throw new Error(`late signup: ${res.status()} ${await res.text()}`)
   const p = await res.json()
