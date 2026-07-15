@@ -794,6 +794,7 @@ function renderChart(): void {
           max: showCurrentTime ? Math.ceil(maxElapsedMinutes * 1.05) : undefined,
         },
         y: {
+          beginAtZero: true,
           title: {
             display: true,
             text: getFlowYAxisLabel(chartRaceType.value, unitsStore.unitSystem),

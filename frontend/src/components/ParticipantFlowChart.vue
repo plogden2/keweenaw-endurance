@@ -194,6 +194,7 @@ function renderChart(): void {
           title: { display: true, text: 'Elapsed time (minutes)' },
         },
         y: {
+          beginAtZero: true,
           title: {
             display: true,
             text: getFlowYAxisLabel(chartRaceType.value, unitsStore.unitSystem),
