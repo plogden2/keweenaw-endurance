@@ -18,6 +18,8 @@ func EncodeLogicalUUID(s string) ([]byte, error) {
 	return out, nil
 }
 
+// DecodeLogicalUUID reads the first 16 bytes of b as a UUID string.
+// Buffers longer than 16 bytes are accepted; trailing bytes are ignored.
 func DecodeLogicalUUID(b []byte) (string, error) {
 	if len(b) < 16 {
 		return "", fmt.Errorf("payload too short")
