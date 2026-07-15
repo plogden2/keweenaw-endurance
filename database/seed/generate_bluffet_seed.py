@@ -12,6 +12,7 @@ in frontend/e2e/fixtures/rfid.ts stay stable across regenerations.
 
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import uuid
@@ -64,13 +65,24 @@ def sql_null_or_str(value: str | None) -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--durations", default="720,360,90")
+    parser.add_argument("--names", default="12 Hour,6 Hour,90-Minute Kids")
+    parser.add_argument("--output", default=str(OUTPUT_SQL))
+    args = parser.parse_args()
+    durs = [int(x) for x in args.durations.split(",")]
+    names = [x.strip() for x in args.names.split(",")]
+    assert len(durs) == 3 and len(names) == 3
+
+    output_sql = Path(args.output)
     event_id = EVENT_ID
 
     races = [
         {
             "id": RACE_12H_ID,
-            "name": "12 Hour",
-            "duration": 720,
+            "key": "12-hour",
+            "name": names[0],
+            "duration": durs[0],
             "start": START_12H,
             "loc": "Bottom of East Bluff (Flo-Rion, Dueling Banjos)",
             "categories": [
@@ -83,8 +95,9 @@ def main() -> None:
         },
         {
             "id": RACE_6H_ID,
-            "name": "6 Hour",
-            "duration": 360,
+            "key": "6-hour",
+            "name": names[1],
+            "duration": durs[1],
             "start": START_6H,
             "loc": "Bottom of East Bluff (Flo-Rion, Dueling Banjos)",
             "categories": [
@@ -97,8 +110,9 @@ def main() -> None:
         },
         {
             "id": RACE_KIDS_ID,
-            "name": "90-Minute Kids",
-            "duration": 90,
+            "key": "90-minute-kids",
+            "name": names[2],
+            "duration": durs[2],
             "start": START_KIDS,
             "loc": "Bottom of East Bluff Campground Rd",
             "categories": [
@@ -120,7 +134,7 @@ def main() -> None:
 
     for race in races:
         race_id = race["id"]
-        race_key = race["name"].lower().replace(" ", "-")
+        race_key = race["key"]
         loc = race["loc"]
         start_cp = stable_uuid(f"checkpoint:{race_key}:start")
         finish_cp = stable_uuid(f"checkpoint:{race_key}:finish")
@@ -149,7 +163,7 @@ def main() -> None:
             first = FIRST_NAMES[name_idx % len(FIRST_NAMES)]
             last = LAST_NAMES[(name_idx * 3) % len(LAST_NAMES)]
             name_idx += 1
-            age = 10 + (i % 8) if race["name"] == "90-Minute Kids" else 25 + (i % 30)
+            age = 10 + (i % 8) if race_key == "90-minute-kids" else 25 + (i % 30)
             tag_uid = stable_uuid(f"tag:{race_key}:{i + 1}")
             all_tag_uids.append(tag_uid)
             participants.append(
@@ -190,7 +204,8 @@ def main() -> None:
         "-- Regenerate: python database/seed/generate_bluffet_seed.py",
         "--",
         "-- Deterministic UUIDs (event/races match frontend/e2e/fixtures/rfid.ts BLUFFET)",
-        "-- 3 races: 12 Hour (08:00), 6 Hour (08:00), 90-Minute Kids (15:00) America/Detroit",
+        f"-- 3 races: {names[0]} ({durs[0]}m, 08:00), {names[1]} ({durs[1]}m, 08:00), "
+        f"{names[2]} ({durs[2]}m, 15:00) America/Detroit",
         "-- Categories: Intermediate/Advanced × Men/Women (12h/6h); Men/Women (kids)",
         "-- 100 participants with category_id + deterministic tag UUIDs (uuid5)",
         "-- Requires: database/migrations/04-rfid-scanner.sql (category_id, rfid_tag_associations)",
@@ -298,9 +313,9 @@ def main() -> None:
     lines.append("COMMIT;")
     lines.append("")
 
-    OUTPUT_SQL.write_text("\n".join(lines), encoding="utf-8")
+    output_sql.write_text("\n".join(lines), encoding="utf-8")
     print(
-        f"Wrote {OUTPUT_SQL} "
+        f"Wrote {output_sql} "
         f"({len(races)} races, {len(category_rows)} categories, "
         f"{len(participants)} participants, {len(association_rows)} tag associations)"
     )
