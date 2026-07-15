@@ -397,12 +397,21 @@ function matchRace(predicate: (name: string) => boolean): EventLiveRace | undefi
   return live.value?.races.find((r) => predicate(r.name.toLowerCase()))
 }
 
-const race12 = computed(() => matchRace((n) => n.includes('12')))
-const race6 = computed(() =>
-  matchRace((n) => n.includes('6') && !n.includes('12')),
+const race12 = computed(
+  () =>
+    matchRace((n) => n.includes('12')) ??
+    // Compressed hardware dress-rehearsal names (30-minute stand-in for 12h).
+    matchRace((n) => /\b30\b/.test(n) && n.includes('minute')),
 )
-const race90 = computed(() =>
-  matchRace((n) => n.includes('90') || n.includes('kids') || n.includes('minute')),
+const race6 = computed(
+  () =>
+    matchRace((n) => n.includes('6') && !n.includes('12')) ??
+    matchRace((n) => /\b15\b/.test(n) && n.includes('minute')),
+)
+const race90 = computed(
+  () =>
+    matchRace((n) => n.includes('90') || n.includes('kids')) ??
+    matchRace((n) => /\b5\b/.test(n) && n.includes('minute')),
 )
 
 function colorFor(key: string): string {
