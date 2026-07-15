@@ -1,9 +1,12 @@
 package services
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
 	"github.com/stretchr/testify/assert"
@@ -45,12 +48,43 @@ func TestRFIDService_WriteTag(t *testing.T) {
 	mock := rfid.NewMockReader()
 	svc := NewRFIDService(db, mock)
 
-	updated, err := svc.WriteTag(participant.ID.UUID(), "NEW-TAG-001")
+	updated, err := svc.WriteTag(participant.ID.UUID())
 	require.NoError(t, err)
-	assert.Equal(t, "NEW-TAG-001", updated.RFIDTagUID)
-	assert.Equal(t, []string{"NEW-TAG-001"}, updated.TagUIDs)
-	assert.Equal(t, "NEW-TAG-001", mock.LastUID)
-	assert.Equal(t, participant.ID.Short(), mock.LastData)
+	require.NotEmpty(t, updated.RFIDTagUID)
+	_, parseErr := uuid.Parse(updated.RFIDTagUID)
+	require.NoError(t, parseErr)
+	assert.Equal(t, []string{updated.RFIDTagUID}, updated.TagUIDs)
+
+	uid, err := mock.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, strings.ToLower(updated.RFIDTagUID), uid)
+}
+
+func TestWriteTag_ProgramsLogicalUUIDWithoutSilicon(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+	p, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "99", FirstName: "Logical", LastName: "Write",
+	})
+	require.NoError(t, err)
+
+	mock := rfid.NewMockReader()
+	svc := NewRFIDService(db, mock)
+	logical := uuid.New().String()
+	_, err = svc.AssociateTag(p.ID.UUID(), logical)
+	require.NoError(t, err)
+
+	_, err = svc.WriteTag(p.ID.UUID())
+	require.NoError(t, err)
+
+	got, err := mock.Poll()
+	require.NoError(t, err)
+	require.Equal(t, strings.ToLower(logical), got)
+
+	found, err := svc.LookupParticipantByUID(got)
+	require.NoError(t, err)
+	require.Equal(t, p.ID, found.ID)
 }
 
 func TestRFIDService_MultiTagAssociationCRUD(t *testing.T) {
@@ -114,6 +148,63 @@ func TestRFIDService_MultiTagAssociationCRUD(t *testing.T) {
 	assert.ElementsMatch(t, []string{"TAG-A", "TAG-B"}, multi.TagUIDs)
 }
 
+func TestRFIDService_WriteTag_ReusesLegacyRFIDTagUID(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+
+	const legacyUID = "550e8400-e29b-41d4-a716-446655440099"
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "19", FirstName: "Legacy", LastName: "Column",
+		RFIDTagUID: legacyUID,
+	})
+	require.NoError(t, err)
+
+	mock := rfid.NewMockReader()
+	svc := NewRFIDService(db, mock)
+
+	updated, err := svc.WriteTag(participant.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, legacyUID, updated.RFIDTagUID)
+	assert.Equal(t, []string{legacyUID}, updated.TagUIDs)
+
+	uid, err := mock.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, strings.ToLower(legacyUID), uid)
+}
+
+func TestRFIDService_WriteTag_RetriesSameLogicalAfterWriteFailure(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "20", FirstName: "Retry", LastName: "Write",
+	})
+	require.NoError(t, err)
+
+	mock := rfid.NewMockReader()
+	svc := NewRFIDService(db, mock)
+
+	mock.WriteErr = errors.New("hardware write failed")
+	_, err = svc.WriteTag(participant.ID.UUID())
+	require.Error(t, err)
+
+	afterFail, err := partSvc.GetParticipant(participant.ID.UUID())
+	require.NoError(t, err)
+	require.NotEmpty(t, afterFail.RFIDTagUID)
+	firstLogical := afterFail.RFIDTagUID
+
+	mock.WriteErr = nil
+	written, err := svc.WriteTag(participant.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, firstLogical, written.RFIDTagUID)
+
+	uid, err := mock.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, strings.ToLower(firstLogical), uid)
+}
+
 func TestRFIDService_WriteTag_HardwareUnavailable(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)
@@ -128,7 +219,7 @@ func TestRFIDService_WriteTag_HardwareUnavailable(t *testing.T) {
 	mock.Available = false
 	svc := NewRFIDService(db, mock)
 
-	_, err = svc.WriteTag(participant.ID.UUID(), "TAG-002")
+	_, err = svc.WriteTag(participant.ID.UUID())
 	assert.ErrorIs(t, err, ErrHardwareUnavailable)
 }
 

@@ -186,26 +186,18 @@
               <td colspan="5">
                 <div class="program-inline" data-testid="program-tag-panel">
                   <p class="muted">
-                    Place tag on Proxmark3 — writes racer UUID. Multiple tags stay
-                    active.
+                    Place a tag on the Proxmark3, then write. This programs this racer’s permanent
+                    RFID UUID onto the chip. Replacement tags get the same UUID.
                   </p>
                   <div class="row">
-                    <label class="grow">
-                      Tag UID
-                      <input
-                        v-model="programUid"
-                        data-testid="program-tag-uid"
-                        placeholder="Auto from hardware…"
-                      />
-                    </label>
                     <button
                       type="button"
                       class="btn ok"
                       data-testid="program-tag-write"
-                      :disabled="!programUid.trim() || programming"
+                      :disabled="programming"
                       @click="writeTag(racer)"
                     >
-                      Write tag
+                      {{ programming ? 'Writing…' : 'Write tag' }}
                     </button>
                     <button
                       type="button"
@@ -246,7 +238,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { raceParticipantsApi, racesApi } from '@/services/api'
+import { raceParticipantsApi, racesApi, rfidApi } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import type { Category, Participant, Race } from '@/types/models'
 import { getErrorMessage } from '@/utils/error'
@@ -275,7 +267,6 @@ const bibDraft = ref('')
 const bibDirty = computed(() => bibDraft.value.trim() !== bibOriginal.value)
 
 const programmingId = ref<string | null>(null)
-const programUid = ref('')
 const programming = ref(false)
 const programError = ref<string | null>(null)
 
@@ -361,13 +352,10 @@ async function saveBib(racer: Participant) {
 
 function toggleProgram(id: string) {
   programmingId.value = programmingId.value === id ? null : id
-  programUid.value = ''
   programError.value = null
 }
 
 async function writeTag(racer: Participant) {
-  const uid = programUid.value.trim()
-  if (!uid) return
   if (!pinAuth.isAuthenticated) {
     await router.push('/pin')
     return
@@ -375,7 +363,7 @@ async function writeTag(racer: Participant) {
   programming.value = true
   programError.value = null
   try {
-    await raceParticipantsApi.addTag(raceId.value, racer.id, uid)
+    await rfidApi.writeTag({ participant_id: racer.id })
     const { data } = await raceParticipantsApi.listTags(raceId.value, racer.id)
     const tags = (data.data ?? []).map((t) => t.tag_uid)
     const idx = racers.value.findIndex((r) => r.id === racer.id)
@@ -386,7 +374,6 @@ async function writeTag(racer: Participant) {
         rfid_tag_uid: tags[tags.length - 1] ?? racers.value[idx].rfid_tag_uid,
       }
     }
-    programUid.value = ''
   } catch (err) {
     programError.value = getErrorMessage(err, 'Failed to write tag')
   } finally {
