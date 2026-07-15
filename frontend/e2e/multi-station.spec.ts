@@ -59,7 +59,7 @@ test.describe('US7 multi-station readers', () => {
       participantIds.add(scan.participant!.id)
     }
 
-    // Three finish stations → three distinct racers (DEMO-TAG-0001..0003).
+    // Three finish stations → three distinct racers (first three 12-hour tag UUIDs).
     expect(participantIds.size).toBe(3)
   })
 

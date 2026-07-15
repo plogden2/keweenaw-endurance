@@ -1,7 +1,6 @@
 package database
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -74,13 +73,11 @@ func TestBluffetSeedSQL_Invariants(t *testing.T) {
 	assert.Contains(t, sql, "'Men'")
 	assert.Contains(t, sql, "'Women'")
 
-	demoTags := 0
-	for i := 1; i <= 100; i++ {
-		if strings.Contains(sql, fmt.Sprintf("DEMO-TAG-%04d", i)) {
-			demoTags++
-		}
-	}
-	assert.Equal(t, 100, demoTags, "expected DEMO-TAG-0001..0100")
+	assert.NotContains(t, sql, "DEMO-TAG-")
+	// First three 12-hour tags (match frontend/e2e/fixtures/rfid.ts BLUFFET.demoTags)
+	assert.Contains(t, sql, "23657b2d-aa08-5fe8-8553-e9e3affb4678")
+	assert.Contains(t, sql, "bdfd9257-7f51-5012-a9b1-a36617846ce5")
+	assert.Contains(t, sql, "cb60c4cd-8c3e-5bbb-be05-e3f6f34c6313")
 
 	// Each participant INSERT value block includes 'registered'
 	assert.Equal(t, 100, strings.Count(sql, "'registered'"))
