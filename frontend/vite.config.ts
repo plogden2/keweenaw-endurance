@@ -65,8 +65,11 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://backend:8080',
+        // Docker Compose sets VITE_PROXY_TARGET=http://backend:8080.
+        // Host `npm run dev` defaults to localhost so the browser can reach the API.
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:8080',
         changeOrigin: true,
+        ws: true,
       },
     },
   },

@@ -10,6 +10,7 @@ services:
     environment:
       - NODE_ENV=development
       - VITE_API_URL=http://localhost:8080
+      - VITE_PROXY_TARGET=http://backend:8080
       - CHOKIDAR_USEPOLLING=true
     volumes:
       - ./frontend:/app
