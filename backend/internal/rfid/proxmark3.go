@@ -121,9 +121,23 @@ func (n *NoOpReader) IsAvailable() bool {
 }
 
 // DefaultReader returns a mock reader in test environments or when
-// PROXMARK3_ENABLED=true; otherwise a no-op reader.
+// PROXMARK3_ENABLED=true (CI inject path); RFID_HARDWARE=true selects the pm3 CLI reader.
 func DefaultReader() Reader {
-	if os.Getenv("GO_ENV") == "test" || os.Getenv("PROXMARK3_ENABLED") == "true" {
+	if os.Getenv("GO_ENV") == "test" {
+		return NewMockReader()
+	}
+	if hw := os.Getenv("RFID_HARDWARE"); hw == "1" || strings.EqualFold(hw, "true") {
+		cli := os.Getenv("PROXMARK3_CLI")
+		if cli == "" {
+			cli = "pm3"
+		}
+		return NewCLIProxmarkReader(CLIProxmarkConfig{
+			CLIPath: cli,
+			Port:    os.Getenv("PROXMARK3_PORT"),
+			Enabled: true,
+		})
+	}
+	if os.Getenv("PROXMARK3_ENABLED") == "true" {
 		return NewMockReader()
 	}
 	return &NoOpReader{}

@@ -26,6 +26,9 @@ type AuthConfig struct {
 type RFIDConfig struct {
 	InjectEnabled    bool
 	Proxmark3Enabled bool
+	Hardware         bool
+	Proxmark3CLI     string
+	Proxmark3Port    string
 	HostedAPIURL     string
 }
 
@@ -97,6 +100,9 @@ func Load() (*Config, error) {
 		RFID: RFIDConfig{
 			InjectEnabled:    getEnvAsBool("RFID_INJECT", false) || getEnv("GO_ENV", "development") == "test",
 			Proxmark3Enabled: getEnvAsBool("PROXMARK3_ENABLED", false),
+			Hardware:         getEnvAsBool("RFID_HARDWARE", false),
+			Proxmark3CLI:     getEnv("PROXMARK3_CLI", "pm3"),
+			Proxmark3Port:    getEnv("PROXMARK3_PORT", ""),
 			HostedAPIURL:     getEnv("HOSTED_API_URL", ""),
 		},
 	}, nil
