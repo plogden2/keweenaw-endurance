@@ -161,30 +161,58 @@ func (s *RFIDService) AssociateTag(participantID uuid.UUID, tagUID string) (*mod
 	return &assoc, nil
 }
 
-func (s *RFIDService) WriteTag(participantID uuid.UUID, tagUID string) (*models.Participant, error) {
-	tagUID = strings.TrimSpace(tagUID)
-	if tagUID == "" {
-		return nil, fmt.Errorf("%w: tag_uid is required", ErrInvalidRFIDInput)
-	}
+// WriteTag programs the chip on the antenna with this participant's logical RFID UUID.
+// Ensures an association exists (creates one with a new UUID if the racer has none).
+func (s *RFIDService) WriteTag(participantID uuid.UUID) (*models.Participant, error) {
 	if participantID == uuid.Nil {
 		return nil, fmt.Errorf("%w: participant_id is required", ErrInvalidRFIDInput)
 	}
 
 	partSvc := NewParticipantService(s.db)
-	participant, err := partSvc.GetParticipant(participantID)
+	if _, err := partSvc.GetParticipant(participantID); err != nil {
+		return nil, err
+	}
+
+	logical, err := s.ensureLogicalTagUUID(participantID)
 	if err != nil {
 		return nil, err
 	}
 
 	device := rfid.NewProxmark3(s.reader)
-	if err := device.WriteTag(tagUID, participant.ID.Short()); err != nil {
-		return nil, err
-	}
-
-	if _, err := s.AssociateTag(participantID, tagUID); err != nil {
+	if err := device.WriteLogicalUUID(logical); err != nil {
 		return nil, err
 	}
 	return partSvc.GetParticipant(participantID)
+}
+
+func (s *RFIDService) ensureLogicalTagUUID(participantID uuid.UUID) (string, error) {
+	var assoc models.RFIDTagAssociation
+	err := s.db.Where("participant_id = ? AND active = ?", participantID, true).
+		Order("created_at ASC").First(&assoc).Error
+	if err == nil {
+		return assoc.TagUID, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", err
+	}
+
+	partSvc := NewParticipantService(s.db)
+	participant, err := partSvc.GetParticipant(participantID)
+	if err != nil {
+		return "", err
+	}
+	if legacy := strings.TrimSpace(participant.RFIDTagUID); legacy != "" {
+		if _, err := s.AssociateTag(participantID, legacy); err != nil {
+			return "", err
+		}
+		return legacy, nil
+	}
+
+	logical := uuid.New().String()
+	if _, err := s.AssociateTag(participantID, logical); err != nil {
+		return "", err
+	}
+	return logical, nil
 }
 
 func (s *RFIDService) ManualEntry(input *ManualEntryInput) (*models.TimingRecord, error) {

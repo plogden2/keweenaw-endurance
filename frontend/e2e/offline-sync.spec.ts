@@ -99,8 +99,8 @@ test.describe('Offline sync [US5]', () => {
     await page.route('**/api/rfid/sync-status', (route) => route.abort())
     await page.route('**/api/events/**/scans', (route) => route.abort())
 
-    await inject(request, 'DEMO-TAG-0004')
-    await deliverTagToUi(page, 'DEMO-TAG-0004')
+    await inject(request, BLUFFET.demoTags[3])
+    await deliverTagToUi(page, BLUFFET.demoTags[3])
     await expect(page.getByTestId('sync-pending')).toBeVisible({ timeout: 5_000 })
     await expect(
       page.getByTestId('scan-popup').or(page.getByTestId('sync-pending')).first(),

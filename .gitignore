@@ -50,3 +50,9 @@ spec-kit/
 
 # Git worktrees
 .worktrees/
+
+# Proxmark3 client session artifacts
+.proxmark3/
+**/.proxmark3/
+*.pm3
+lf_unknown_*

@@ -140,6 +140,7 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		api.POST("/timing-records/:id/karaoke-bonus", h.CreateKaraokeBonus)
 
 		api.POST("/rfid/write-tag", append(adminOnly, h.WriteRFIDTag)...)
+		api.GET("/rfid/read-payload", append(adminOnly, h.ReadRFIDPayload)...)
 		api.GET("/rfid/scan/:uid", h.ScanRFIDTag)
 		api.GET("/rfid/stream", h.StreamRFIDTags)
 		api.POST("/rfid/inject", h.InjectRFIDTag)
@@ -677,7 +678,6 @@ func TestRFIDHandlers_WriteTag(t *testing.T) {
 
 	body := map[string]string{
 		"participant_id": participant.ID.Short(),
-		"tag_uid":        "NEW-HW-TAG",
 	}
 	payload, _ := json.Marshal(body)
 
@@ -690,7 +690,9 @@ func TestRFIDHandlers_WriteTag(t *testing.T) {
 
 	var updated models.Participant
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updated))
-	assert.Equal(t, "NEW-HW-TAG", updated.RFIDTagUID)
+	require.NotEmpty(t, updated.RFIDTagUID)
+	_, err = uuid.Parse(updated.RFIDTagUID)
+	require.NoError(t, err)
 }
 
 func TestAuthHandlers_ExchangePIN(t *testing.T) {
@@ -853,6 +855,58 @@ func TestKaraokeBonus_CreatesAndConflicts(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusConflict, w.Code)
+}
+
+func TestRFIDHandlers_ReadPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&models.Event{},
+		&models.Race{},
+		&models.Participant{},
+		&models.TimingCheckpoint{},
+		&models.TimingRecord{},
+		&models.Category{},
+		&models.RFIDTagAssociation{},
+		&models.ReaderStation{},
+	))
+
+	mock := rfid.NewMockReader()
+	mock.Enqueue("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+	svc := services.NewServicesWithReader(db, testHandlerConfig(), mock)
+	h := NewHandlers(svc)
+
+	auth := middleware.JWTAuth(svc.Auth)
+	adminOnly := []gin.HandlerFunc{auth, middleware.RequireRoles(services.RoleAdmin, services.RoleOwner)}
+	router := gin.New()
+	router.GET("/api/rfid/read-payload", append(adminOnly, h.ReadRFIDPayload)...)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/rfid/read-payload", nil)
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var resp map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "a1b2c3d4-e5f6-7890-abcd-ef1234567890", resp["logical_uuid"])
+
+	// Empty poll returns 200 with empty string.
+	req = httptest.NewRequest(http.MethodGet, "/api/rfid/read-payload", nil)
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, "", resp["logical_uuid"])
+
+	// Unauthenticated → 401
+	req = httptest.NewRequest(http.MethodGet, "/api/rfid/read-payload", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestRFIDHandlers_Inject(t *testing.T) {

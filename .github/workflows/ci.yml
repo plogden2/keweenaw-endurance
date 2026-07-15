@@ -63,7 +63,7 @@ jobs:
           # RFID_INJECT=true in docker-compose.yml — inject must succeed for e2e.
           code=$(curl -s -o /tmp/inject.json -w "%{http_code}" -X POST \
             -H "Content-Type: application/json" \
-            -d '{"tag_uid":"DEMO-TAG-0001"}' \
+            -d '{"tag_uid":"23657b2d-aa08-5fe8-8553-e9e3affb4678"}' \
             http://localhost:8080/api/rfid/inject)
           echo "inject HTTP $code"
           cat /tmp/inject.json

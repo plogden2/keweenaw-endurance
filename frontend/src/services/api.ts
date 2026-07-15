@@ -109,9 +109,15 @@ export const timingApi = {
     apiClient.get<LiveTimingResponse>(`/api/timing/live/${raceId}`),
 }
 
+export interface WriteTagPayload {
+  participant_id: string
+}
+
 export const rfidApi = {
   scan: (uid: string) =>
     apiClient.get<Participant>(`/api/rfid/scan/${encodeURIComponent(uid)}`),
+  writeTag: (payload: WriteTagPayload) =>
+    apiClient.post<Participant>('/api/rfid/write-tag', payload),
   manualEntry: (payload: ManualTimingEntryPayload) =>
     apiClient.post<TimingRecord>('/api/rfid/manual-entry', payload),
   getSyncStatus: () => apiClient.get<SyncStatusResponse>('/api/rfid/sync-status'),

@@ -46,7 +46,9 @@ test.describe('US6 CSV disaster recovery', () => {
     const body = await liveCsv.text()
     expect(body.length).toBeGreaterThan(0)
     // Snapshot should reflect race activity (racer/tag or timing row).
-    expect(body).toMatch(/DEMO-TAG-0001|timing|participant/i)
+    expect(body).toMatch(
+      new RegExp(`${BLUFFET.demoTags[0]}|timing|participant`, 'i'),
+    )
   })
 
   test('PIN-gated CSV import restores state on a fresh station via /csv', async ({

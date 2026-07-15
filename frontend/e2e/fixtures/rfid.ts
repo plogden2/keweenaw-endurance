@@ -48,12 +48,17 @@ export const BLUFFET = {
     },
   },
   expectedRacerCount: 100,
-  demoTags: ['DEMO-TAG-0001', 'DEMO-TAG-0002', 'DEMO-TAG-0003'] as const,
+  demoTags: [
+    '23657b2d-aa08-5fe8-8553-e9e3affb4678', // tag:12-hour:1
+    'bdfd9257-7f51-5012-a9b1-a36617846ce5', // tag:12-hour:2
+    'cb60c4cd-8c3e-5bbb-be05-e3f6f34c6313', // tag:12-hour:3
+    '5f5ce6ea-49fe-50f3-a456-292a9b7a7739', // tag:12-hour:4
+  ] as const,
 } as const
 
-export const DEMO_TAG_12H = 'DEMO-TAG-0001'
-export const DEMO_TAG_6H = 'DEMO-TAG-0002'
-export const DEMO_TAG_KIDS = 'DEMO-TAG-0003'
+export const DEMO_TAG_12H = '23657b2d-aa08-5fe8-8553-e9e3affb4678' // tag:12-hour:1
+export const DEMO_TAG_6H = '2fe0e039-60a4-50a8-90af-e14ff61371fc' // tag:6-hour:1
+export const DEMO_TAG_KIDS = '7dca226d-4eb6-500d-916e-c1044c107ffd' // tag:90-minute-kids:1
 
 /** Display names matched by seed generator for first tags — adjust if seed names change */
 export const DEMO_RACER_NAMES = {

@@ -12,6 +12,8 @@ in frontend/e2e/fixtures/rfid.ts stay stable across regenerations.
 
 from __future__ import annotations
 
+import os
+import re
 import uuid
 from pathlib import Path
 
@@ -113,8 +115,8 @@ def main() -> None:
     participants: list[tuple[str, str, str, str, str, str, int, str, str]] = []
     association_rows: list[str] = []
 
-    tag_seq = 1
     name_idx = 0
+    all_tag_uids: list[str] = []
 
     for race in races:
         race_id = race["id"]
@@ -148,8 +150,8 @@ def main() -> None:
             last = LAST_NAMES[(name_idx * 3) % len(LAST_NAMES)]
             name_idx += 1
             age = 10 + (i % 8) if race["name"] == "90-Minute Kids" else 25 + (i % 30)
-            tag_uid = f"DEMO-TAG-{tag_seq:04d}"
-            tag_seq += 1
+            tag_uid = stable_uuid(f"tag:{race_key}:{i + 1}")
+            all_tag_uids.append(tag_uid)
             participants.append(
                 (pid, race_id, bib, first, last, gender, age, tag_uid, cat_id)
             )
@@ -159,8 +161,17 @@ def main() -> None:
             )
 
     assert len(participants) == 100, f"expected 100 participants, got {len(participants)}"
-    assert tag_seq == 101, f"expected DEMO-TAG-0001..0100, next would be {tag_seq}"
+    uuid_re = re.compile(
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    )
+    for tag_uid in all_tag_uids:
+        assert uuid_re.match(tag_uid), f"tag_uid must be UUID, got {tag_uid!r}"
+        assert not tag_uid.startswith("DEMO-TAG"), f"legacy DEMO-TAG prefix: {tag_uid}"
     assert len(category_rows) == 10, f"expected 10 categories, got {len(category_rows)}"
+
+    if os.environ.get("DEBUG_TAGS") == "1":
+        for race_key in ("12-hour", "6-hour", "90-minute-kids"):
+            print(stable_uuid(f"tag:{race_key}:1"))
 
     event_filter = f"e.name = {sql_str(EVENT_NAME)}"
     race_subq = (
@@ -181,7 +192,7 @@ def main() -> None:
         "-- Deterministic UUIDs (event/races match frontend/e2e/fixtures/rfid.ts BLUFFET)",
         "-- 3 races: 12 Hour (08:00), 6 Hour (08:00), 90-Minute Kids (15:00) America/Detroit",
         "-- Categories: Intermediate/Advanced × Men/Women (12h/6h); Men/Women (kids)",
-        "-- 100 participants with category_id + DEMO-TAG-0001..DEMO-TAG-0100",
+        "-- 100 participants with category_id + deterministic tag UUIDs (uuid5)",
         "-- Requires: database/migrations/04-rfid-scanner.sql (category_id, rfid_tag_associations)",
         "",
         "BEGIN;",
