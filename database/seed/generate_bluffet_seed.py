@@ -170,8 +170,8 @@ def main() -> None:
     assert len(category_rows) == 10, f"expected 10 categories, got {len(category_rows)}"
 
     if os.environ.get("DEBUG_TAGS") == "1":
-        for tag_uid in all_tag_uids[:3]:
-            print(tag_uid)
+        for race_key in ("12-hour", "6-hour", "90-minute-kids"):
+            print(stable_uuid(f"tag:{race_key}:1"))
 
     event_filter = f"e.name = {sql_str(EVENT_NAME)}"
     race_subq = (
