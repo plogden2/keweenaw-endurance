@@ -17,6 +17,11 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'on',
     video: { mode: 'on', size: { width: 1920, height: 1080 } },
+    // Long-running background loops (reader carousel, spectator churn) rely on
+    // every action having a bound — without this, a single stuck locator would
+    // otherwise block only on the 45min test timeout.
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
   },
   projects: [{ name: 'hardware-bluffet', use: { ...devices['Desktop Chrome'] } }],
 })
