@@ -147,6 +147,13 @@ func TestParseReadPageOutput(t *testing.T) {
 	require.Equal(t, []byte{0x14, 0x41, 0x67, 0x4d}, raw)
 }
 
+func TestParseReadPageOutput_HexBlockLabel(t *testing.T) {
+	// Real pm3 output uses 04/0x04 — must not treat the label hex as data bytes.
+	raw, err := parseReadPageOutput("[=] 04/0x04 | 11 22 33 44 | .\"3D\n", 4)
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x11, 0x22, 0x33, 0x44}, raw)
+}
+
 func TestCLIProxmarkReader_DetectISO14443A(t *testing.T) {
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,

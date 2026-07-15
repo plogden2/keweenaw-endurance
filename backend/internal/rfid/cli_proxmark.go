@@ -160,10 +160,19 @@ func pm3DeviceResponded(stdout string) bool {
 		strings.Contains(stdout, "Using UART port")
 }
 
+// pipePageDataPattern matches pm3 table rows like:
+//
+//	[=] 04/0x04 | 11 22 33 44 | ....
+//	[=]   4 | 14 41 67 4d | ....
+//
+// Captures only the data column so block labels (04/0x04) are not mistaken for payload.
+var pipePageDataPattern = regexp.MustCompile(`(?i)\|\s*((?:[0-9a-f]{2}\s+){3}[0-9a-f]{2})\s*\|`)
+
 // parseReadPageOutput extracts 4 data bytes from pm3 `hf mfu rdbl -b N` stdout.
 //
 // Typical formats:
 //
+//	[=] 04/0x04 | 14 41 67 4d | ....
 //	[=]   4 | 14 41 67 4d | ....
 //	Data : 14 41 67 4D
 func parseReadPageOutput(stdout string, page int) ([]byte, error) {
@@ -172,31 +181,45 @@ func parseReadPageOutput(stdout string, page int) ([]byte, error) {
 	}
 
 	pageStr := fmt.Sprintf("%d", page)
+	pageHex := fmt.Sprintf("%02x", page)
 	lines := strings.Split(stdout, "\n")
 	for _, line := range lines {
 		lower := strings.ToLower(line)
-		if strings.Contains(lower, "data") || strings.Contains(line, "|") {
-			if !strings.Contains(line, pageStr) && !strings.Contains(lower, "data") {
-				continue
-			}
+		looksLikePageRow := strings.Contains(line, "|") &&
+			(strings.Contains(lower, pageStr) || strings.Contains(lower, pageHex) || strings.Contains(lower, "data"))
+		if !looksLikePageRow && !strings.Contains(lower, "data :") {
+			continue
+		}
+		if raw, ok := extractPipeColumnPage(line); ok {
+			return raw, nil
+		}
+		if strings.Contains(lower, "data") {
 			if raw, ok := extractHexBytes(line); ok && len(raw) >= proxmarkPageSize {
 				return raw[:proxmarkPageSize], nil
 			}
 		}
 	}
 
-	if raw, ok := extractHexBytes(stdout); ok {
-		if len(raw) < proxmarkPageSize {
-			return nil, fmt.Errorf("parse read page: found %d bytes, need %d", len(raw), proxmarkPageSize)
-		}
-		// Prefer trailing page-sized slice when CLI dumps more hex (UID, etc.).
-		if len(raw) > proxmarkPageSize {
-			return raw[len(raw)-proxmarkPageSize:], nil
-		}
-		return raw[:proxmarkPageSize], nil
+	if raw, ok := extractPipeColumnPage(stdout); ok {
+		return raw, nil
 	}
 
 	return nil, fmt.Errorf("parse read page: no hex payload in output")
+}
+
+func extractPipeColumnPage(line string) ([]byte, bool) {
+	if m := pipePageDataPattern.FindStringSubmatch(line); len(m) == 2 {
+		if raw, ok := extractHexBytes(m[1]); ok && len(raw) >= proxmarkPageSize {
+			return raw[:proxmarkPageSize], true
+		}
+	}
+	// Single-column rows used in tests: "[=]   4 | 14 41 67 4d"
+	if i := strings.Index(line, "|"); i >= 0 {
+		if raw, ok := extractHexBytes(line[i+1:]); ok && len(raw) >= proxmarkPageSize {
+			return raw[:proxmarkPageSize], true
+		}
+	}
+	return nil, false
 }
 
 // parseReadBlockOutput is kept for unit tests of legacy 16-byte dumps.
