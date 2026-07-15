@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import Racers from '@/views/Racers.vue'
 import { setupPinia, createTestRouter } from '@/test/helpers'
-import { raceParticipantsApi, racesApi } from '@/services/api'
+import { raceParticipantsApi, racesApi, rfidApi } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
 
 vi.mock('@/services/api', async () => {
@@ -20,6 +20,9 @@ vi.mock('@/services/api', async () => {
       listCategories: vi.fn(),
       listTags: vi.fn(),
       addTag: vi.fn(),
+    },
+    rfidApi: {
+      writeTag: vi.fn(),
     },
   }
 })
@@ -147,5 +150,30 @@ describe('Racers.vue', () => {
     await wrapper.find('[data-testid="bib-save"]').trigger('click')
     await flushPromises()
     expect(raceParticipantsApi.update).toHaveBeenCalledWith('p1', { bib_number: '9999' })
+  })
+
+  it('programs tag via writeTag without silicon UID input', async () => {
+    const logicalUuid = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+    ;(rfidApi.writeTag as Mock).mockResolvedValue({
+      data: { ...sampleRacers[1], tag_uids: [logicalUuid] },
+    })
+    ;(raceParticipantsApi.listTags as Mock).mockResolvedValue({
+      data: { data: [{ tag_uid: logicalUuid, participant_id: 'p2', active: true }] },
+    })
+    const wrapper = await mountRacers()
+    const rows = wrapper.findAll('[data-testid="racer-row"]')
+    await rows[1].find('[data-testid="program-tag"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="program-tag-uid"]').exists()).toBe(false)
+    const writeBtn = wrapper.find('[data-testid="program-tag-write"]')
+    expect(writeBtn.attributes('disabled')).toBeUndefined()
+
+    await writeBtn.trigger('click')
+    await flushPromises()
+
+    expect(rfidApi.writeTag).toHaveBeenCalledWith({ participant_id: 'p2' })
+    expect(raceParticipantsApi.listTags).toHaveBeenCalledWith('race-1', 'p2')
+    expect(wrapper.find('[data-testid="program-tag-list"]').text()).toContain(logicalUuid)
   })
 })

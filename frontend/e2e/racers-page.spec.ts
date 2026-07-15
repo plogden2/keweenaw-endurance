@@ -79,22 +79,21 @@ test.describe('Racers page [US3]', () => {
     await expect(row.getByTestId('bib-edit')).toHaveText('9999')
   })
 
-  test('inline multi-tag program associates two tags', async ({ page }) => {
+  test('program tag writes racer logical UUID', async ({ page }) => {
     await page.goto(`/races/${RACE_ID}/racers`)
     const row = page.getByTestId('racer-row').first()
     await row.getByTestId('program-tag').click()
 
     const program = page.getByTestId('program-tag-panel')
     await expect(program).toBeVisible()
+    await expect(program.getByTestId('program-tag-uid')).toHaveCount(0)
 
-    await program.getByTestId('program-tag-uid').fill('E2E-TAG-A')
     await program.getByTestId('program-tag-write').click()
-    await expect(program.getByText('E2E-TAG-A')).toBeVisible()
 
-    await program.getByTestId('program-tag-uid').fill('E2E-TAG-B')
-    await program.getByTestId('program-tag-write').click()
-    await expect(program.getByText('E2E-TAG-B')).toBeVisible()
-
-    await expect(row.getByText(/2 tags/i)).toBeVisible()
+    const tagList = program.getByTestId('program-tag-list')
+    await expect(tagList).toContainText(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+    )
+    await expect(row.getByText(/1 tag/i)).toBeVisible()
   })
 })

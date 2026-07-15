@@ -5,6 +5,7 @@ import {
   racesApi,
   participantsApi,
   raceParticipantsApi,
+  rfidApi,
   scansApi,
   eventsLiveApi,
   rfidStreamUrl,
@@ -195,6 +196,14 @@ describe('RFID scanner APIs', () => {
       tag_uid: 'TAG-1',
       device_id: 'laptop-1',
       local_timestamp: '2026-08-01T12:00:00Z',
+    })
+  })
+
+  it('writes tag with participant_id only', async () => {
+    ;(apiClient.post as Mock).mockResolvedValue({ data: { id: 'p-1' } })
+    await rfidApi.writeTag({ participant_id: 'p-1' })
+    expect(apiClient.post).toHaveBeenCalledWith('/api/rfid/write-tag', {
+      participant_id: 'p-1',
     })
   })
 
