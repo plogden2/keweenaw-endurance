@@ -56,3 +56,6 @@ spec-kit/
 **/.proxmark3/
 *.pm3
 lf_unknown_*
+
+# E2E hardware run artifacts
+e2e-artifacts/
