@@ -1,7 +1,7 @@
 # Hardware East Bluffet e2e dress rehearsal — design
 
 **Date:** 2026-07-15  
-**Status:** Draft — awaiting user review before implementation plan  
+**Status:** Approved — implementation plan at `docs/superpowers/plans/2026-07-15-hardware-bluffet-e2e.md`  
 **Feature context:** Speckit `002-rfid-race-scanner` / All You Can East Bluffet  
 **Approach:** Scripted Playwright harness + Cursor monitoring agent (Approach 1)
 
