@@ -70,9 +70,12 @@ describe('Timing.vue', () => {
     expect(wrapper.text()).toContain('Spring Run')
   })
 
-  it('links events to event details route', async () => {
+  it('links active events to live route and others to event details', async () => {
     eventsStore.activeEvents = [
       { id: 'evt-1', name: 'Trail Day', event_date: '2024-07-01', status: 'active' },
+    ]
+    eventsStore.upcomingEvents = [
+      { id: 'evt-2', name: 'Fall Classic', event_date: '2024-09-01', status: 'upcoming' },
     ]
 
     const router = createTestRouter()
@@ -80,7 +83,8 @@ describe('Timing.vue', () => {
       global: { plugins: [router] },
     })
 
-    const link = wrapper.find('a.table-row')
-    expect(link.attributes('href')).toBe('/timing/evt-1')
+    const links = wrapper.findAll('a.table-row')
+    expect(links[0].attributes('href')).toBe('/timing/evt-2')
+    expect(links[1].attributes('href')).toBe('/events/evt-1/live')
   })
 })
