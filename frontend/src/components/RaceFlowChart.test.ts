@@ -100,9 +100,16 @@ describe('raceFlowData', () => {
     const flows = buildParticipantFlows(sampleRecords, undefined, 'time_based', 'metric')
 
     expect(flows).toHaveLength(2)
-    expect(flows[0].label).toContain('#7')
+    expect(flows[0].label).toBe('#7 Alex Runner')
     expect(flows[0].points[0].value).toBe(21.1)
     expect(flows[1].points[0].value).toBe(21.1)
+  })
+
+  it('includes first and last name in flow legend labels', () => {
+    const flows = buildParticipantFlows(sampleRecords, undefined, 'lap_based')
+
+    expect(flows[0].label).toBe('#7 Alex Runner')
+    expect(flows[1].label).toBe('#12 Sam Trail')
   })
 
   it('converts distance flows to miles by default', () => {

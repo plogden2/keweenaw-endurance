@@ -41,6 +41,7 @@ const livePayload = {
     {
       id: 'r-12',
       name: '12 Hour',
+      race_type: 'lap_based',
       status: 'scheduled',
       start_time: '2026-08-01T08:00:00-04:00',
       countdown_seconds: 3600,
@@ -60,6 +61,7 @@ const livePayload = {
     {
       id: 'r-6',
       name: '6 Hour',
+      race_type: 'lap_based',
       status: 'scheduled',
       start_time: '2026-08-01T08:00:00-04:00',
       countdown_seconds: 3600,
@@ -69,6 +71,7 @@ const livePayload = {
     {
       id: 'r-90',
       name: '90-Minute Kids',
+      race_type: 'lap_based',
       status: 'scheduled',
       start_time: '2026-08-01T15:00:00-04:00',
       countdown_seconds: 25200,
@@ -99,7 +102,14 @@ describe('EventLive.vue', () => {
     const wrapper = mount(EventLive, {
       global: {
         plugins: [router],
-        stubs: { ScanPopup: true, RaceFlowChart: true },
+        stubs: {
+          ScanPopup: true,
+          RaceFlowChart: {
+            name: 'RaceFlowChart',
+            props: ['raceId', 'raceStatus', 'raceStartTime', 'raceType'],
+            template: '<div data-testid="race-flow-chart-stub" />',
+          },
+        },
       },
     })
     await flushPromises()
@@ -115,6 +125,35 @@ describe('EventLive.vue', () => {
     expect(wrapper.find('[data-testid="category-legend"]').exists()).toBe(true)
     // Spectator / unlocked browsers do not show station sync chrome
     expect(wrapper.find('[data-testid="sync-status"]').exists()).toBe(false)
+  })
+
+  it('hides countdown after it reaches zero', async () => {
+    ;(eventsLiveApi.getLive as Mock).mockResolvedValue({
+      data: {
+        ...livePayload,
+        races: livePayload.races.map((race) => ({
+          ...race,
+          status: 'active',
+          countdown_seconds: 0,
+        })),
+      },
+    })
+
+    const wrapper = await mountLive()
+
+    expect(wrapper.find('[data-testid="live-countdown"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Countdown')
+  })
+
+  it('passes race type and start time into race flow charts', async () => {
+    const wrapper = await mountLive()
+    const chart = wrapper.findComponent({ name: 'RaceFlowChart' })
+
+    expect(chart.exists()).toBe(true)
+    expect(chart.props('raceId')).toBe('r-12')
+    expect(chart.props('raceType')).toBe('lap_based')
+    expect(chart.props('raceStatus')).toBe('scheduled')
+    expect(chart.props('raceStartTime')).toBe('2026-08-01T08:00:00-04:00')
   })
 
   it('shows sync status when PIN-unlocked as a reader session', async () => {

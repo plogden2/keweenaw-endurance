@@ -156,7 +156,7 @@ export function compareAgeGroupKeys(a: string, b: string): number {
 function createParticipantFlow(participant: NonNullable<TimingRecord['participant']>): ParticipantFlow {
   return {
     participantId: participant.id,
-    label: `#${participant.bib_number} ${participant.first_name}`,
+    label: `#${participant.bib_number} ${participant.first_name} ${participant.last_name}`.trim(),
     bibNumber: participant.bib_number,
     firstName: participant.first_name,
     lastName: participant.last_name,

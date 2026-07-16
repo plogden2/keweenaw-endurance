@@ -1079,6 +1079,7 @@ func TestGetEventLive_CountdownAndLegend(t *testing.T) {
 	require.Len(t, races, 1)
 	race0 := races[0].(map[string]interface{})
 	assert.Equal(t, "scheduled", race0["status"])
+	assert.Equal(t, "lap_based", race0["race_type"])
 	assert.Greater(t, race0["countdown_seconds"].(float64), float64(0))
 	assert.NotNil(t, race0["flow_series"])
 	assert.NotNil(t, race0["leaderboard_overall"])

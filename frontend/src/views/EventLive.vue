@@ -101,19 +101,27 @@
       <div v-show="activeTab === '12h'" data-testid="race-panel-12h">
         <section class="panel">
           <h2>{{ race12?.name || '12 Hour' }}</h2>
-          <p id="countdown-label-12h" class="countdown-label">Countdown</p>
-          <p
-            class="countdown"
-            data-testid="live-countdown"
-            role="timer"
-            aria-live="polite"
-            aria-labelledby="countdown-label-12h"
-          >
-            {{ formatCountdown(race12?.countdown_seconds ?? 0) }}
-          </p>
+          <template v-if="(race12?.countdown_seconds ?? 0) > 0">
+            <p id="countdown-label-12h" class="countdown-label">Countdown</p>
+            <p
+              class="countdown"
+              data-testid="live-countdown"
+              role="timer"
+              aria-live="polite"
+              aria-labelledby="countdown-label-12h"
+            >
+              {{ formatCountdown(race12?.countdown_seconds ?? 0) }}
+            </p>
+          </template>
         </section>
         <div class="chart-wrap" aria-label="Lap progress chart">
-          <RaceFlowChart v-if="race12?.id" :race-id="race12.id" />
+          <RaceFlowChart
+            v-if="race12?.id"
+            :race-id="race12.id"
+            :race-status="asRaceStatus(race12.status)"
+            :race-start-time="race12.start_time"
+            :race-type="race12.race_type"
+          />
         </div>
         <section class="panel">
           <h2>Leaderboard — Combined overall</h2>
@@ -154,18 +162,26 @@
       <div v-show="activeTab === '6h'" data-testid="race-panel-6h">
         <section class="panel">
           <h2>{{ race6?.name || '6 Hour' }}</h2>
-          <p id="countdown-label-6h" class="countdown-label">Countdown</p>
-          <p
-            class="countdown"
-            role="timer"
-            aria-live="polite"
-            aria-labelledby="countdown-label-6h"
-          >
-            {{ formatCountdown(race6?.countdown_seconds ?? 0) }}
-          </p>
+          <template v-if="(race6?.countdown_seconds ?? 0) > 0">
+            <p id="countdown-label-6h" class="countdown-label">Countdown</p>
+            <p
+              class="countdown"
+              role="timer"
+              aria-live="polite"
+              aria-labelledby="countdown-label-6h"
+            >
+              {{ formatCountdown(race6?.countdown_seconds ?? 0) }}
+            </p>
+          </template>
         </section>
         <div class="chart-wrap">
-          <RaceFlowChart v-if="race6?.id" :race-id="race6.id" />
+          <RaceFlowChart
+            v-if="race6?.id"
+            :race-id="race6.id"
+            :race-status="asRaceStatus(race6.status)"
+            :race-start-time="race6.start_time"
+            :race-type="race6.race_type"
+          />
         </div>
         <section class="panel">
           <h2>Leaderboard — Combined overall</h2>
@@ -196,18 +212,26 @@
       <div v-show="activeTab === '90m'" data-testid="race-panel-90m">
         <section class="panel">
           <h2>{{ race90?.name || '90 Minute' }}</h2>
-          <p id="countdown-label-90m" class="countdown-label">Countdown</p>
-          <p
-            class="countdown"
-            role="timer"
-            aria-live="polite"
-            aria-labelledby="countdown-label-90m"
-          >
-            {{ formatCountdown(race90?.countdown_seconds ?? 0) }}
-          </p>
+          <template v-if="(race90?.countdown_seconds ?? 0) > 0">
+            <p id="countdown-label-90m" class="countdown-label">Countdown</p>
+            <p
+              class="countdown"
+              role="timer"
+              aria-live="polite"
+              aria-labelledby="countdown-label-90m"
+            >
+              {{ formatCountdown(race90?.countdown_seconds ?? 0) }}
+            </p>
+          </template>
         </section>
         <div class="chart-wrap">
-          <RaceFlowChart v-if="race90?.id" :race-id="race90.id" />
+          <RaceFlowChart
+            v-if="race90?.id"
+            :race-id="race90.id"
+            :race-status="asRaceStatus(race90.status)"
+            :race-start-time="race90.start_time"
+            :race-type="race90.race_type"
+          />
         </div>
         <section class="panel">
           <h2>Leaderboard — Combined overall</h2>
@@ -241,8 +265,20 @@
           <p class="muted">Combined flow chart for concurrent races.</p>
         </section>
         <div class="chart-wrap overlap-charts" aria-label="Overlap race flow">
-          <RaceFlowChart v-if="race12?.id" :race-id="race12.id" />
-          <RaceFlowChart v-if="race6?.id" :race-id="race6.id" />
+          <RaceFlowChart
+            v-if="race12?.id"
+            :race-id="race12.id"
+            :race-status="asRaceStatus(race12.status)"
+            :race-start-time="race12.start_time"
+            :race-type="race12.race_type"
+          />
+          <RaceFlowChart
+            v-if="race6?.id"
+            :race-id="race6.id"
+            :race-status="asRaceStatus(race6.status)"
+            :race-start-time="race6.start_time"
+            :race-type="race6.race_type"
+          />
         </div>
       </div>
 
@@ -265,7 +301,13 @@
           <div class="fs-panel" data-testid="rotator-flow">
             <h2>Race flow</h2>
             <div class="chart-wrap dark">
-              <RaceFlowChart v-if="race12?.id" :race-id="race12.id" />
+              <RaceFlowChart
+                v-if="race12?.id"
+                :race-id="race12.id"
+                :race-status="asRaceStatus(race12.status)"
+                :race-start-time="race12.start_time"
+                :race-type="race12.race_type"
+              />
             </div>
           </div>
           <div class="fs-panel" data-testid="rotator-leaderboard">
@@ -319,6 +361,7 @@ import { useReaderStation } from '@/composables/useReaderStation'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
 import { getErrorMessage } from '@/utils/error'
+import type { RaceStatus } from '@/types/models'
 
 const route = useRoute()
 const eventId = computed(() => String(route.params.eventId))
@@ -344,6 +387,18 @@ function formatCountdown(seconds: number): string {
   const m = Math.floor((s % 3600) / 60)
   const r = s % 60
   return [h, m, r].map((n) => String(n).padStart(2, '0')).join(':')
+}
+
+function asRaceStatus(status: string): RaceStatus | undefined {
+  if (
+    status === 'scheduled' ||
+    status === 'active' ||
+    status === 'finished' ||
+    status === 'cancelled'
+  ) {
+    return status
+  }
+  return undefined
 }
 
 function matchRace(predicate: (name: string) => boolean): EventLiveRace | undefined {

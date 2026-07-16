@@ -12,6 +12,7 @@ import type {
   PaginatedResponse,
   Participant,
   Race,
+  RaceType,
   RfidTagAssociation,
   Category,
   SyncStatusResponse,
@@ -194,6 +195,7 @@ export interface LiveLeaderboardEntry {
 export interface EventLiveRace {
   id: string
   name: string
+  race_type: RaceType
   status: string
   start_time: string
   countdown_seconds: number
