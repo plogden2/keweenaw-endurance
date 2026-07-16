@@ -93,7 +93,7 @@
           class="legend-item"
           role="listitem"
         >
-          <i :style="{ background: item.color }" aria-hidden="true" />
+          <i :style="{ background: resolveCategoryColor(item.key, item.color) }" aria-hidden="true" />
           {{ item.label }}
         </span>
       </div>
@@ -362,6 +362,7 @@ import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
 import { getErrorMessage } from '@/utils/error'
 import type { RaceStatus } from '@/types/models'
+import { resolveCategoryColor } from '@/themes/defaultLegend'
 
 const route = useRoute()
 const eventId = computed(() => String(route.params.eventId))
@@ -423,7 +424,8 @@ const race90 = computed(
 )
 
 function colorFor(key: string): string {
-  return live.value?.category_legend.find((l) => l.key === key)?.color || '#6c757d'
+  const apiColor = live.value?.category_legend.find((l) => l.key === key)?.color
+  return resolveCategoryColor(key, apiColor)
 }
 
 async function refreshPending() {
@@ -568,13 +570,11 @@ onUnmounted(() => {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 2rem;
-  --line: #dee2e6;
-  --muted: #6c757d;
-  --accent: #1a5276;
+  --line: var(--border);
 }
 
 .page-title {
-  color: #2c3e50;
+  color: var(--ink);
   margin: 0 0 1rem;
 }
 
@@ -592,22 +592,22 @@ onUnmounted(() => {
   padding: 0.2rem 0.55rem;
   border-radius: 4px;
   font-size: 0.8rem;
-  background: #ecf0f1;
+  background: color-mix(in srgb, var(--muted) 15%, var(--surface));
 }
 
 .badge.online {
-  background: #d5f5e3;
-  color: #1e8449;
+  background: color-mix(in srgb, var(--success) 15%, var(--surface));
+  color: var(--success);
 }
 
 .badge.offline {
-  background: #fadbd8;
-  color: #922b21;
+  background: color-mix(in srgb, var(--signal) 15%, var(--surface));
+  color: var(--signal);
 }
 
 .badge.pending {
-  background: #fdebd0;
-  color: #7d6608;
+  background: color-mix(in srgb, var(--copper) 20%, var(--surface));
+  color: var(--copper);
 }
 
 .sync-group {
@@ -633,7 +633,7 @@ onUnmounted(() => {
 
 .race-tabs button {
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   padding: 0.45rem 0.85rem;
   border-radius: 4px;
   cursor: pointer;
@@ -642,7 +642,7 @@ onUnmounted(() => {
 
 .race-tabs button[aria-selected='true'] {
   background: var(--accent);
-  color: #fff;
+  color: var(--surface);
   border-color: var(--accent);
 }
 
@@ -653,12 +653,12 @@ onUnmounted(() => {
   font: inherit;
   cursor: pointer;
   background: var(--accent);
-  color: #fff;
+  color: var(--surface);
 }
 
 .btn.secondary {
-  background: #ecf0f1;
-  color: #2c3e50;
+  background: var(--mist);
+  color: var(--ink);
 }
 
 .legend {
@@ -668,7 +668,7 @@ onUnmounted(() => {
   font-size: 0.85rem;
   margin: 0.5rem 0 1rem;
   padding: 0.65rem 0.85rem;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px;
   align-items: center;
@@ -688,7 +688,7 @@ onUnmounted(() => {
 }
 
 .panel {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 1rem 1.15rem;
@@ -710,7 +710,7 @@ onUnmounted(() => {
 }
 
 .chart-wrap {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 0.75rem;
@@ -725,8 +725,8 @@ onUnmounted(() => {
 }
 
 .chart-wrap.dark {
-  background: #1c2833;
-  border-color: #34495e;
+  background: var(--ink-deep);
+  border-color: var(--ink);
 }
 
 .muted {
@@ -739,7 +739,7 @@ onUnmounted(() => {
 }
 
 .status.error {
-  color: #dc3545;
+  color: var(--signal);
 }
 
 table {
@@ -772,8 +772,8 @@ td {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: #1c2833;
-  color: #ecf0f1;
+  background: var(--ink-deep);
+  color: var(--mist);
   padding: 1.5rem 2rem;
   display: flex;
   flex-direction: column;
@@ -787,13 +787,13 @@ td {
 }
 
 .fs-root h1 {
-  color: #fff;
+  color: var(--surface);
   font-size: 1.75rem;
   margin: 0;
 }
 
 .fs-meta {
-  color: #aeb6bf;
+  color: var(--muted);
   font-size: 0.95rem;
 }
 
@@ -806,7 +806,7 @@ td {
 }
 
 .fs-panel {
-  background: #273746;
+  background: color-mix(in srgb, var(--ink) 35%, var(--ink-deep));
   border-radius: 8px;
   padding: 1rem 1.15rem;
   overflow: auto;
@@ -815,7 +815,7 @@ td {
 .fs-panel h2 {
   margin: 0 0 0.75rem;
   font-size: 1.2rem;
-  color: #fff;
+  color: var(--surface);
 }
 
 .fs-exit {
