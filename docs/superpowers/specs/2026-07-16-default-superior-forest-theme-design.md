@@ -1,7 +1,7 @@
 # Default site theme: Superior Forest + copper
 
 **Date:** 2026-07-16  
-**Status:** Draft — awaiting user review before implementation plan  
+**Status:** Approved — implementation in progress  
 
 **Inspiration:** [Visit Keweenaw](https://www.visitkeweenaw.com/) outdoor greens (adapted, not copied) + copper rock hues from a Keweenaw shoreline photo. No Visit Keweenaw logo, fonts, photography, or layout recreation.
 
