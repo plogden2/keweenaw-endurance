@@ -200,7 +200,7 @@ watch(
   position: fixed;
   inset: 0;
   z-index: 2000;
-  background: rgba(44, 62, 80, 0.45);
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -227,7 +227,7 @@ watch(
   font-size: 1.6rem;
   font-weight: 700;
   margin: 0.25rem 0;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .bib {
@@ -257,7 +257,7 @@ watch(
 
 .stat strong {
   font-size: 1.5rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .actions {
@@ -273,13 +273,13 @@ watch(
   padding: 0.55rem 1rem;
   font: inherit;
   cursor: pointer;
-  background: #1a5276;
+  background: var(--accent-link);
   color: #fff;
 }
 
 .btn.secondary {
   background: #ecf0f1;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .btn.ok {
@@ -325,7 +325,7 @@ watch(
 
 .toast.test-read {
   background: #d6eaf8;
-  color: #1a5276;
+  color: var(--accent-link);
 }
 
 .toast.unknown {

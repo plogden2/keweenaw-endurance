@@ -108,7 +108,7 @@ function onSubmit(): void {
 <style scoped>
 .manual-form {
   background: #fff;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 1.25rem;
 }
@@ -116,7 +116,7 @@ function onSubmit(): void {
 .section-title {
   margin: 0 0 1rem;
   font-size: 1.1rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .field {
@@ -134,14 +134,14 @@ function onSubmit(): void {
 .field input,
 .field select {
   padding: 0.5rem 0.75rem;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 1rem;
 }
 
 .submit-btn {
   padding: 0.6rem 1.25rem;
-  background: #27ae60;
+  background: var(--success);
   color: white;
   border: none;
   border-radius: 4px;
@@ -155,7 +155,7 @@ function onSubmit(): void {
 }
 
 .error {
-  color: #c0392b;
+  color: var(--signal);
   font-size: 0.9rem;
   margin: 0 0 0.75rem;
 }
