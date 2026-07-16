@@ -142,6 +142,10 @@ func (s *LocalStore) EnqueueLap(lap PendingLap) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := os.MkdirAll(filepath.Dir(s.csvPath), 0o755); err != nil {
+		return err
+	}
+
 	rollback, err := s.appendCSVRowLocked(lap)
 	if err != nil {
 		return err

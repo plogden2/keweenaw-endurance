@@ -159,7 +159,13 @@ func (a *HostedAuth) FetchLogicalUUID(client *http.Client, raceID, participantID
 
 	var tags []ParticipantTag
 	if err := json.Unmarshal(raw, &tags); err != nil {
-		return "", err
+		var wrapped struct {
+			Data []ParticipantTag `json:"data"`
+		}
+		if err2 := json.Unmarshal(raw, &wrapped); err2 != nil {
+			return "", err
+		}
+		tags = wrapped.Data
 	}
 	for _, tag := range tags {
 		if uid := strings.TrimSpace(tag.TagUID); uid != "" {

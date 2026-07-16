@@ -1,8 +1,17 @@
 import type { APIRequestContext, Page } from '@playwright/test'
-import { API_BASE, pinToken } from '../../fixtures/rfid'
+import { API_BASE, BLUFFET, pinToken } from '../../fixtures/rfid'
 import { BRIDGE_LOCAL_URL, fetchLocalBridgeStatus } from './chaos'
+import { serverLapsTotal } from './spectators'
 
-async function resolveLogicalUuid(
+async function countHostedLaps(request: APIRequestContext, raceId?: string): Promise<number> {
+  const ids = raceId
+    ? [raceId]
+    : [BLUFFET.races.twelveHour.id, BLUFFET.races.sixHour.id, BLUFFET.races.kids.id]
+  const totals = await Promise.all(ids.map((id) => serverLapsTotal(request, id).catch(() => 0)))
+  return totals.reduce((a, b) => a + b, 0)
+}
+
+export async function resolveLogicalUuid(
   request: APIRequestContext,
   participantId: string,
   raceId?: string,
@@ -95,6 +104,10 @@ export async function programRacerAndAwaitLap(opts: {
   }
 
   const token = await pinToken(opts.request)
+  // Snapshot before write: bridge poll→hosted scoring can finish (and dismiss the
+  // reader popup) before this HTTP returns, so UI-only wait is flaky on prod-like.
+  const lapsBefore = await countHostedLaps(opts.request, opts.raceId)
+
   // Hardware write waits on the Proxmark mutex (and may queue behind a poll).
   // Playwright's default API timeout (15s) is too tight for real CLI round-trips.
   const write = await opts.request.post(`${API_BASE}/api/rfid/write-tag`, {
@@ -106,17 +119,32 @@ export async function programRacerAndAwaitLap(opts: {
     throw new Error(`write-tag failed: ${write.status()} ${await write.text()}`)
   }
 
-  // Pre-start races return `test_read` (toast), not a scored `lap` modal.
-  // Either proves write→Poll→WS→scan worked.
-  await feedback.waitFor({
-    state: 'visible',
-    timeout: timeoutMs,
-  })
-
-  if (opts.dismissAfter) {
-    await popup
-      .getByTestId('scan-popup-dismiss')
-      .click({ timeout: 2_000 })
-      .catch(() => {})
+  // Success = reader popup/toast OR hosted lap total grew (bridge scored without UI).
+  // Pre-start races use test_read toast (laps may not increase).
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await feedback.isVisible().catch(() => false)) {
+      if (opts.dismissAfter) {
+        await popup
+          .getByTestId('scan-popup-dismiss')
+          .click({ timeout: 2_000 })
+          .catch(() => {})
+      }
+      return
+    }
+    const lapsNow = await countHostedLaps(opts.request, opts.raceId)
+    if (lapsNow > lapsBefore) {
+      if (opts.dismissAfter) {
+        await popup
+          .getByTestId('scan-popup-dismiss')
+          .click({ timeout: 2_000 })
+          .catch(() => {})
+      }
+      return
+    }
+    await new Promise((r) => setTimeout(r, 400))
   }
+  throw new Error(
+    `write-tag ok but no reader feedback and hosted laps unchanged (${lapsBefore}) before timeout`,
+  )
 }

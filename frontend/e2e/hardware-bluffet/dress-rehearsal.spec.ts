@@ -18,7 +18,7 @@ import { API_BASE, BLUFFET, armFinishStation, getBluffetEvent, pinLogin, pinToke
 import { appendIssue, createRunDir, writeStatus, type Issue, type IssueSeverity, type RunStatus } from './lib/artifacts'
 import { sampleLapDelayMs, sleep } from './lib/clock'
 import { addRacersToLapState, dueRacers, initLapState, removeRacer, scheduleNext, type LapState } from './lib/lapEngine'
-import { programRacerAndAwaitLap } from './lib/proxmark'
+import { programRacerAndAwaitLap, resolveLogicalUuid } from './lib/proxmark'
 import { loadSeededRacers, pickDnfs, pickNoShows, type Racer } from './lib/roster'
 import { addLateSignup, finishCheckpointId, firstCategoryId, refreshEmptyBibs, setCompressedStartTimes } from './lib/setup'
 import {
@@ -498,38 +498,10 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
       const raceEndAt = tZero.getTime() + RACE_END_OFFSET_MS
 
       while (Date.now() < raceEndAt) {
-        const now = Date.now()
-
-        const inOutage = outageStarted && !outageEnded
-
-        // --- lap engine: serialize one write-tag→read at a time on the single chip ---
-        for (const id of dueRacers(lapState, now)) {
-          const racer = racerById.get(id)
-          try {
-            await programRacerAndAwaitLap({
-              request,
-              readerPage: reader!.page,
-              participantId: id,
-              logicalTagUuid: racer?.logicalTagUuid,
-              raceId: racer?.raceId,
-              useLocalBridge: inOutage,
-              timeoutMs: 60_000,
-              dismissAfter: true,
-            })
-            scheduleNext(lapState, id, Date.now())
-            state.lapsScored = lapState.scored
-            state.lastProxmark = `lap ok bib=${racer?.bib ?? id}`
-            if (inOutage) outageLapsScored += 1
-          } catch (err) {
-            lapState.nextDue.set(id, Date.now() + 45_000)
-            await issue(
-              'critical',
-              'Proxmark write-tag/read timeout',
-              `bib=${racer?.bib ?? '?'} participant=${id}: ${String(err)}`,
-              { screenshot: await screenshotFor('proxmark-timeout', reader!.page) },
-            )
-          }
-        }
+        // Fresh clock every tick. Chaos/timeline MUST run before the lap engine —
+        // each write→read can take 10–60s; draining all due racers first starved
+        // outage/crash windows on the prod-like bridge path.
+        let now = Date.now()
 
         // --- T+2:00 late signup #3, joins rotation immediately ---
         if (!signup3Done && now >= tZero.getTime() + LATE_SIGNUP_3_OFFSET_MS) {
@@ -722,6 +694,56 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
                 )
                 outagePreSnapshot = { laptop: laptopNow, iphone: iphoneNow }
               }
+            }
+          }
+        }
+
+        // --- lap engine: at most one write→read per tick so chaos stays on schedule ---
+        now = Date.now()
+        const inOutage = outageStarted && !outageEnded
+        const due = dueRacers(lapState, now)
+        if (due.length > 0) {
+          const id = due[0]
+          const racer = racerById.get(id)
+          // Late signups may not have a tag association yet. During partition the
+          // local bridge cannot mint one via hosted lookup — defer until online.
+          if (inOutage && !racer?.logicalTagUuid) {
+            lapState.nextDue.set(id, Date.now() + 30_000)
+            await issue(
+              'idea',
+              'Deferred untagged racer during hosted partition',
+              `bib=${racer?.bib ?? '?'} participant=${id} — no logical UUID yet; will retry after heal.`,
+            )
+          } else {
+            try {
+              await programRacerAndAwaitLap({
+                request,
+                readerPage: reader!.page,
+                participantId: id,
+                logicalTagUuid: racer?.logicalTagUuid,
+                raceId: racer?.raceId,
+                useLocalBridge: inOutage,
+                timeoutMs: 60_000,
+                dismissAfter: true,
+              })
+              // First successful write stamps the permanent UUID onto the chip and
+              // usually creates/activates the association — cache it for outage path.
+              if (racer && !racer.logicalTagUuid) {
+                const resolved = await resolveLogicalUuid(request, id, racer.raceId)
+                if (resolved) racer.logicalTagUuid = resolved
+              }
+              scheduleNext(lapState, id, Date.now())
+              state.lapsScored = lapState.scored
+              state.lastProxmark = `lap ok bib=${racer?.bib ?? id}`
+              if (inOutage) outageLapsScored += 1
+            } catch (err) {
+              lapState.nextDue.set(id, Date.now() + 45_000)
+              await issue(
+                'critical',
+                'Proxmark write-tag/read timeout',
+                `bib=${racer?.bib ?? '?'} participant=${id}: ${String(err)}`,
+                { screenshot: await screenshotFor('proxmark-timeout', reader!.page) },
+              )
             }
           }
         }

@@ -1,7 +1,7 @@
 # GCP production deploy + prod-like Bluffet dress rehearsal — design
 
 **Date:** 2026-07-16  
-**Status:** Implemented — dress rehearsal pending hardware run (plan at `docs/superpowers/plans/2026-07-16-gcp-prod-deploy-and-dress-rehearsal.md`)  
+**Status:** Implemented — prod-like dress rehearsal green (`e2e-artifacts/bluffet-hardware/2026-07-16T19-59-55-012Z`, 76 laps, exit 0)  
 **Domain:** `keweenawendurance.com`  
 **Related:** `docs/superpowers/specs/2026-07-15-hardware-bluffet-e2e-design.md`  
 **Feature context:** Speckit `002-rfid-race-scanner` / All You Can East Bluffet  
