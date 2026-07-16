@@ -30,6 +30,8 @@ test.describe('US2 karaoke bonus', () => {
 
     await armFinishStation(request, token, event.id)
 
+    await page.goto('/pin')
+    await pinLogin(page)
     await page.goto(`/events/${event.id}/live`)
     await expect(page.getByTestId('live-view')).toBeVisible()
 

@@ -4,7 +4,11 @@
       <div class="hero-content">
         <h1 class="hero-title">Keweenaw Endurance Syndicate Race Timing</h1>
         <p class="hero-subtitle">Comprehensive race timing and indexing for endurance events</p>
-        <router-link to="/timing" class="cta-button" data-testid="timing-cta">
+        <router-link
+          :to="liveTimingTarget"
+          class="cta-button"
+          data-testid="timing-cta"
+        >
           View Live Timing
         </router-link>
       </div>
@@ -25,11 +29,11 @@
         <div class="featured-actions">
           <router-link
             v-if="bluffetEventId"
-            :to="`/timing/${bluffetEventId}`"
+            :to="`/events/${bluffetEventId}/live`"
             class="featured-timing-link"
             data-testid="bluffet-timing-link"
           >
-            View Event
+            Live race flow
           </router-link>
           <a
             href="https://www.copperharbortrails.org/bluffet"
@@ -85,6 +89,11 @@ const bluffetEventId = computed(() => {
       : undefined)
   return event?.id
 })
+
+/** Spectators land on event live view when Bluffet is known; else the events list. */
+const liveTimingTarget = computed(() =>
+  bluffetEventId.value ? `/events/${bluffetEventId.value}/live` : '/timing',
+)
 
 onMounted(() => {
   void eventsStore.fetchEvents({ limit: 100 })

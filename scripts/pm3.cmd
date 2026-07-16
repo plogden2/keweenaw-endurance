@@ -16,5 +16,12 @@ if not exist "%PM3_EXE%" (
 
 if "%PROXMARK3_PORT%"=="" set "PROXMARK3_PORT=COM3"
 
-"%PM3_EXE%" -p %PROXMARK3_PORT% -f %*
+REM Go's CLIProxmarkReader already passes -p <port>; don't duplicate it
+REM (proxmark3.exe errors: "got COM3 as port and now we got also: COM3").
+echo %*| findstr /I /C:"-p " >nul
+if %ERRORLEVEL%==0 (
+  "%PM3_EXE%" %*
+) else (
+  "%PM3_EXE%" -p %PROXMARK3_PORT% -f %*
+)
 exit /b %ERRORLEVEL%

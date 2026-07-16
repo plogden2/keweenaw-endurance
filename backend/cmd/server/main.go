@@ -190,10 +190,16 @@ func main() {
 		}
 	}()
 
-	// Continuous Proxmark3 / mock reader poll → WebSocket fan-out
+	// Continuous Proxmark3 / mock reader poll → WebSocket fan-out.
+	// Hardware CLI spawns a process per poll and needs exclusive COM access;
+	// keep the interval long enough that Poll finishes before the next tick.
+	pollInterval := 200 * time.Millisecond
+	if cfg.RFID.Hardware {
+		pollInterval = 1500 * time.Millisecond
+	}
 	pollCtx, pollCancel := context.WithCancel(context.Background())
 	defer pollCancel()
-	svc.RFID.StartPolling(pollCtx, 200*time.Millisecond, func() string {
+	svc.RFID.StartPolling(pollCtx, pollInterval, func() string {
 		return svc.Stations.CurrentDeviceID()
 	})
 

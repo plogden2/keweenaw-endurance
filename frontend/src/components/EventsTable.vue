@@ -10,7 +10,7 @@
       <router-link
         v-for="event in events"
         :key="event.id"
-        :to="`/timing/${event.id}`"
+        :to="eventPath(event)"
         class="table-row"
       >
         <span>{{ event.name }}</span>
@@ -39,6 +39,14 @@ withDefaults(
 
 function formatDate(value: string | undefined): string {
   return formatEventDate(value)
+}
+
+/** Active events → live spectator view; others → timing event details. */
+function eventPath(event: Event): string {
+  if (event.status === 'active') {
+    return `/events/${event.id}/live`
+  }
+  return `/timing/${event.id}`
 }
 </script>
 

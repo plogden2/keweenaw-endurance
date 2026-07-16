@@ -12,19 +12,18 @@ import (
 
 func TestCLIProxmarkReader_PollParsesFourPages(t *testing.T) {
 	const logicalUUID = "1441674d-a011-471a-a601-722b88b117f5"
-	pages := map[string]string{
-		"hf mfu rdbl -b 4": "[=]   4 | 14 41 67 4d\n",
-		"hf mfu rdbl -b 5": "[=]   5 | a0 11 47 1a\n",
-		"hf mfu rdbl -b 6": "[=]   6 | a6 01 72 2b\n",
-		"hf mfu rdbl -b 7": "[=]   7 | 88 b1 17 f5\n",
-	}
+	combined := strings.Join([]string{
+		"[=]   4 | 14 41 67 4d\n",
+		"[=]   5 | a0 11 47 1a\n",
+		"[=]   6 | a6 01 72 2b\n",
+		"[=]   7 | 88 b1 17 f5\n",
+	}, "")
 
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
-			out, ok := pages[command]
-			require.True(t, ok, "unexpected command %q", command)
-			return out, nil
+			assert.Equal(t, "hf mfu rdbl -b 4; hf mfu rdbl -b 5; hf mfu rdbl -b 6; hf mfu rdbl -b 7", command)
+			return combined, nil
 		},
 	})
 
@@ -47,12 +46,11 @@ func TestCLIProxmarkReader_WriteLogicalUUIDWritesFourPages(t *testing.T) {
 
 	err := reader.WriteLogicalUUID(logicalUUID)
 	require.NoError(t, err)
-	assert.Equal(t, []string{
-		"hf mfu wrbl -b 4 -d 1441674d",
-		"hf mfu wrbl -b 5 -d a011471a",
-		"hf mfu wrbl -b 6 -d a601722b",
-		"hf mfu wrbl -b 7 -d 88b117f5",
-	}, commands)
+	require.Len(t, commands, 1)
+	assert.Equal(t,
+		"hf mfu wrbl -b 4 -d 1441674d; hf mfu wrbl -b 5 -d a011471a; hf mfu wrbl -b 6 -d a601722b; hf mfu wrbl -b 7 -d 88b117f5",
+		commands[0],
+	)
 }
 
 func TestCLIProxmarkReader_PollEmptyPagesReturnsEmpty(t *testing.T) {
@@ -192,18 +190,21 @@ func TestCLIProxmarkReader_WritePageCommandFormat(t *testing.T) {
 		Runner: func(command string) (string, error) {
 			assert.NotContains(t, command, "--blk")
 			assert.Contains(t, command, "-b ")
-			assert.True(t, strings.HasPrefix(command, "hf mfu wrbl "))
-			parts := strings.Fields(command)
-			require.GreaterOrEqual(t, len(parts), 6)
-			dIdx := -1
-			for i, p := range parts {
-				if p == "-d" {
-					dIdx = i
-					break
+			for _, part := range strings.Split(command, ";") {
+				part = strings.TrimSpace(part)
+				assert.True(t, strings.HasPrefix(part, "hf mfu wrbl "), part)
+				parts := strings.Fields(part)
+				require.GreaterOrEqual(t, len(parts), 6)
+				dIdx := -1
+				for i, p := range parts {
+					if p == "-d" {
+						dIdx = i
+						break
+					}
 				}
+				require.Greater(t, dIdx, 0)
+				require.Equal(t, 8, len(parts[dIdx+1]), "page writes must be 4 bytes (8 hex chars): %s", part)
 			}
-			require.Greater(t, dIdx, 0)
-			require.Equal(t, 8, len(parts[dIdx+1]), "page writes must be 4 bytes (8 hex chars): %s", command)
 			return "ok", nil
 		},
 	})
@@ -215,11 +216,16 @@ func TestCLIProxmarkReader_PollPageCommandFormat(t *testing.T) {
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
-			var page int
-			_, err := fmt.Sscanf(command, "hf mfu rdbl -b %d", &page)
-			require.NoError(t, err)
-			seen[page] = true
-			return fmt.Sprintf("[=]   %d | 00 00 00 00\n", page), nil
+			var out strings.Builder
+			for _, part := range strings.Split(command, ";") {
+				part = strings.TrimSpace(part)
+				var page int
+				_, err := fmt.Sscanf(part, "hf mfu rdbl -b %d", &page)
+				require.NoError(t, err)
+				seen[page] = true
+				fmt.Fprintf(&out, "[=]   %d | 00 00 00 00\n", page)
+			}
+			return out.String(), nil
 		},
 	})
 	_, err := reader.Poll()

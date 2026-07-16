@@ -6,7 +6,12 @@
       <router-view />
     </main>
 
-    <ScanPopup :scan="lastScan" @dismiss="clearLastScan" @karaoke="onKaraoke" />
+    <ScanPopup
+      v-if="pinAuth.isAuthenticated"
+      :scan="lastScan"
+      @dismiss="clearLastScan"
+      @karaoke="onKaraoke"
+    />
 
     <footer class="footer">
       <div class="footer-content">
@@ -18,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import UnitToggle from '@/components/UnitToggle.vue'
@@ -26,10 +31,12 @@ import ScanPopup from '@/components/ScanPopup.vue'
 import { useReaderStation } from '@/composables/useReaderStation'
 import { useBluffetTheme } from '@/composables/useBluffetTheme'
 import { timingRecordsApi } from '@/services/api'
+import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
 
 const route = useRoute()
 const station = useStationStore()
+const pinAuth = usePinAuthStore()
 const { lastScan, clearLastScan, start, stop } = useReaderStation()
 const { active: bluffetActive, themeClass } = useBluffetTheme()
 
@@ -53,12 +60,24 @@ async function onKaraoke() {
   }
 }
 
+/** RFID + ScanPopup only on PIN-unlocked organizer/reader browsers — not spectators. */
+function syncReaderSession() {
+  if (pinAuth.isAuthenticated) {
+    void station.fetchCurrent().catch(() => {
+      /* station may be unarmed */
+    })
+    start()
+    return
+  }
+  stop()
+  clearLastScan()
+}
+
 onMounted(() => {
-  void station.fetchCurrent().catch(() => {
-    /* station may be unarmed */
-  })
-  start()
+  syncReaderSession()
 })
+
+watch(() => pinAuth.isAuthenticated, syncReaderSession)
 
 onUnmounted(() => {
   stop()

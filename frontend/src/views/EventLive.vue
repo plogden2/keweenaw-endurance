@@ -1,6 +1,6 @@
 <template>
   <div class="event-live" data-testid="live-view">
-    <p class="meta-bar sync-bar">
+    <p v-if="isReaderSession" class="meta-bar sync-bar">
       <span class="sync-group" data-testid="sync-status">
         <span
           v-if="online"
@@ -101,28 +101,27 @@
       <div v-show="activeTab === '12h'" data-testid="race-panel-12h">
         <section class="panel">
           <h2>{{ race12?.name || '12 Hour' }}</h2>
-          <p id="countdown-label-12h" class="countdown-label">Countdown</p>
-          <p
-            class="countdown"
-            data-testid="live-countdown"
-            role="timer"
-            aria-live="polite"
-            aria-labelledby="countdown-label-12h"
-          >
-            {{ formatCountdown(race12?.countdown_seconds ?? 0) }}
-          </p>
+          <template v-if="(race12?.countdown_seconds ?? 0) > 0">
+            <p id="countdown-label-12h" class="countdown-label">Countdown</p>
+            <p
+              class="countdown"
+              data-testid="live-countdown"
+              role="timer"
+              aria-live="polite"
+              aria-labelledby="countdown-label-12h"
+            >
+              {{ formatCountdown(race12?.countdown_seconds ?? 0) }}
+            </p>
+          </template>
         </section>
         <div class="chart-wrap" aria-label="Lap progress chart">
-          <svg viewBox="0 0 640 220" role="img">
-            <line x1="40" y1="200" x2="620" y2="200" stroke="#dee2e6" />
-            <line x1="40" y1="20" x2="40" y2="200" stroke="#dee2e6" />
-            <polyline
-              fill="none"
-              stroke="#1a5276"
-              stroke-width="2.5"
-              points="40,180 120,160 200,140 280,110 360,95 440,70 520,55 600,40"
-            />
-          </svg>
+          <RaceFlowChart
+            v-if="race12?.id"
+            :race-id="race12.id"
+            :race-status="asRaceStatus(race12.status)"
+            :race-start-time="race12.start_time"
+            :race-type="race12.race_type"
+          />
         </div>
         <section class="panel">
           <h2>Leaderboard — Combined overall</h2>
@@ -163,27 +162,26 @@
       <div v-show="activeTab === '6h'" data-testid="race-panel-6h">
         <section class="panel">
           <h2>{{ race6?.name || '6 Hour' }}</h2>
-          <p id="countdown-label-6h" class="countdown-label">Countdown</p>
-          <p
-            class="countdown"
-            role="timer"
-            aria-live="polite"
-            aria-labelledby="countdown-label-6h"
-          >
-            {{ formatCountdown(race6?.countdown_seconds ?? 0) }}
-          </p>
+          <template v-if="(race6?.countdown_seconds ?? 0) > 0">
+            <p id="countdown-label-6h" class="countdown-label">Countdown</p>
+            <p
+              class="countdown"
+              role="timer"
+              aria-live="polite"
+              aria-labelledby="countdown-label-6h"
+            >
+              {{ formatCountdown(race6?.countdown_seconds ?? 0) }}
+            </p>
+          </template>
         </section>
         <div class="chart-wrap">
-          <svg viewBox="0 0 640 220" role="img">
-            <line x1="40" y1="200" x2="620" y2="200" stroke="#dee2e6" />
-            <line x1="40" y1="20" x2="40" y2="200" stroke="#dee2e6" />
-            <polyline
-              fill="none"
-              stroke="#148f77"
-              stroke-width="2.5"
-              points="40,170 150,140 260,100 370,80 480,60 600,45"
-            />
-          </svg>
+          <RaceFlowChart
+            v-if="race6?.id"
+            :race-id="race6.id"
+            :race-status="asRaceStatus(race6.status)"
+            :race-start-time="race6.start_time"
+            :race-type="race6.race_type"
+          />
         </div>
         <section class="panel">
           <h2>Leaderboard — Combined overall</h2>
@@ -214,27 +212,26 @@
       <div v-show="activeTab === '90m'" data-testid="race-panel-90m">
         <section class="panel">
           <h2>{{ race90?.name || '90 Minute' }}</h2>
-          <p id="countdown-label-90m" class="countdown-label">Countdown</p>
-          <p
-            class="countdown"
-            role="timer"
-            aria-live="polite"
-            aria-labelledby="countdown-label-90m"
-          >
-            {{ formatCountdown(race90?.countdown_seconds ?? 0) }}
-          </p>
+          <template v-if="(race90?.countdown_seconds ?? 0) > 0">
+            <p id="countdown-label-90m" class="countdown-label">Countdown</p>
+            <p
+              class="countdown"
+              role="timer"
+              aria-live="polite"
+              aria-labelledby="countdown-label-90m"
+            >
+              {{ formatCountdown(race90?.countdown_seconds ?? 0) }}
+            </p>
+          </template>
         </section>
         <div class="chart-wrap">
-          <svg viewBox="0 0 640 220" role="img">
-            <line x1="40" y1="200" x2="620" y2="200" stroke="#dee2e6" />
-            <line x1="40" y1="20" x2="40" y2="200" stroke="#dee2e6" />
-            <polyline
-              fill="none"
-              stroke="#2980b9"
-              stroke-width="2.5"
-              points="40,190 200,160 360,130 520,100 600,90"
-            />
-          </svg>
+          <RaceFlowChart
+            v-if="race90?.id"
+            :race-id="race90.id"
+            :race-status="asRaceStatus(race90.status)"
+            :race-start-time="race90.start_time"
+            :race-type="race90.race_type"
+          />
         </div>
         <section class="panel">
           <h2>Leaderboard — Combined overall</h2>
@@ -267,24 +264,21 @@
           <h2>Overlapping races — 12 Hour + 6 Hour</h2>
           <p class="muted">Combined flow chart for concurrent races.</p>
         </section>
-        <div class="chart-wrap" aria-label="Overlap race flow">
-          <svg viewBox="0 0 640 220" role="img">
-            <line x1="40" y1="200" x2="620" y2="200" stroke="#dee2e6" />
-            <line x1="40" y1="20" x2="40" y2="200" stroke="#dee2e6" />
-            <polyline
-              fill="none"
-              stroke="#1a5276"
-              stroke-width="2.5"
-              points="40,180 120,160 200,140 280,110 360,95 440,70 520,55 600,40"
-            />
-            <polyline
-              fill="none"
-              stroke="#148f77"
-              stroke-width="2.5"
-              stroke-dasharray="8 4"
-              points="40,170 120,145 200,115 280,90 360,75 440,55 520,40 600,30"
-            />
-          </svg>
+        <div class="chart-wrap overlap-charts" aria-label="Overlap race flow">
+          <RaceFlowChart
+            v-if="race12?.id"
+            :race-id="race12.id"
+            :race-status="asRaceStatus(race12.status)"
+            :race-start-time="race12.start_time"
+            :race-type="race12.race_type"
+          />
+          <RaceFlowChart
+            v-if="race6?.id"
+            :race-id="race6.id"
+            :race-status="asRaceStatus(race6.status)"
+            :race-start-time="race6.start_time"
+            :race-type="race6.race_type"
+          />
         </div>
       </div>
 
@@ -307,16 +301,13 @@
           <div class="fs-panel" data-testid="rotator-flow">
             <h2>Race flow</h2>
             <div class="chart-wrap dark">
-              <svg viewBox="0 0 640 220">
-                <line x1="40" y1="200" x2="620" y2="200" stroke="#5d6d7e" />
-                <line x1="40" y1="20" x2="40" y2="200" stroke="#5d6d7e" />
-                <polyline
-                  fill="none"
-                  stroke="#5dade2"
-                  stroke-width="3"
-                  points="40,180 120,160 200,140 280,110 360,95 440,70 520,55 600,40"
-                />
-              </svg>
+              <RaceFlowChart
+                v-if="race12?.id"
+                :race-id="race12.id"
+                :race-status="asRaceStatus(race12.status)"
+                :race-start-time="race12.start_time"
+                :race-type="race12.race_type"
+              />
             </div>
           </div>
           <div class="fs-panel" data-testid="rotator-leaderboard">
@@ -352,6 +343,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import {
   eventsLiveApi,
   rfidApi,
@@ -366,13 +358,17 @@ import {
 } from '@/services/offlineQueue'
 import { setDisplayCache } from '@/services/timingStorage'
 import { useReaderStation } from '@/composables/useReaderStation'
+import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
 import { getErrorMessage } from '@/utils/error'
+import type { RaceStatus } from '@/types/models'
 
 const route = useRoute()
 const eventId = computed(() => String(route.params.eventId))
 const station = useStationStore()
+const pinAuth = usePinAuthStore()
 const { lastScan } = useReaderStation()
+const isReaderSession = computed(() => pinAuth.isAuthenticated)
 
 const live = ref<EventLiveResponse | null>(null)
 const loading = ref(false)
@@ -393,16 +389,37 @@ function formatCountdown(seconds: number): string {
   return [h, m, r].map((n) => String(n).padStart(2, '0')).join(':')
 }
 
+function asRaceStatus(status: string): RaceStatus | undefined {
+  if (
+    status === 'scheduled' ||
+    status === 'active' ||
+    status === 'finished' ||
+    status === 'cancelled'
+  ) {
+    return status
+  }
+  return undefined
+}
+
 function matchRace(predicate: (name: string) => boolean): EventLiveRace | undefined {
   return live.value?.races.find((r) => predicate(r.name.toLowerCase()))
 }
 
-const race12 = computed(() => matchRace((n) => n.includes('12')))
-const race6 = computed(() =>
-  matchRace((n) => n.includes('6') && !n.includes('12')),
+const race12 = computed(
+  () =>
+    matchRace((n) => n.includes('12')) ??
+    // Compressed hardware dress-rehearsal names (30-minute stand-in for 12h).
+    matchRace((n) => /\b30\b/.test(n) && n.includes('minute')),
 )
-const race90 = computed(() =>
-  matchRace((n) => n.includes('90') || n.includes('kids') || n.includes('minute')),
+const race6 = computed(
+  () =>
+    matchRace((n) => n.includes('6') && !n.includes('12')) ??
+    matchRace((n) => /\b15\b/.test(n) && n.includes('minute')),
+)
+const race90 = computed(
+  () =>
+    matchRace((n) => n.includes('90') || n.includes('kids')) ??
+    matchRace((n) => /\b5\b/.test(n) && n.includes('minute')),
 )
 
 function colorFor(key: string): string {
@@ -482,15 +499,11 @@ watch(
 )
 
 onMounted(() => {
-  if (!station.eventId) {
-    station.eventId = eventId.value
+  if (isReaderSession.value) {
+    void station.fetchCurrent().catch(() => {
+      /* offline / unconfigured */
+    })
   }
-  if (!station.deviceId) {
-    station.deviceId = 'browser-station'
-  }
-  void station.fetchCurrent().catch(() => {
-    /* offline / unconfigured */
-  })
 
   void loadLive()
   online.value = typeof navigator !== 'undefined' ? navigator.onLine : true
@@ -705,11 +718,10 @@ onUnmounted(() => {
   overflow-x: auto;
 }
 
-.chart-wrap svg {
-  width: 100%;
-  min-width: 480px;
-  height: 220px;
-  display: block;
+.overlap-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .chart-wrap.dark {

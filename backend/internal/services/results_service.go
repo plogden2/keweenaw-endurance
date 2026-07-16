@@ -58,6 +58,7 @@ type CategoryLegendEntry struct {
 type LiveRaceView struct {
 	ID                 uuidutil.PublicUUID `json:"id"`
 	Name               string              `json:"name"`
+	RaceType           string              `json:"race_type"`
 	Status             string              `json:"status"`
 	StartTime          time.Time           `json:"start_time"`
 	CountdownSeconds   int                 `json:"countdown_seconds"`
@@ -207,6 +208,7 @@ func (s *ResultsService) GetEventLive(eventID uuid.UUID, categoryID *uuid.UUID) 
 		views = append(views, LiveRaceView{
 			ID:                 race.ID,
 			Name:               race.Name,
+			RaceType:           race.RaceType,
 			Status:             race.Status,
 			StartTime:          race.StartTime,
 			CountdownSeconds:   countdown,

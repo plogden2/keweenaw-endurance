@@ -3,7 +3,7 @@
 -- Regenerate: python database/seed/generate_bluffet_seed.py
 --
 -- Deterministic UUIDs (event/races match frontend/e2e/fixtures/rfid.ts BLUFFET)
--- 3 races: 30 Minute (30m, 08:00), 15 Minute (15m, 08:00), 5-Minute Kids (5m, 15:00) America/Detroit
+-- 3 races: 12 Hour (30m, 08:00), 6 Hour (15m, 08:00), 90-Minute Kids (5m, 15:00) America/Detroit
 -- Categories: Intermediate/Advanced × Men/Women (12h/6h); Men/Women (kids)
 -- 100 participants with category_id + deterministic tag UUIDs (uuid5)
 -- Requires: database/migrations/04-rfid-scanner.sql (category_id, rfid_tag_associations)
@@ -13,6 +13,22 @@ BEGIN;
 -- Event id: 1441674d-a011-471a-a601-722b88b117f5
 
 -- Clean prior Bluffet seed (order respects FKs)
+DELETE FROM timing_records WHERE participant_id IN (
+    SELECT p.id FROM participants p
+    WHERE p.race_id IN (
+    SELECT r.id FROM races r
+    JOIN events e ON r.event_id = e.id
+    WHERE e.name = 'All You Can East Bluffet'
+    )
+) OR station_id IN (
+    SELECT s.id FROM reader_stations s
+    JOIN events e ON s.event_id = e.id
+    WHERE e.name = 'All You Can East Bluffet'
+);
+DELETE FROM reader_stations WHERE event_id IN (
+    SELECT e.id FROM events e
+    WHERE e.name = 'All You Can East Bluffet'
+);
 DELETE FROM rfid_tag_associations WHERE participant_id IN (
     SELECT p.id FROM participants p
     WHERE p.race_id IN (
@@ -59,7 +75,7 @@ VALUES
     (
         '17da3ba1-2e09-4eb1-aeb3-d9dd5b6a394e',
         '1441674d-a011-471a-a601-722b88b117f5',
-        '30 Minute',
+        '12 Hour',
         'lap_based',
         NULL,
         30,
@@ -69,7 +85,7 @@ VALUES
     (
         '209769a1-f723-4f70-ae90-466a46338684',
         '1441674d-a011-471a-a601-722b88b117f5',
-        '15 Minute',
+        '6 Hour',
         'lap_based',
         NULL,
         15,
@@ -79,7 +95,7 @@ VALUES
     (
         '0e45ee85-800c-4e1f-a95b-4b92462e790a',
         '1441674d-a011-471a-a601-722b88b117f5',
-        '5-Minute Kids',
+        '90-Minute Kids',
         'lap_based',
         NULL,
         5,

@@ -23,6 +23,15 @@
 
       <section class="races-section">
         <h2>Races</h2>
+        <p class="live-link-wrap">
+          <router-link
+            :to="`/events/${eventId}/live`"
+            class="live-link"
+            data-testid="event-live-link"
+          >
+            Open live race flow
+          </router-link>
+        </p>
         <div v-if="racesStore.loading" class="status">Loading races…</div>
         <ul v-else class="race-list">
           <li v-for="race in racesStore.races" :key="race.id">
@@ -120,6 +129,21 @@ watch(eventId, loadEvent)
 .races-section h2 {
   margin-bottom: 1rem;
   color: #2c3e50;
+}
+
+.live-link-wrap {
+  margin: 0 0 1rem;
+}
+
+.live-link {
+  display: inline-block;
+  font-weight: 600;
+  color: #1a5276;
+  text-decoration: none;
+}
+
+.live-link:hover {
+  text-decoration: underline;
 }
 
 .race-list {

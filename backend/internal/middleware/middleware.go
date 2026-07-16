@@ -19,18 +19,25 @@ func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Allow all origins in development, configure for production
+		// Dev defaults — Vite may be opened as localhost or 127.0.0.1 (different origins).
 		allowedOrigins := []string{
 			"http://localhost:3000",
 			"http://localhost:3001",
 			"https://localhost:3000",
 			"https://localhost:3001",
+			"http://127.0.0.1:3000",
+			"http://127.0.0.1:3001",
+			"https://127.0.0.1:3000",
+			"https://127.0.0.1:3001",
 		}
 
-		// Check if origin is allowed
 		isAllowed := false
 		for _, allowed := range allowedOrigins {
-			if origin == allowed || strings.HasPrefix(origin, "http://localhost:") {
+			if origin == allowed ||
+				strings.HasPrefix(origin, "http://localhost:") ||
+				strings.HasPrefix(origin, "https://localhost:") ||
+				strings.HasPrefix(origin, "http://127.0.0.1:") ||
+				strings.HasPrefix(origin, "https://127.0.0.1:") {
 				isAllowed = true
 				break
 			}
