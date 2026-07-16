@@ -7,6 +7,8 @@ const files = [
   'src/components/SyncStatus.vue',
   'src/components/RaceCard.vue',
   'src/components/ManualTimingForm.vue',
+  'src/components/RaceFlowChart.vue',
+  'src/components/ResultCertificate.vue',
 ]
 
 describe('shared component chrome tokens', () => {
@@ -14,7 +16,7 @@ describe('shared component chrome tokens', () => {
     it(`${file} does not hardcode legacy blue chrome`, () => {
       const src = readFileSync(join(process.cwd(), file), 'utf8')
       const style = src.split('<style')[1] ?? ''
-      expect(style).not.toMatch(/#3498db|#2980b9|#1a5276|#2c3e50/i)
+      expect(style).not.toMatch(/#3498db|#2980b9|#1a5276|#2c3e50|#152536|#e74c3c/i)
     })
   }
 })

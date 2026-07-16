@@ -218,8 +218,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } 
 import { timingApi } from '@/services/api'
 import { useUnitsStore } from '@/stores/units'
 import type { ParticipantStatus, RaceStatus, RaceType, TimingRecord } from '@/types/models'
+import { resolveCategoryColor } from '@/themes/defaultLegend'
 import {
-  assignContrastFlowColors,
   buildExtrapolationPoint,
   buildParticipantFlowTooltip,
   buildParticipantFlows,
@@ -227,7 +227,6 @@ import {
   compareGenderKeys,
   getCurrentElapsedMinutes,
   getFlowChartTitle,
-  getFlowLineColor,
   getFlowYAxisLabel,
   getParticipantAgeGroupLabel,
   getParticipantGenderLabel,
@@ -237,7 +236,7 @@ import {
 } from '@/utils/raceFlowData'
 import { getErrorMessage } from '@/utils/error'
 
-const CURRENT_TIME_LINE_COLOR = '#e74c3c'
+const SIGNAL_COLOR = '#c45c38'
 const LIVE_REFRESH_MS = 30_000
 const STATUS_ORDER: ParticipantStatus[] = [
   'finished',
@@ -293,7 +292,7 @@ const currentTimeLinePlugin: Plugin<'line'> = {
 
     const xPixel = xScale.getPixelForValue(xMinutes)
     ctx.save()
-    ctx.strokeStyle = CURRENT_TIME_LINE_COLOR
+    ctx.strokeStyle = SIGNAL_COLOR
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.moveTo(xPixel, chartArea.top)
@@ -314,7 +313,7 @@ Chart.register(
   currentTimeLinePlugin,
 )
 
-const HIGHLIGHT_COLOR = '#e67e22'
+const HIGHLIGHT_COLOR = '#9b654e'
 const DIMMED_OPACITY = 0.2
 
 const props = defineProps<{
@@ -413,14 +412,18 @@ const visibleFlows = computed(() =>
   filteredFlows.value.filter((flow) => visibleParticipantIds.value.has(flow.participantId)),
 )
 
-const visibleFlowColors = computed(() =>
-  assignContrastFlowColors(visibleFlows.value.map((flow) => flow.participantId)),
-)
+const visibleFlowColors = computed(() => {
+  const colors = new Map<string, string>()
+  for (const participantId of visibleFlows.value.map((flow) => flow.participantId).sort()) {
+    colors.set(participantId, resolveCategoryColor(participantId))
+  }
+  return colors
+})
 
 function getParticipantColor(participantId: string): string {
   return (
     visibleFlowColors.value.get(participantId) ??
-    getFlowLineColor(participantId)
+    resolveCategoryColor(participantId)
   )
 }
 
@@ -646,6 +649,14 @@ function destroyChart(): void {
 function withAlpha(color: string, alpha: number): string {
   if (color.startsWith('hsl(')) {
     return color.replace(')', `, ${alpha})`).replace('hsl(', 'hsla(')
+  }
+
+  if (color.startsWith('#')) {
+    const hex = color.slice(1)
+    const r = Number.parseInt(hex.slice(0, 2), 16)
+    const g = Number.parseInt(hex.slice(2, 4), 16)
+    const b = Number.parseInt(hex.slice(4, 6), 16)
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
   }
 
   return color
@@ -911,7 +922,7 @@ canvas {
 }
 
 .legend-panel {
-  background: #f8f9fa;
+  background: var(--mist);
   border-radius: 8px;
   padding: 1rem;
 }
@@ -939,7 +950,7 @@ canvas {
 .legend-search {
   width: 100%;
   padding: 0.45rem 0.65rem;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font: inherit;
 }
@@ -962,10 +973,10 @@ canvas {
   gap: 0.1rem;
   width: 100%;
   padding: 0.45rem 2rem 0.45rem 0.65rem;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: white;
-  color: #2c3e50;
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
   font: inherit;
   text-align: left;
@@ -977,25 +988,25 @@ canvas {
   right: 0.65rem;
   top: 50%;
   transform: translateY(-50%);
-  color: #6c757d;
+  color: var(--muted);
   pointer-events: none;
 }
 
 .filter-dropdown-trigger:hover {
-  background: #f8f9fa;
+  background: var(--mist);
 }
 
 .filter-dropdown-label {
   font-size: 0.72rem;
   font-weight: 600;
-  color: #6c757d;
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 
 .filter-dropdown-value {
   font-size: 0.85rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .filter-dropdown-menu {
@@ -1007,9 +1018,9 @@ canvas {
   margin: 0;
   padding: 0.25rem 0;
   list-style: none;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: white;
+  background: var(--surface);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   max-height: 220px;
   overflow-y: auto;
@@ -1021,19 +1032,19 @@ canvas {
   padding: 0.45rem 0.75rem;
   border: none;
   background: transparent;
-  color: #2c3e50;
+  color: var(--ink);
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
 .filter-dropdown-option:hover {
-  background: #f8f9fa;
+  background: var(--mist);
 }
 
 .filter-dropdown-option.selected {
-  background: #e9f2ff;
-  color: #1f4f82;
+  background: color-mix(in srgb, var(--accent-link) 15%, var(--surface));
+  color: var(--accent-link);
   font-weight: 600;
 }
 
@@ -1043,21 +1054,21 @@ canvas {
 
 .select-all-btn {
   padding: 0.45rem 0.75rem;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: white;
-  color: #2c3e50;
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
   font: inherit;
 }
 
 .select-all-btn:hover {
-  background: #e9ecef;
+  background: var(--mist);
 }
 
 .legend-empty {
   margin: 0;
-  color: #6c757d;
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
@@ -1074,7 +1085,7 @@ canvas {
   align-items: center;
   gap: 0.4rem;
   font-size: 0.85rem;
-  color: #2c3e50;
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -1083,7 +1094,7 @@ canvas {
 }
 
 .legend-item-hovered {
-  background: #e9f2ff;
+  background: color-mix(in srgb, var(--accent-link) 15%, var(--surface));
   border-radius: 4px;
 }
 
@@ -1110,8 +1121,8 @@ canvas {
   max-width: 240px;
   padding: 0.55rem 0.7rem;
   border-radius: 6px;
-  background: #2c3e50;
-  color: #f8f9fa;
+  background: var(--ink-deep);
+  color: var(--mist);
   font-size: 0.8rem;
   line-height: 1.35;
   pointer-events: none;
@@ -1124,10 +1135,10 @@ canvas {
 
 .status,
 .empty {
-  color: #6c757d;
+  color: var(--muted);
 }
 
 .status.error {
-  color: #c0392b;
+  color: var(--signal);
 }
 </style>

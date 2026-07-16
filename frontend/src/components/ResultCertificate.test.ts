@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { mount, flushPromises } from '@vue/test-utils'
 import ResultCertificate from './ResultCertificate.vue'
 import { createTestRouter } from '@/test/helpers'
@@ -39,6 +41,14 @@ const baseProps = {
 describe('ResultCertificate.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('does not hardcode legacy certificate chrome hex', () => {
+    const src = readFileSync(join(process.cwd(), 'src/components/ResultCertificate.vue'), 'utf8')
+    expect(src).not.toMatch(/#2c3e50|#152536|#1f2d3a/i)
+    const style = src.split('<style')[1] ?? ''
+    expect(style).toMatch(/var\(--ink\)/)
+    expect(style).toMatch(/var\(--ink-deep\)/)
   })
 
   it('renders save image buttons', () => {
@@ -121,7 +131,7 @@ describe('ResultCertificate.vue', () => {
       wrapper.find('[data-testid="social-square-card"]').element,
       'copper-harbor-trails-fest-peter-karinen-bib-788-social.png',
       {
-        backgroundColor: '#152536',
+        backgroundColor: '#203429',
         scale: 1,
         width: 1080,
         height: 1080,
