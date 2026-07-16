@@ -63,9 +63,9 @@ function eventPath(event: Event): string {
   grid-template-columns: 2fr 1fr 1fr 1fr;
   gap: 1rem;
   padding: 1rem;
-  background: #f8f9fa;
+  background: var(--mist);
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .table-row {
@@ -73,14 +73,14 @@ function eventPath(event: Event): string {
   grid-template-columns: 2fr 1fr 1fr 1fr;
   gap: 1rem;
   padding: 1rem;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid var(--border);
   text-decoration: none;
   color: inherit;
   transition: background-color 0.3s;
 }
 
 .table-row:hover {
-  background: #f8f9fa;
+  background: var(--mist);
 }
 
 .table-row:last-child {
@@ -88,26 +88,26 @@ function eventPath(event: Event): string {
 }
 
 .status-active {
-  color: #28a745;
-  font-weight: 500;
+  color: var(--success);
+  font-weight: 600;
   text-transform: capitalize;
 }
 
 .status-upcoming {
-  color: #e67e22;
-  font-weight: 500;
+  color: var(--copper);
+  font-weight: 600;
   text-transform: capitalize;
 }
 
 .status-completed {
-  color: #6c757d;
-  font-weight: 500;
+  color: var(--muted);
+  font-weight: 600;
   text-transform: capitalize;
 }
 
 .empty {
   padding: 1rem;
-  color: #6c757d;
+  color: var(--muted);
   margin: 0;
 }
 

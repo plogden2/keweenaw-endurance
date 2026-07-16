@@ -216,12 +216,11 @@ onUnmounted(() => {
   max-width: 40rem;
   margin: 0 auto;
   padding: 0 2rem;
-  --line: #dee2e6;
-  --muted: #6c757d;
+  --line: var(--border);
 }
 
 .page-title {
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .lead {
@@ -229,8 +228,8 @@ onUnmounted(() => {
 }
 
 .armed {
-  background: #d5f5e3;
-  color: #1e8449;
+  background: color-mix(in srgb, var(--success) 15%, var(--surface));
+  color: var(--success);
   padding: 0.65rem 0.85rem;
   border-radius: 6px;
   margin-bottom: 1rem;
@@ -238,7 +237,7 @@ onUnmounted(() => {
 }
 
 .panel {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 1.25rem;
@@ -250,7 +249,7 @@ label {
   gap: 0.35rem;
   margin-bottom: 1rem;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 label.inline {
@@ -281,18 +280,18 @@ select {
   padding: 0.55rem 1rem;
   font: inherit;
   cursor: pointer;
-  background: var(--accent, #1a5276);
+  background: var(--accent-link);
   color: #fff;
   text-decoration: none;
   display: inline-block;
 }
 
 .btn.secondary {
-  background: #ecf0f1;
-  color: #2c3e50;
+  background: var(--mist);
+  color: var(--ink);
 }
 
 .error {
-  color: #c0392b;
+  color: var(--signal);
 }
 </style>

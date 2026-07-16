@@ -105,7 +105,7 @@ watch(eventId, loadEvent)
 
 .page-title {
   margin-bottom: 0.5rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .event-header {
@@ -122,13 +122,13 @@ watch(eventId, loadEvent)
 }
 
 .meta {
-  color: #6c757d;
+  color: var(--muted);
   margin-bottom: 0;
 }
 
 .races-section h2 {
   margin-bottom: 1rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .live-link-wrap {
@@ -138,7 +138,7 @@ watch(eventId, loadEvent)
 .live-link {
   display: inline-block;
   font-weight: 600;
-  color: #1a5276;
+  color: var(--accent-link);
   text-decoration: none;
 }
 
@@ -158,16 +158,16 @@ watch(eventId, loadEvent)
   align-items: center;
   gap: 1rem;
   padding: 1rem;
-  background: white;
+  background: var(--surface);
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
   margin-bottom: 0.75rem;
   text-decoration: none;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .race-link:hover {
-  background: #f8f9fa;
+  background: var(--mist);
 }
 
 .race-name {
@@ -176,34 +176,34 @@ watch(eventId, loadEvent)
 
 .race-distance {
   font-size: 0.875rem;
-  color: #6c757d;
+  color: var(--muted);
   white-space: nowrap;
 }
 
 .race-status {
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   text-transform: capitalize;
 }
 
 .status-active {
-  color: #28a745;
+  color: var(--success);
 }
 
 .status-finished,
 .status-completed {
-  color: #6c757d;
+  color: var(--muted);
 }
 
 .status {
-  color: #6c757d;
+  color: var(--muted);
 }
 
 .status.error {
-  color: #dc3545;
+  color: var(--signal);
 }
 
 .empty {
-  color: #6c757d;
+  color: var(--muted);
 }
 </style>

@@ -385,7 +385,7 @@ onUnmounted(() => {
 }
 
 .lead {
-  color: #555;
+  color: var(--muted);
   margin: 0 0 1.25rem;
   max-width: 42rem;
 }
@@ -407,17 +407,17 @@ onUnmounted(() => {
 }
 
 .badge.online {
-  background: #d6eaf8;
-  color: #1a5276;
+  background: color-mix(in srgb, var(--accent-link) 15%, var(--surface));
+  color: var(--accent-link);
 }
 
 .badge.ok {
-  background: #d5f5e3;
-  color: #1e8449;
+  background: color-mix(in srgb, var(--success) 15%, var(--surface));
+  color: var(--success);
 }
 
 .muted {
-  color: #777;
+  color: var(--muted);
   font-size: 0.9rem;
 }
 
@@ -426,8 +426,8 @@ onUnmounted(() => {
 }
 
 .panel {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
+  background: var(--mist);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 1.25rem;
   margin-bottom: 1rem;
@@ -472,7 +472,7 @@ onUnmounted(() => {
 }
 
 .btn {
-  background: #2c3e50;
+  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -488,15 +488,15 @@ onUnmounted(() => {
 }
 
 .btn.secondary {
-  background: #7f8c8d;
+  background: var(--muted);
 }
 
 .btn.danger {
-  background: #c0392b;
+  background: var(--signal);
 }
 
 .error {
-  color: #c0392b;
+  color: var(--signal);
   margin: 0.5rem 0;
 }
 
@@ -510,13 +510,13 @@ th,
 td {
   text-align: left;
   padding: 0.35rem 0.5rem;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
 
 th {
   width: 40%;
-  color: #555;
+  color: var(--muted);
   font-weight: 600;
 }
 
@@ -543,7 +543,7 @@ code {
 input[type='password'],
 input[type='file'] {
   padding: 0.45rem;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--border);
   border-radius: 4px;
 }
 </style>
