@@ -99,7 +99,7 @@ describe('EventLive.vue', () => {
     const wrapper = mount(EventLive, {
       global: {
         plugins: [router],
-        stubs: { ScanPopup: true },
+        stubs: { ScanPopup: true, RaceFlowChart: true },
       },
     })
     await flushPromises()
@@ -113,6 +113,18 @@ describe('EventLive.vue', () => {
     expect(wrapper.find('[data-testid="live-countdown"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="leaderboard-overall"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="category-legend"]').exists()).toBe(true)
+    // Spectator / unlocked browsers do not show station sync chrome
+    expect(wrapper.find('[data-testid="sync-status"]').exists()).toBe(false)
+  })
+
+  it('shows sync status when PIN-unlocked as a reader session', async () => {
+    const { usePinAuthStore } = await import('@/stores/pinAuth')
+    const pin = usePinAuthStore()
+    pin.token = 'test-token'
+    pin.role = 'organizer'
+    pin.expiresAt = Math.floor(Date.now() / 1000) + 3600
+
+    const wrapper = await mountLive()
     expect(wrapper.find('[data-testid="sync-status"]').exists()).toBe(true)
   })
 

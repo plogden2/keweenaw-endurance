@@ -60,6 +60,8 @@ test.describe('US1 live lap timing', () => {
     const token = await pinLogin(request)
     await armFinishStation(request, token, event.id)
 
+    await page.goto('/pin')
+    await pinLogin(page)
     await page.goto(`/events/${event.id}/live`)
     await expect(page.getByTestId('live-view')).toBeVisible()
 
@@ -82,6 +84,8 @@ test.describe('US1 live lap timing', () => {
     const token = await pinLogin(request)
     await armFinishStation(request, token, event.id)
 
+    await page.goto('/pin')
+    await pinLogin(page)
     await page.goto(`/events/${event.id}/live`)
     await expect(page.getByTestId('live-view')).toBeVisible()
 
@@ -104,6 +108,8 @@ test.describe('US1 live lap timing', () => {
     const token = await pinLogin(request)
     await armFinishStation(request, token, event.id)
 
+    await page.goto('/pin')
+    await pinLogin(page)
     await page.goto(`/events/${event.id}/live`)
     await expect(page.getByTestId('live-view')).toBeVisible()
     await expect(page.getByTestId('live-countdown')).toBeVisible()
@@ -124,6 +130,8 @@ test.describe('US1 live lap timing', () => {
     const token = await pinLogin(request)
     await armFinishStation(request, token, event.id)
 
+    await page.goto('/pin')
+    await pinLogin(page)
     await page.goto(`/events/${event.id}/live`)
     await expect(page.getByTestId('live-view')).toBeVisible()
 

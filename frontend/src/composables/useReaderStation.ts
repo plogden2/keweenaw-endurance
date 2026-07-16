@@ -2,6 +2,7 @@ import { ref, type Ref } from 'vue'
 import { type ScanResult } from '@/services/api'
 import { enqueueScan } from '@/services/offlineQueue'
 import { setDisplayCache, getDisplayCache } from '@/services/timingStorage'
+import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
 import { rfidStreamUrl } from '@/services/api'
 
@@ -48,14 +49,10 @@ function createReaderStation(): UseReaderStation {
   }
 
   async function handleTagRead(tagUid: string, readAt?: string) {
+    const pinAuth = usePinAuthStore()
+    if (!pinAuth.isAuthenticated) return
+
     const station = useStationStore()
-    // Prefer configured station event; fall back to last path segment when on live view.
-    if (!station.eventId && typeof window !== 'undefined') {
-      const match = window.location.pathname.match(/\/events\/([^/]+)\/live/)
-      if (match?.[1]) {
-        station.eventId = match[1]
-      }
-    }
     if (!station.eventId) {
       try {
         await station.fetchCurrent()

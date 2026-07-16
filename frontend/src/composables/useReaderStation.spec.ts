@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
 import 'fake-indexeddb/auto'
 import { scansApi, rfidStreamUrl } from '@/services/api'
+import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
 import { deleteDatabase } from '@/services/timingStorage'
 import { __resetReaderStationForTests } from './useReaderStation'
@@ -60,6 +61,13 @@ class MockWebSocket {
 }
 
 describe('useReaderStation', () => {
+  function unlockReaderPin() {
+    const pin = usePinAuthStore()
+    pin.token = 'test-token'
+    pin.role = 'organizer'
+    pin.expiresAt = Math.floor(Date.now() / 1000) + 3600
+  }
+
   beforeEach(async () => {
     setActivePinia(createPinia())
     MockWebSocket.instances = []
@@ -90,6 +98,7 @@ describe('useReaderStation', () => {
   })
 
   it('on tag_read posts a scan for the current station event and exposes lastScan', async () => {
+    unlockReaderPin()
     const station = useStationStore()
     station.eventId = 'evt-1'
     station.deviceId = 'laptop-finish-1'
@@ -137,7 +146,29 @@ describe('useReaderStation', () => {
     stop()
   })
 
+  it('skips posting when browser is not PIN-unlocked (spectator)', async () => {
+    const station = useStationStore()
+    station.eventId = 'evt-1'
+    station.deviceId = 'laptop-finish-1'
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop, lastScan } = useReaderStation()
+    start()
+
+    MockWebSocket.instances[0].emit({
+      type: 'tag_read',
+      tag_uid: 'DEMO-TAG-0001',
+      read_at: '2026-08-01T12:00:01-04:00',
+    })
+
+    await nextTick()
+    expect(scansApi.postScan).not.toHaveBeenCalled()
+    expect(lastScan.value).toBeNull()
+    stop()
+  })
+
   it('skips posting when station has no event_id', async () => {
+    unlockReaderPin()
     const station = useStationStore()
     station.eventId = null
 
@@ -157,6 +188,7 @@ describe('useReaderStation', () => {
   })
 
   it('exposes cooldown and test_read scan results', async () => {
+    unlockReaderPin()
     const station = useStationStore()
     station.eventId = 'evt-1'
     station.deviceId = 'laptop-finish-1'
@@ -201,6 +233,7 @@ describe('useReaderStation', () => {
   })
 
   it('queues scans offline and still exposes provisional lastScan', async () => {
+    unlockReaderPin()
     const station = useStationStore()
     station.eventId = 'evt-1'
     station.deviceId = 'laptop-finish-1'
@@ -256,6 +289,7 @@ describe('useReaderStation', () => {
   })
 
   it('uses unknown-device and queues when scan API rejects non-Error', async () => {
+    unlockReaderPin()
     const station = useStationStore()
     station.eventId = 'evt-1'
     station.deviceId = ''

@@ -19,6 +19,11 @@ function createHomeRouter() {
       { path: '/', name: 'home', component: Home },
       { path: '/timing', name: 'timing', component: { template: '<div />' } },
       { path: '/timing/:eventId', name: 'event-timing', component: { template: '<div />' } },
+      {
+        path: '/events/:eventId/live',
+        name: 'event-live',
+        component: { template: '<div />' },
+      },
     ],
   })
 }
@@ -39,6 +44,7 @@ describe('Home.vue', () => {
 
     expect(wrapper.text()).toContain('Keweenaw Endurance Syndicate Race Timing')
     const cta = wrapper.find('[data-testid="timing-cta"]')
+    // No Bluffet id yet → events list
     expect(cta.attributes('href')).toBe('/timing')
   })
 
@@ -64,7 +70,10 @@ describe('Home.vue', () => {
     expect(registerLink.attributes('target')).toBe('_blank')
 
     const timingLink = wrapper.find('[data-testid="bluffet-timing-link"]')
-    expect(timingLink.attributes('href')).toBe('/timing/a1b2c3')
+    expect(timingLink.attributes('href')).toBe('/events/a1b2c3/live')
+    expect(wrapper.find('[data-testid="timing-cta"]').attributes('href')).toBe(
+      '/events/a1b2c3/live',
+    )
     const poster = wrapper.find('[data-testid="bluffet-poster"]')
     expect(poster.exists()).toBe(true)
     expect(poster.find('source[type="image/avif"]').attributes('srcset')).toBe(

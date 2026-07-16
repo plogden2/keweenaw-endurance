@@ -50,6 +50,13 @@ func TestCORS(t *testing.T) {
 			expectedOrigin: "http://localhost:3001",
 		},
 		{
+			name:           "Allowed origin - 127.0.0.1:3000",
+			origin:         "http://127.0.0.1:3000",
+			method:         "GET",
+			expectedStatus: http.StatusOK,
+			expectedOrigin: "http://127.0.0.1:3000",
+		},
+		{
 			name:           "Disallowed origin",
 			origin:         "http://malicious-site.com",
 			method:         "GET",

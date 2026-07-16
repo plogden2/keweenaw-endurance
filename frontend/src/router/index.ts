@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import Home from '@/views/Home.vue'
 import Timing from '@/views/Timing.vue'
-import { eventsLiveApi, racesApi } from '@/services/api'
+import { eventsApi, eventsLiveApi, racesApi } from '@/services/api'
 import { useStationStore } from '@/stores/station'
 
 const routes: RouteRecordRaw[] = [
@@ -73,6 +73,7 @@ const router = createRouter({
 
 /**
  * When opening `/` during an active race, land on event live view (US1 default).
+ * Spectators (no station) still redirect when any Bluffet/event race is active.
  */
 router.beforeEach(async (to) => {
   if (to.name !== 'home' && to.path !== '/') return true
@@ -85,7 +86,18 @@ router.beforeEach(async (to) => {
         await station.fetchCurrent()
         eventId = station.eventId
       } catch {
-        /* no station */
+        /* no station — fall through to event discovery */
+      }
+    }
+
+    if (!eventId) {
+      try {
+        const { data } = await eventsApi.list({ limit: 100 })
+        const events = data.data ?? []
+        const bluffet = events.find((e) => e.name === 'All You Can East Bluffet')
+        eventId = bluffet?.id ?? events.find((e) => e.status === 'active')?.id ?? null
+      } catch {
+        return true
       }
     }
     if (!eventId) return true

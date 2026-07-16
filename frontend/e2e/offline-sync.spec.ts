@@ -22,6 +22,8 @@ async function deliverTagToUi(page: import('@playwright/test').Page, tagUid: str
 
 test.describe('Offline sync [US5]', () => {
   test.beforeEach(async ({ page }) => {
+    await page.goto('/pin')
+    await pinLogin(page)
     await page.goto(`/events/${BLUFFET.eventId}/live`)
     await expect(page.getByTestId('sync-status')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId('sync-online')).toBeVisible()

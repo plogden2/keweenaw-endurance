@@ -13,6 +13,22 @@ BEGIN;
 -- Event id: 1441674d-a011-471a-a601-722b88b117f5
 
 -- Clean prior Bluffet seed (order respects FKs)
+DELETE FROM timing_records WHERE participant_id IN (
+    SELECT p.id FROM participants p
+    WHERE p.race_id IN (
+    SELECT r.id FROM races r
+    JOIN events e ON r.event_id = e.id
+    WHERE e.name = 'All You Can East Bluffet'
+    )
+) OR station_id IN (
+    SELECT s.id FROM reader_stations s
+    JOIN events e ON s.event_id = e.id
+    WHERE e.name = 'All You Can East Bluffet'
+);
+DELETE FROM reader_stations WHERE event_id IN (
+    SELECT e.id FROM events e
+    WHERE e.name = 'All You Can East Bluffet'
+);
 DELETE FROM rfid_tag_associations WHERE participant_id IN (
     SELECT p.id FROM participants p
     WHERE p.race_id IN (

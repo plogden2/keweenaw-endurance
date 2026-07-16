@@ -1,5 +1,5 @@
 import type { Browser, BrowserContext, Page } from '@playwright/test'
-import { armFinishStation, pinToken } from '../../fixtures/rfid'
+import { armFinishStation, pinLogin, pinToken } from '../../fixtures/rfid'
 import type { APIRequestContext } from '@playwright/test'
 
 /**
@@ -45,6 +45,9 @@ export async function crashAndReopenReader(opts: {
     recordVideo: { dir: opts.videoDir, size: { width: 1920, height: 1080 } },
   })
   const page = await context.newPage()
+  // Reader RFID/ScanPopup is gated on PIN session — re-unlock after crash.
+  await page.goto('/pin')
+  await pinLogin(page)
   await page.goto(`/events/${opts.eventId}/live`)
   await page.getByTestId('live-view').waitFor({ state: 'visible', timeout: 30_000 })
   return { context, page }

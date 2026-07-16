@@ -9,7 +9,8 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - VITE_API_URL=http://localhost:8080
+      # Leave VITE_API_URL unset so the browser uses same-origin /api (Vite proxy).
+      # Baking http://localhost:8080 breaks when the app is opened as http://127.0.0.1:3000.
       - VITE_PROXY_TARGET=http://backend:8080
       - CHOKIDAR_USEPOLLING=true
     volumes:

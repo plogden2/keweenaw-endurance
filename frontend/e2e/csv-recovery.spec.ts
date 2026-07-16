@@ -127,6 +127,8 @@ test.describe('US6 CSV disaster recovery', () => {
       token,
     })
 
+    await page.goto('/pin')
+    await pinLogin(page)
     await page.goto(`/events/${BLUFFET.eventId}/live`)
     await inject(request, BLUFFET.demoTags[1])
 
