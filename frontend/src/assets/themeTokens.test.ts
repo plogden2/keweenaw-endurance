@@ -3,6 +3,9 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const mainCss = readFileSync(join(process.cwd(), 'src/assets/main.css'), 'utf8')
+const indexHtml = readFileSync(join(process.cwd(), 'index.html'), 'utf8')
+const manifestJson = readFileSync(join(process.cwd(), 'public/manifest.json'), 'utf8')
+const viteConfig = readFileSync(join(process.cwd(), 'vite.config.ts'), 'utf8')
 
 describe('default theme tokens', () => {
   it('defines Superior Forest token block on :root', () => {
@@ -30,5 +33,11 @@ describe('default theme tokens', () => {
     expect(mainCss).toMatch(/:focus-visible\s*\{[^}]*outline:[^;]*var\(--sage\)/s)
     expect(mainCss).toMatch(/\.status-active\s*\{[^}]*color:\s*var\(--success\)/s)
     expect(mainCss).toMatch(/\.status-cancelled\s*\{[^}]*color:\s*var\(--signal\)/s)
+  })
+
+  it('aligns PWA theme color across shell and manifest', () => {
+    expect(indexHtml).toMatch(/name="theme-color"\s+content="#1a3f3d"/)
+    expect(manifestJson).toMatch(/"theme_color":\s*"#1a3f3d"/)
+    expect(viteConfig).toMatch(/theme_color:\s*'#1a3f3d'/)
   })
 })
