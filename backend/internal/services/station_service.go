@@ -163,6 +163,27 @@ func (s *StationService) CurrentDeviceID() string {
 	return station.DeviceID
 }
 
+// EventIDForDevice returns the event bound to the most recently seen station for deviceID.
+func (s *StationService) EventIDForDevice(deviceID string) (uuid.UUID, error) {
+	deviceID = strings.TrimSpace(deviceID)
+	if deviceID == "" {
+		return uuid.Nil, fmt.Errorf("%w: device_id is required", ErrInvalidStationInput)
+	}
+
+	var station models.ReaderStation
+	err := s.db.Where("device_id = ?", deviceID).
+		Order("last_seen_at DESC").
+		Order("created_at DESC").
+		First(&station).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return uuid.Nil, ErrStationNotFound
+	}
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return station.EventID.UUID(), nil
+}
+
 func (s *StationService) loadCurrentStation() (*models.ReaderStation, error) {
 	s.mu.RLock()
 	currentID := s.currentID

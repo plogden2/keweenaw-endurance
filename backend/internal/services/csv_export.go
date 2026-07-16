@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -47,16 +48,17 @@ type CSVImportSummary struct {
 
 // CSVExportService maintains live CSV snapshots and import/restore.
 type CSVExportService struct {
-	db      *gorm.DB
-	dataDir string
-	mu      sync.Mutex
+	db               *gorm.DB
+	dataDir          string
+	liveCSVMirrorDir string // optional; Cloud Run may point at a GCS FUSE mount (see deploy README, Task 7)
+	mu               sync.Mutex
 }
 
-func NewCSVExportService(db *gorm.DB, dataDir string) *CSVExportService {
+func NewCSVExportService(db *gorm.DB, dataDir, liveCSVMirrorDir string) *CSVExportService {
 	if dataDir == "" {
 		dataDir = "data"
 	}
-	return &CSVExportService{db: db, dataDir: dataDir}
+	return &CSVExportService{db: db, dataDir: dataDir, liveCSVMirrorDir: liveCSVMirrorDir}
 }
 
 func (s *CSVExportService) LiveSnapshotPath(eventID uuid.UUID) (string, error) {
@@ -136,7 +138,50 @@ func (s *CSVExportService) WriteLiveSnapshot(eventID uuid.UUID) (string, error) 
 		_ = os.Remove(tmp)
 		return "", err
 	}
+	s.bestEffortMirrorLiveSnapshot(path, eventID)
 	return path, nil
+}
+
+// bestEffortMirrorLiveSnapshot copies to the mirror dir; mirror failures must not fail the primary write.
+func (s *CSVExportService) bestEffortMirrorLiveSnapshot(sourcePath string, eventID uuid.UUID) {
+	if s.liveCSVMirrorDir == "" {
+		return
+	}
+	if err := s.mirrorLiveSnapshot(sourcePath, eventID); err != nil {
+		log.Printf("live csv mirror failed for event %s: %v", eventID, err)
+	}
+}
+
+func (s *CSVExportService) mirrorLiveSnapshot(sourcePath string, eventID uuid.UUID) error {
+	mirrorPath := filepath.Join(s.liveCSVMirrorDir, "events", eventID.String(), "live-snapshot.csv")
+	if err := os.MkdirAll(filepath.Dir(mirrorPath), 0o755); err != nil {
+		return err
+	}
+	src, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	tmp := mirrorPath + ".tmp"
+	dst, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		_ = dst.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := dst.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, mirrorPath); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // RefreshEvent is a convenience hook for mutation sites.
@@ -504,6 +549,7 @@ func (s *CSVExportService) ImportCSV(eventID uuid.UUID, data []byte) (*CSVImport
 	if err := os.WriteFile(path, body, 0o644); err != nil {
 		return nil, err
 	}
+	s.bestEffortMirrorLiveSnapshot(path, eventID)
 
 	return &CSVImportSummary{
 		EventID:         eventID.String(),

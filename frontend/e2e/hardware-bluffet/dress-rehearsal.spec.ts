@@ -5,7 +5,7 @@
  * This is NOT a fast CI spec. It owns a deterministic timeline (compressed
  * 30/15-minute races + a 5-minute kids race at T+20), drives the Proxmark
  * write→read path for every scored lap, and injects chaos (reader crash,
- * 5-minute client→API outage) while three video contexts record 1080p footage.
+ * 5-minute hosted partition outage with offline bridge scoring) while three
  * Run via `npm run test:e2e:bluffet-hardware` (frontend/) — see Task 8 / README.
  */
 import { test, devices } from '@playwright/test'
@@ -21,7 +21,14 @@ import { addRacersToLapState, dueRacers, initLapState, removeRacer, scheduleNext
 import { programRacerAndAwaitLap } from './lib/proxmark'
 import { loadSeededRacers, pickDnfs, pickNoShows, type Racer } from './lib/roster'
 import { addLateSignup, finishCheckpointId, firstCategoryId, refreshEmptyBibs, setCompressedStartTimes } from './lib/setup'
-import { crashAndReopenReader, endApiOutage, startApiOutage, type VideoContext } from './lib/chaos'
+import {
+  crashAndReopenReader,
+  fetchLocalBridgeStatus,
+  healPartition,
+  partitionFromHosted,
+  waitForReaderChip,
+  type VideoContext,
+} from './lib/chaos'
 import {
   awaitCatchUp,
   churnOnce,
@@ -147,16 +154,21 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
 
     async function refreshPendingSync() {
       try {
-        const token = await pinToken(request)
-        const res = await request.get(`${API_BASE}/api/rfid/sync-status`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (res.ok()) {
-          const body = await res.json()
-          state.pendingSync = body.pending_count ?? 0
-        }
+        const local = await fetchLocalBridgeStatus()
+        state.pendingSync = local.pending_count ?? 0
       } catch {
-        // best-effort telemetry only
+        try {
+          const token = await pinToken(request)
+          const res = await request.get(`${API_BASE}/api/rfid/sync-status`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (res.ok()) {
+            const body = await res.json()
+            state.pendingSync = body.pending_count ?? 0
+          }
+        } catch {
+          // best-effort telemetry only
+        }
       }
     }
 
@@ -478,11 +490,17 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
       let outageStarted = false
       let outageEnded = false
       let outagePreSnapshot: { laptop: number; iphone: number } | undefined
+      let outagePreServerLaps = 0
+      let outagePreBridgePending = 0
+      let outageLapsScored = 0
+      let outageServerLeakReported = false
 
       const raceEndAt = tZero.getTime() + RACE_END_OFFSET_MS
 
       while (Date.now() < raceEndAt) {
         const now = Date.now()
+
+        const inOutage = outageStarted && !outageEnded
 
         // --- lap engine: serialize one write-tag→read at a time on the single chip ---
         for (const id of dueRacers(lapState, now)) {
@@ -492,12 +510,16 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
               request,
               readerPage: reader!.page,
               participantId: id,
+              logicalTagUuid: racer?.logicalTagUuid,
+              raceId: racer?.raceId,
+              useLocalBridge: inOutage,
               timeoutMs: 60_000,
               dismissAfter: true,
             })
             scheduleNext(lapState, id, Date.now())
             state.lapsScored = lapState.scored
             state.lastProxmark = `lap ok bib=${racer?.bib ?? id}`
+            if (inOutage) outageLapsScored += 1
           } catch (err) {
             lapState.nextDue.set(id, Date.now() + 45_000)
             await issue(
@@ -559,53 +581,147 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
           await performReaderCrash()
         }
 
-        // --- 5-minute client→API outage on spectator contexts only ---
+        // --- 5-minute hosted partition: bridge scores offline, spectators stale ---
         if (!outageStarted && now >= tZero.getTime() + OUTAGE_START_OFFSET_MS) {
           outageStarted = true
           state.chaos.apiOutage = true
           writeStatusNow()
+          outagePreServerLaps = await totalScoredLaps().catch(() => 0)
+          try {
+            outagePreBridgePending = (await fetchLocalBridgeStatus()).pending_count
+          } catch (err) {
+            await issue(
+              'critical',
+              'Could not read local bridge status before outage',
+              String(err),
+            )
+          }
           outagePreSnapshot = {
             laptop: await snapshotVisibleLaps(laptopPage).catch(() => 0),
             iphone: await snapshotVisibleLaps(iphonePage).catch(() => 0),
           }
-          await startApiOutage([laptopCtx, iphoneCtx])
+          await partitionFromHosted([laptopCtx!, iphoneCtx!])
+          try {
+            await waitForReaderChip(reader!.page, 'offline', 45_000)
+          } catch (err) {
+            await issue(
+              'critical',
+              'Reader sync chip did not show Offline during partition',
+              String(err),
+              { screenshot: await screenshotFor('outage-offline-chip', reader!.page) },
+            )
+          }
         }
         if (outageStarted && !outageEnded) {
           if (now >= tZero.getTime() + OUTAGE_START_OFFSET_MS + OUTAGE_DURATION_MS) {
             outageEnded = true
-            await endApiOutage([laptopCtx, iphoneCtx])
+            await healPartition([laptopCtx!, iphoneCtx!])
             state.chaos.apiOutage = false
             writeStatusNow()
 
-            const laptopCatch = await awaitCatchUp(spectatorLaptop, request, { timeoutMs: 60_000 })
+            try {
+              await waitForReaderChip(reader!.page, 'syncing', 90_000)
+            } catch (err) {
+              await issue(
+                'minor',
+                'Reader sync chip did not show Syncing after heal',
+                String(err),
+                { screenshot: await screenshotFor('outage-syncing-chip', reader!.page) },
+              )
+            }
+
+            try {
+              await waitForReaderChip(reader!.page, 'online_synced', 180_000)
+            } catch (err) {
+              await issue(
+                'critical',
+                'Reader sync chip did not reach Online · Synced after heal',
+                String(err),
+                { screenshot: await screenshotFor('outage-synced-chip', reader!.page) },
+              )
+            }
+
+            const postHealLaps = await totalScoredLaps().catch(() => outagePreServerLaps)
+            if (postHealLaps < outagePreServerLaps + outageLapsScored) {
+              await issue(
+                'critical',
+                'Hosted lap total did not catch up after automatic bridge sync',
+                `expected ≥ ${outagePreServerLaps + outageLapsScored} (pre=${outagePreServerLaps} ` +
+                  `+ outage=${outageLapsScored}), got ${postHealLaps}`,
+              )
+            }
+
+            try {
+              const bridgeAfter = await fetchLocalBridgeStatus()
+              if (bridgeAfter.pending_count > 0) {
+                await issue(
+                  'minor',
+                  'Bridge still has pending laps after auto-sync',
+                  `pending_count=${bridgeAfter.pending_count} after heal`,
+                )
+              }
+            } catch {
+              // best-effort
+            }
+
+            const laptopCatch = await awaitCatchUp(spectatorLaptop, request, { timeoutMs: 120_000 })
             if (!laptopCatch.caughtUp) {
               await issue(
                 'critical',
-                'Spectator laptop did not catch up after API outage',
+                'Spectator laptop did not catch up after outage heal',
                 `ui=${laptopCatch.uiTotal} server=${laptopCatch.serverTotal}`,
                 { screenshot: await screenshotFor('outage-catchup-laptop', laptopPage) },
               )
             }
-            const iphoneCatch = await awaitCatchUp(spectatorIphone, request, { timeoutMs: 60_000 })
+            const iphoneCatch = await awaitCatchUp(spectatorIphone, request, { timeoutMs: 120_000 })
             if (!iphoneCatch.caughtUp) {
               await issue(
                 'critical',
-                'Spectator iphone did not catch up after API outage',
+                'Spectator iphone did not catch up after outage heal',
                 `ui=${iphoneCatch.uiTotal} server=${iphoneCatch.serverTotal}`,
                 { screenshot: await screenshotFor('outage-catchup-iphone', iphonePage) },
               )
             }
-          } else if (outagePreSnapshot) {
-            const laptopNow = await snapshotVisibleLaps(laptopPage).catch(() => 0)
-            const iphoneNow = await snapshotVisibleLaps(iphonePage).catch(() => 0)
-            if (laptopNow > outagePreSnapshot.laptop || iphoneNow > outagePreSnapshot.iphone) {
-              await issue(
-                'minor',
-                'Spectator saw fresh laps during API outage',
-                `laptop ${outagePreSnapshot.laptop}->${laptopNow}, iphone ${outagePreSnapshot.iphone}->${iphoneNow} ` +
-                  `— expected no visible change while the context is offline.`,
-              )
-              outagePreSnapshot = { laptop: laptopNow, iphone: iphoneNow }
+          } else {
+            if (!outageServerLeakReported) {
+              const serverNow = await totalScoredLaps().catch(() => outagePreServerLaps)
+              if (serverNow > outagePreServerLaps) {
+                outageServerLeakReported = true
+                await issue(
+                  'critical',
+                  'Hosted lap total increased during bridge partition',
+                  `pre=${outagePreServerLaps} now=${serverNow} — hosted should not score while bridge is partitioned.`,
+                )
+              }
+            }
+
+            if (outageLapsScored > 0) {
+              try {
+                const bridgePending = (await fetchLocalBridgeStatus()).pending_count
+                if (bridgePending < outagePreBridgePending + outageLapsScored) {
+                  await issue(
+                    'minor',
+                    'Local bridge pending queue lagging outage laps scored',
+                    `expected ≥ ${outagePreBridgePending + outageLapsScored}, got ${bridgePending}`,
+                  )
+                }
+              } catch {
+                // best-effort during partition
+              }
+            }
+
+            if (outagePreSnapshot) {
+              const laptopNow = await snapshotVisibleLaps(laptopPage).catch(() => 0)
+              const iphoneNow = await snapshotVisibleLaps(iphonePage).catch(() => 0)
+              if (laptopNow > outagePreSnapshot.laptop || iphoneNow > outagePreSnapshot.iphone) {
+                await issue(
+                  'minor',
+                  'Spectator saw fresh laps during hosted partition',
+                  `laptop ${outagePreSnapshot.laptop}->${laptopNow}, iphone ${outagePreSnapshot.iphone}->${iphoneNow} ` +
+                    '— expected no visible change while spectator contexts are offline.',
+                )
+                outagePreSnapshot = { laptop: laptopNow, iphone: iphoneNow }
+              }
             }
           }
         }

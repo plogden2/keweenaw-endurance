@@ -15,13 +15,96 @@ import type {
   RfidTagAssociation,
   Category,
   SyncStatusResponse,
+  BridgeStatusResponse,
+  LocalBridgeStatusResponse,
   TimingRecord,
   UpdateEventPayload,
   UpdateParticipantPayload,
   UpdateRacePayload,
 } from '@/types/models'
 
+import type { BridgeStatusSnapshot } from './bridgeSyncStatus'
+
 const baseURL = import.meta.env.VITE_API_URL || ''
+const bridgeLocalUrl = (import.meta.env.VITE_BRIDGE_LOCAL_URL || 'http://127.0.0.1:8091').replace(
+  /\/$/,
+  '',
+)
+
+let lastBridgeSnapshot: BridgeStatusSnapshot = {
+  navigatorOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+  hosted: null,
+  local: null,
+}
+
+export function getLastBridgeSnapshot(): BridgeStatusSnapshot {
+  return lastBridgeSnapshot
+}
+
+export function updateLastBridgeSnapshot(snapshot: BridgeStatusSnapshot): void {
+  lastBridgeSnapshot = snapshot
+}
+
+const WRITE_TAG_PROBE_MS = 300
+
+export function isBridgeSnapshotUnknown(snapshot: BridgeStatusSnapshot = lastBridgeSnapshot): boolean {
+  return snapshot.hosted === null && snapshot.local === null
+}
+
+export function shouldRouteWriteTagLocal(snapshot: BridgeStatusSnapshot = lastBridgeSnapshot): boolean {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return true
+  }
+  const { hosted, local } = snapshot
+  if (local?.mode === 'offline') return true
+  if (hosted && !hosted.connected && hosted.pending_count > 0) return true
+  return false
+}
+
+async function withProbeTimeout<T>(promise: Promise<T>, ms = WRITE_TAG_PROBE_MS): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), ms)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+async function fetchLocalBridgeStatus(): Promise<LocalBridgeStatusResponse | null> {
+  try {
+    const res = await withProbeTimeout(fetch(`${bridgeLocalUrl}/status`))
+    if (!res?.ok) return null
+    return (await res.json()) as LocalBridgeStatusResponse
+  } catch {
+    return null
+  }
+}
+
+async function refreshBridgeSnapshotForWriteTag(): Promise<void> {
+  const navigatorOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
+  let hosted: BridgeStatusResponse | null = lastBridgeSnapshot.hosted
+  let local: LocalBridgeStatusResponse | null = lastBridgeSnapshot.local
+
+  if (navigatorOnline && hosted === null) {
+    hosted = await withProbeTimeout(
+      apiClient
+        .get<BridgeStatusResponse>('/api/rfid/bridge/status', {
+          params: { device_id: 'laptop-finish-1' },
+        })
+        .then((res) => res.data)
+        .catch(() => null),
+    )
+  }
+
+  local = (await fetchLocalBridgeStatus()) ?? local
+
+  updateLastBridgeSnapshot({ navigatorOnline, hosted, local })
+}
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL,
@@ -113,14 +196,44 @@ export interface WriteTagPayload {
   participant_id: string
 }
 
+async function writeTagLocal(
+  payload: WriteTagPayload,
+): Promise<AxiosResponse<Participant>> {
+  const res = await fetch(`${bridgeLocalUrl}/write-tag`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    throw new Error(`Local bridge write-tag failed (${res.status})`)
+  }
+  const data = (await res.json()) as Participant
+  return { data } as AxiosResponse<Participant>
+}
+
 export const rfidApi = {
   scan: (uid: string) =>
     apiClient.get<Participant>(`/api/rfid/scan/${encodeURIComponent(uid)}`),
-  writeTag: (payload: WriteTagPayload) =>
-    apiClient.post<Participant>('/api/rfid/write-tag', payload),
+  writeTag: async (payload: WriteTagPayload) => {
+    if (shouldRouteWriteTagLocal()) {
+      return writeTagLocal(payload)
+    }
+    if (isBridgeSnapshotUnknown()) {
+      await refreshBridgeSnapshotForWriteTag()
+    }
+    if (shouldRouteWriteTagLocal()) {
+      return writeTagLocal(payload)
+    }
+    return apiClient.post<Participant>('/api/rfid/write-tag', payload)
+  },
   manualEntry: (payload: ManualTimingEntryPayload) =>
     apiClient.post<TimingRecord>('/api/rfid/manual-entry', payload),
   getSyncStatus: () => apiClient.get<SyncStatusResponse>('/api/rfid/sync-status'),
+  getBridgeStatus: (deviceId = 'laptop-finish-1') =>
+    apiClient.get<BridgeStatusResponse>('/api/rfid/bridge/status', {
+      params: { device_id: deviceId },
+    }),
+  getLocalBridgeStatus: () => fetchLocalBridgeStatus(),
   syncPending: () =>
     apiClient.post<{ synced_count: number }>('/api/rfid/sync-pending'),
 }

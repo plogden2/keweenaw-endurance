@@ -20,6 +20,7 @@ type Services struct {
 	Timing       *TimingService
 	Results      *ResultsService
 	RFID         *RFIDService
+	Bridge       *BridgeHub
 	Scan         *scan.ScanService
 	Stations     *StationService
 	Sync         *SyncService
@@ -36,9 +37,17 @@ func NewServicesWithReader(db *gorm.DB, cfg *config.Config, reader rfid.Reader) 
 	if cfg != nil && cfg.DataDir != "" {
 		dataDir = cfg.DataDir
 	}
-	csvSvc := NewCSVExportService(db, dataDir)
+	mirrorDir := ""
+	if cfg != nil {
+		mirrorDir = cfg.LiveCSVMirrorDir
+	}
+	csvSvc := NewCSVExportService(db, dataDir, mirrorDir)
 	scanSvc := scan.NewScanService(db, syncSvc)
 	scanSvc.SetOnEventChange(csvSvc.RefreshEvent)
+
+	bridgeHub := NewBridgeHub()
+	rfidSvc := NewRFIDService(db, reader)
+	rfidSvc.ConfigureBridge(cfg, bridgeHub)
 
 	return &Services{
 		DB:           db,
@@ -51,7 +60,8 @@ func NewServicesWithReader(db *gorm.DB, cfg *config.Config, reader rfid.Reader) 
 		Categories:   NewCategoryService(db),
 		Timing:       NewTimingService(db),
 		Results:      NewResultsService(db, cache.NewLeaderboardCache(cfg.Redis)),
-		RFID:         NewRFIDService(db, reader),
+		RFID:         rfidSvc,
+		Bridge:       bridgeHub,
 		Scan:         scanSvc,
 		Stations:     NewStationService(db),
 		Sync:         syncSvc,

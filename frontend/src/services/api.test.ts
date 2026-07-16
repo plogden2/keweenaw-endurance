@@ -10,6 +10,8 @@ import {
   eventsLiveApi,
   rfidStreamUrl,
   setAuthToken,
+  shouldRouteWriteTagLocal,
+  updateLastBridgeSnapshot,
 } from './api'
 
 vi.mock('axios', () => {
@@ -183,6 +185,12 @@ describe('raceParticipantsApi', () => {
 describe('RFID scanner APIs', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+    updateLastBridgeSnapshot({
+      navigatorOnline: true,
+      hosted: { connected: true, pending_count: 0, syncing: false },
+      local: null,
+    })
   })
 
   it('posts event scans', async () => {
@@ -205,6 +213,91 @@ describe('RFID scanner APIs', () => {
     expect(apiClient.post).toHaveBeenCalledWith('/api/rfid/write-tag', {
       participant_id: 'p-1',
     })
+  })
+
+  it('fetches bridge status for a device', async () => {
+    ;(apiClient.get as Mock).mockResolvedValue({
+      data: { connected: true, pending_count: 0, syncing: false },
+    })
+    await rfidApi.getBridgeStatus('laptop-finish-1')
+    expect(apiClient.get).toHaveBeenCalledWith('/api/rfid/bridge/status', {
+      params: { device_id: 'laptop-finish-1' },
+    })
+  })
+
+  it('routes writeTag to local bridge when offline', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'p-1' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+    await rfidApi.writeTag({ participant_id: 'p-1' })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8091/write-tag',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participant_id: 'p-1' }),
+      }),
+    )
+    expect(apiClient.post).not.toHaveBeenCalled()
+
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+    vi.unstubAllGlobals()
+  })
+
+  it('routes writeTag to local bridge when bridge snapshot is offline', async () => {
+    updateLastBridgeSnapshot({
+      navigatorOnline: true,
+      hosted: { connected: false, pending_count: 2, syncing: false },
+      local: { connected: false, pending_count: 2, syncing: false, mode: 'offline' },
+    })
+    expect(shouldRouteWriteTagLocal()).toBe(true)
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'p-1' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await rfidApi.writeTag({ participant_id: 'p-1' })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8091/write-tag',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(apiClient.post).not.toHaveBeenCalled()
+
+    vi.unstubAllGlobals()
+  })
+
+  it('probes bridge status before writeTag when snapshot is unknown', async () => {
+    updateLastBridgeSnapshot({ navigatorOnline: true, hosted: null, local: null })
+    ;(apiClient.get as Mock).mockResolvedValue({
+      data: { connected: false, pending_count: 2, syncing: false },
+    })
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'p-1' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await rfidApi.writeTag({ participant_id: 'p-1' })
+
+    expect(apiClient.get).toHaveBeenCalledWith('/api/rfid/bridge/status', {
+      params: { device_id: 'laptop-finish-1' },
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8091/write-tag',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(apiClient.post).not.toHaveBeenCalled()
+
+    vi.unstubAllGlobals()
   })
 
   it('fetches event live payload', async () => {

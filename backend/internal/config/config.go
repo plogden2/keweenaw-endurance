@@ -9,7 +9,8 @@ import (
 type Config struct {
 	Environment string
 	Port        string
-	DataDir     string
+	DataDir          string
+	LiveCSVMirrorDir string
 	Database    DatabaseConfig
 	Redis       RedisConfig
 	JWT         JWTConfig
@@ -30,6 +31,8 @@ type RFIDConfig struct {
 	Proxmark3CLI     string
 	Proxmark3Port    string
 	HostedAPIURL     string
+	BridgeToken      string
+	BridgeDeviceID   string
 }
 
 type DatabaseConfig struct {
@@ -66,7 +69,8 @@ func Load() (*Config, error) {
 	return &Config{
 		Environment: getEnv("GO_ENV", "development"),
 		Port:        getEnv("PORT", "8080"),
-		DataDir:     getEnv("DATA_DIR", "data"),
+		DataDir:          getEnv("DATA_DIR", "data"),
+		LiveCSVMirrorDir: getEnv("LIVE_CSV_MIRROR_DIR", ""),
 		Database: DatabaseConfig{
 			Host:            getEnv("DB_HOST", "localhost"),
 			Port:            getEnv("DB_PORT", "5432"),
@@ -104,6 +108,8 @@ func Load() (*Config, error) {
 			Proxmark3CLI:     getEnv("PROXMARK3_CLI", "pm3"),
 			Proxmark3Port:    getEnv("PROXMARK3_PORT", ""),
 			HostedAPIURL:     getEnv("HOSTED_API_URL", ""),
+			BridgeToken:      getEnv("BRIDGE_TOKEN", ""),
+			BridgeDeviceID:   getEnv("BRIDGE_DEVICE_ID", "laptop-finish-1"),
 		},
 	}, nil
 }

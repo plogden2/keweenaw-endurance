@@ -1,0 +1,99 @@
+# Stop dev stack first: `docker compose down` — both stacks bind host port 80 via nginx.
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - keweenaw-prod-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - GO_ENV=production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=keweenaw_timing
+      - DB_USER=timing_user
+      - DB_PASSWORD=${DB_PASSWORD:-timing_pass}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET:-development-secret-key-change-in-production}
+      - ORGANIZER_PIN=${ORGANIZER_PIN:-1738}
+      - LOG_LEVEL=info
+      - RFID_HARDWARE=false
+      - RFID_INJECT=false
+      - PROXMARK3_ENABLED=true
+      - HOSTED_API_URL=
+      - DATA_DIR=/app/data
+      - LIVE_CSV_MIRROR_DIR=/app/csv-mirror
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://keweenawendurance.com,http://localhost}
+      - GCS_LIVE_CSV_BUCKET=${GCS_LIVE_CSV_BUCKET:-}
+      - BRIDGE_TOKEN=${BRIDGE_TOKEN:-}
+      - BRIDGE_DEVICE_ID=${BRIDGE_DEVICE_ID:-laptop-finish-1}
+    volumes:
+      - backend_data:/app/data
+      - csv_mirror:/app/csv-mirror
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - keweenaw-prod-network
+
+  postgres:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=keweenaw_timing
+      - POSTGRES_USER=timing_user
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-timing_pass}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timing_user -d keweenaw_timing"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - keweenaw-prod-network
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data_prod:/data
+    command: redis-server --appendonly yes
+    networks:
+      - keweenaw-prod-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - keweenaw-prod-network
+
+volumes:
+  postgres_data_prod:
+  redis_data_prod:
+  backend_data:
+  csv_mirror:
+
+networks:
+  keweenaw-prod-network:
+    driver: bridge

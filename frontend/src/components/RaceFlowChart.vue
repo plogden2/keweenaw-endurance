@@ -466,7 +466,7 @@ function syncFilterSelections(): void {
   )
 }
 
-function mergeFilterSelections(current: string[], available: string[]): string[] {
+function mergeFilterSelections<T extends string>(current: T[], available: T[]): T[] {
   if (available.length === 0) {
     return []
   }

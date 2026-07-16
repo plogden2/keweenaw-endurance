@@ -70,8 +70,19 @@ func (s *ScanService) notifyChange(eventID uuid.UUID) {
 	}
 }
 
+// ScanOptions carries optional behavior for ProcessScan.
+type ScanOptions struct {
+	// BridgeRecordID, when set, is used as the timing_records primary key so
+	// bridge flush replays are idempotent across reconnects.
+	BridgeRecordID string
+}
+
 // ProcessScan handles a tag read for eventID.
-func (s *ScanService) ProcessScan(eventID uuid.UUID, tagUID, deviceID string, localTimestamp time.Time) (*ScanResult, error) {
+func (s *ScanService) ProcessScan(eventID uuid.UUID, tagUID, deviceID string, localTimestamp time.Time, opts ...ScanOptions) (*ScanResult, error) {
+	var opt ScanOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
 	tagUID = strings.TrimSpace(tagUID)
 	if tagUID == "" {
 		return &ScanResult{Result: ResultUnknownTag}, nil
@@ -142,6 +153,11 @@ func (s *ScanService) ProcessScan(eventID uuid.UUID, tagUID, deviceID string, lo
 		SyncStatus:     syncStatus,
 		RecordType:     "rfid_lap",
 		StationID:      ptrStationID(station),
+	}
+	if bridgeID := strings.TrimSpace(opt.BridgeRecordID); bridgeID != "" {
+		if id, err := uuid.Parse(bridgeID); err == nil {
+			record.ID = uuidutil.NewPublicUUID(id)
+		}
 	}
 	if err := s.db.Create(record).Error; err != nil {
 		return nil, err

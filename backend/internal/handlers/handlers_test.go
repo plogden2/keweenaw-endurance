@@ -37,6 +37,7 @@ func testHandlerConfig() *config.Config {
 		},
 		RFID: config.RFIDConfig{
 			InjectEnabled: true,
+			Hardware:      true,
 		},
 	}
 }
@@ -147,6 +148,8 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		api.POST("/rfid/manual-entry", append(timerWrite, h.ManualTimingEntry)...)
 		api.GET("/rfid/sync-status", h.GetSyncStatus)
 		api.POST("/rfid/sync-pending", append(timerWrite, h.SyncPendingRecords)...)
+		api.GET("/rfid/bridge", h.BridgeWebSocket)
+		api.GET("/rfid/bridge/status", h.GetBridgeStatus)
 
 		api.POST("/sync/push", h.PushSync)
 		api.POST("/sync/pull", h.PullSync)
@@ -922,7 +925,7 @@ func TestRFIDHandlers_Inject(t *testing.T) {
 
 	uid, err := svc.RFID.Poll()
 	require.NoError(t, err)
-	assert.Equal(t, "DEMO-TAG-0001", uid)
+	assert.Equal(t, "demo-tag-0001", uid)
 
 	select {
 	case ev := <-sub:

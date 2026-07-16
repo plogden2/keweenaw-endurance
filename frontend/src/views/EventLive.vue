@@ -3,18 +3,25 @@
     <p v-if="isReaderSession" class="meta-bar sync-bar">
       <span class="sync-group" data-testid="sync-status">
         <span
-          v-if="online"
+          v-if="chipState === 'online_synced'"
           class="badge online"
           data-testid="sync-online"
         >
-          Station online
+          {{ chipLabel }}
+        </span>
+        <span
+          v-else-if="chipState === 'syncing'"
+          class="badge syncing"
+          data-testid="sync-syncing"
+        >
+          {{ chipLabel }}
         </span>
         <span
           v-else
           class="badge offline"
           data-testid="sync-offline"
         >
-          Station offline
+          {{ chipLabel }}
         </span>
         <span
           v-if="pendingSync > 0"
@@ -312,9 +319,9 @@ import {
   getLocalPendingCount,
   onOnline,
   onPendingChange,
-  syncAll,
 } from '@/services/offlineQueue'
 import { setDisplayCache } from '@/services/timingStorage'
+import { useBridgeSyncStatus } from '@/composables/useBridgeSyncStatus'
 import { useReaderStation } from '@/composables/useReaderStation'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
@@ -326,6 +333,7 @@ const station = useStationStore()
 const pinAuth = usePinAuthStore()
 const { lastScan } = useReaderStation()
 const isReaderSession = computed(() => pinAuth.isAuthenticated)
+const { chipState, chipLabel } = useBridgeSyncStatus()
 
 const live = ref<EventLiveResponse | null>(null)
 const loading = ref(false)
@@ -423,11 +431,12 @@ function onKey(e: KeyboardEvent) {
 
 function onBrowserOnline() {
   online.value = true
-  void syncAll().then(() => refreshPending())
+  void refreshPending()
 }
 
 function onBrowserOffline() {
   online.value = false
+  void refreshPending()
 }
 
 watch(eventId, () => {
@@ -457,11 +466,7 @@ onMounted(() => {
     const next = typeof navigator !== 'undefined' ? navigator.onLine : true
     if (online.value !== next) {
       online.value = next
-      if (next) {
-        void syncAll().then(() => refreshPending())
-      } else {
-        void refreshPending()
-      }
+      void refreshPending()
     }
   }
 
@@ -548,6 +553,11 @@ onUnmounted(() => {
 .badge.offline {
   background: #fadbd8;
   color: #922b21;
+}
+
+.badge.syncing {
+  background: #fdebd0;
+  color: #7d6608;
 }
 
 .badge.pending {

@@ -154,6 +154,17 @@ export interface SyncStatusResponse {
   synced_count: number
 }
 
+export interface BridgeStatusResponse {
+  connected: boolean
+  pending_count: number
+  syncing: boolean
+  last_sync_at?: string | null
+}
+
+export interface LocalBridgeStatusResponse extends BridgeStatusResponse {
+  mode?: 'offline' | 'syncing' | 'online_synced' | string
+}
+
 export interface ManualTimingEntryPayload {
   race_id: string
   checkpoint_id: string
