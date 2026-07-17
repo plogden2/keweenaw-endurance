@@ -127,6 +127,18 @@ describe('EventLive.vue', () => {
     expect(wrapper.find('[data-testid="sync-status"]').exists()).toBe(false)
   })
 
+  it('retints category legend and leaderboard dots with brand colors', async () => {
+    const wrapper = await mountLive()
+
+    const legendSwatches = wrapper.findAll('.legend i')
+    expect(legendSwatches[0]?.attributes('style')).toContain('rgb(26, 63, 61)')
+    expect(legendSwatches[1]?.attributes('style')).toContain('rgb(47, 107, 90)')
+
+    const dot = wrapper.find('.cat-dot')
+    expect(dot.attributes('style')).toContain('rgb(26, 63, 61)')
+    expect(dot.attributes('style')).not.toContain('#1a5276')
+  })
+
   it('hides countdown after it reaches zero', async () => {
     ;(eventsLiveApi.getLive as Mock).mockResolvedValue({
       data: {

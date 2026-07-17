@@ -29,8 +29,8 @@ const { active: bluffetActive, logoPath } = useBluffetTheme()
 
 <style scoped>
 .header {
-  background-color: #2c3e50;
-  color: white;
+  background-color: var(--ink);
+  color: var(--surface);
   padding: 1rem 0;
 }
 
@@ -45,7 +45,7 @@ const { active: bluffetActive, logoPath } = useBluffetTheme()
 
 .logo {
   text-decoration: none;
-  color: white;
+  color: var(--surface);
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -54,6 +54,7 @@ const { active: bluffetActive, logoPath } = useBluffetTheme()
 .logo h1 {
   margin: 0;
   font-size: 1.5rem;
+  font-weight: 600;
 }
 
 .bluffet-nav-mark {
@@ -68,8 +69,9 @@ const { active: bluffetActive, logoPath } = useBluffetTheme()
 }
 
 .nav-link {
-  color: white;
+  color: var(--surface);
   text-decoration: none;
+  font-weight: 600;
   padding: 0.5rem 1rem;
   border-radius: 4px;
   transition: background-color 0.3s;
@@ -77,7 +79,8 @@ const { active: bluffetActive, logoPath } = useBluffetTheme()
 
 .nav-link:hover,
 .nav-link.router-link-active {
-  background-color: #34495e;
+  background-color: var(--sage);
+  color: var(--ink);
 }
 
 @media (max-width: 768px) {

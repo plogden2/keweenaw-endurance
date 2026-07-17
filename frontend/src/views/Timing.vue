@@ -46,7 +46,7 @@ onMounted(() => {
 .page-title {
   text-align: center;
   margin-bottom: 3rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .timing-section {
@@ -55,16 +55,16 @@ onMounted(() => {
 
 .timing-section h2 {
   margin-bottom: 1.5rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .status {
   text-align: center;
-  color: #6c757d;
+  color: var(--muted);
 }
 
 .status.error {
-  color: #dc3545;
+  color: var(--signal);
 }
 
 @media (max-width: 768px) {

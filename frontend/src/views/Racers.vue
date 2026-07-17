@@ -448,10 +448,7 @@ onUnmounted(() => {
   max-width: 1100px;
   margin: 0 auto;
   padding: 0 1.5rem 3rem;
-  --ink: #2c3e50;
-  --muted: #6c757d;
-  --line: #dee2e6;
-  --ok: #1e8449;
+  --line: var(--border);
 }
 
 .page-title {
@@ -484,12 +481,12 @@ onUnmounted(() => {
 }
 
 .badge.online {
-  background: #d5f5e3;
-  color: var(--ok);
+  background: color-mix(in srgb, var(--success) 15%, var(--surface));
+  color: var(--success);
 }
 
 .panel {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 1rem 1.15rem;
@@ -543,7 +540,7 @@ label.grow {
 input,
 select {
   padding: 0.5rem 0.7rem;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--border);
   border-radius: 4px;
   font: inherit;
 }
@@ -560,7 +557,7 @@ select {
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 4px;
-  background: var(--accent, #1a5276);
+  background: var(--accent-link);
   color: #fff;
   font: inherit;
   cursor: pointer;
@@ -568,12 +565,12 @@ select {
 }
 
 .btn.secondary {
-  background: #ecf0f1;
+  background: var(--mist);
   color: var(--ink);
 }
 
 .btn.ok {
-  background: var(--ok);
+  background: var(--success);
 }
 
 .btn:disabled {
@@ -610,7 +607,7 @@ td {
 
 .bib-display:hover {
   border-color: var(--line);
-  background: #f8f9fa;
+  background: var(--mist);
 }
 
 .bib-edit-wrap {
@@ -634,17 +631,17 @@ td {
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--surface);
   cursor: pointer;
-  color: var(--ok);
+  color: var(--success);
 }
 
 .icon-btn:hover {
-  background: #eafaf1;
+  background: color-mix(in srgb, var(--success) 12%, var(--surface));
 }
 
 tr.programming {
-  background: #f0f7fb;
+  background: color-mix(in srgb, var(--accent-link) 8%, var(--surface));
 }
 
 .program-inline {
@@ -659,6 +656,6 @@ tr.programming {
 }
 
 .error {
-  color: #c0392b;
+  color: var(--signal);
 }
 </style>

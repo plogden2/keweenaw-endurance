@@ -148,7 +148,7 @@ defineExpose({ loadStatus, syncPending })
 .section-title {
   margin: 0 0 1rem;
   font-size: 1.1rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .counts {
@@ -168,12 +168,12 @@ defineExpose({ loadStatus, syncPending })
 .value {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .sync-btn {
   padding: 0.5rem 1rem;
-  background: #3498db;
+  background: var(--accent);
   color: white;
   border: none;
   border-radius: 4px;
@@ -187,7 +187,7 @@ defineExpose({ loadStatus, syncPending })
 
 .sync-message {
   margin: 0.75rem 0 0;
-  color: #27ae60;
+  color: var(--success);
   font-size: 0.9rem;
 }
 
@@ -196,7 +196,7 @@ defineExpose({ loadStatus, syncPending })
 }
 
 .status.error {
-  color: #c0392b;
+  color: var(--signal);
 }
 
 .offline-banner {

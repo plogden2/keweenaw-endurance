@@ -59,21 +59,21 @@ withDefaults(
 .race-name {
   font-size: 1.3rem;
   margin-bottom: 1rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .race-link {
   display: inline-block;
-  background: #3498db;
+  background: var(--accent);
   color: white;
   padding: 0.75rem 1.5rem;
   border-radius: 6px;
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
   transition: background-color 0.3s;
 }
 
 .race-link:hover {
-  background: #2980b9;
+  background: var(--accent-link);
 }
 </style>

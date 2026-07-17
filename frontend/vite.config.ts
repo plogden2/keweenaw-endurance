@@ -16,7 +16,7 @@ export default defineConfig({
         name: 'Keweenaw Endurance Syndicate Race Timing',
         short_name: 'Keweenaw Timing',
         description: 'Endurance race timing and indexing for Keweenaw area events',
-        theme_color: '#2c3e50',
+        theme_color: '#1a3f3d',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',

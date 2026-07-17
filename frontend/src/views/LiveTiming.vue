@@ -269,19 +269,19 @@ watch(raceId, async () => {
 }
 
 .page-title {
-  color: #2c3e50;
+  color: var(--ink);
   margin-bottom: 0.25rem;
 }
 
 .meta {
-  color: #6c757d;
+  color: var(--muted);
   margin-bottom: 1.5rem;
 }
 
 .back-link {
   display: inline-block;
   margin-bottom: 1rem;
-  color: #3498db;
+  color: var(--accent-link);
   text-decoration: none;
 }
 
@@ -300,7 +300,7 @@ watch(raceId, async () => {
 .section-title {
   margin: 0 0 1rem;
   font-size: 1.1rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .lookup-row {
@@ -316,18 +316,18 @@ watch(raceId, async () => {
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.9rem;
-  color: #495057;
+  color: var(--muted);
 }
 
 .lookup-row input {
   padding: 0.5rem 0.75rem;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--border);
   border-radius: 4px;
 }
 
 .action-btn {
   padding: 0.5rem 1rem;
-  background: #3498db;
+  background: var(--accent-link);
   color: white;
   border: none;
   border-radius: 4px;
@@ -338,15 +338,15 @@ watch(raceId, async () => {
 .participant-card {
   margin-top: 1rem;
   padding: 1rem;
-  background: #e8f6f3;
+  background: var(--mist);
   border-radius: 6px;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .participant-card .tag {
   display: block;
   font-size: 0.85rem;
-  color: #6c757d;
+  color: var(--muted);
   margin-top: 0.25rem;
 }
 
@@ -363,25 +363,25 @@ watch(raceId, async () => {
 .records-table td {
   padding: 0.5rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid #dee2e6;
+  border-bottom: 1px solid var(--border);
 }
 
 .records-table th {
-  color: #6c757d;
+  color: var(--muted);
   font-weight: 600;
 }
 
 .status {
-  color: #6c757d;
+  color: var(--muted);
 }
 
 .status.error,
 .error {
-  color: #c0392b;
+  color: var(--signal);
 }
 
 .empty {
-  color: #6c757d;
+  color: var(--muted);
 }
 
 .sync-panel {

@@ -418,13 +418,11 @@ onMounted(async () => {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 2rem;
-  --line: #dee2e6;
-  --muted: #6c757d;
-  --danger: #c0392b;
+  --line: var(--border);
 }
 
 .page-title {
-  color: #2c3e50;
+  color: var(--ink);
   text-align: center;
 }
 
@@ -436,7 +434,7 @@ onMounted(async () => {
 }
 
 .panel {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 1.25rem;
@@ -456,7 +454,7 @@ onMounted(async () => {
   padding: 0.75rem;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--surface);
   margin: 1rem 0;
   min-height: 3rem;
 }
@@ -474,16 +472,16 @@ onMounted(async () => {
   font-size: 1.25rem;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--surface);
   cursor: pointer;
 }
 
 .pad button:hover {
-  background: #eaf2f8;
+  background: var(--mist);
 }
 
 .err {
-  color: var(--danger);
+  color: var(--signal);
   min-height: 1.25rem;
 }
 
@@ -505,7 +503,7 @@ select {
 label {
   display: block;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
   margin-bottom: 0.5rem;
 }
 
@@ -515,7 +513,7 @@ label {
   padding: 0.55rem 1rem;
   font: inherit;
   cursor: pointer;
-  background: var(--accent, #1a5276);
+  background: var(--accent-link);
   color: #fff;
 }
 
@@ -525,12 +523,12 @@ label {
 }
 
 .btn.secondary {
-  background: #ecf0f1;
-  color: #2c3e50;
+  background: var(--mist);
+  color: var(--ink);
 }
 
 .btn.danger {
-  background: var(--danger);
+  background: var(--signal);
   color: #fff;
 }
 
@@ -570,8 +568,8 @@ label {
 }
 
 .badge.online {
-  background: #d5f5e3;
-  color: #1e8449;
+  background: color-mix(in srgb, var(--success) 15%, var(--surface));
+  color: var(--success);
   padding: 0.2rem 0.55rem;
   border-radius: 4px;
   font-size: 0.85rem;

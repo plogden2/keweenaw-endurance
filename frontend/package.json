@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@fontsource/outfit": "^5.2.8",
     "@fontsource/yuji-mai": "^5.2.7",
     "axios": "^1.6.2",
     "chart.js": "^4.5.1",

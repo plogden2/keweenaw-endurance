@@ -422,17 +422,17 @@ watch(activeTab, async (tab) => {
 .back-link {
   display: inline-block;
   margin-bottom: 1rem;
-  color: #3498db;
+  color: var(--accent-link);
   text-decoration: none;
 }
 
 .page-title {
   margin-bottom: 0.5rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .meta {
-  color: #6c757d;
+  color: var(--muted);
   margin-bottom: 1.5rem;
   text-transform: capitalize;
 }
@@ -446,13 +446,13 @@ watch(activeTab, async (tab) => {
 .tab {
   padding: 0.5rem 1rem;
   border: none;
-  background: #e9ecef;
+  background: var(--border);
   border-radius: 4px;
   cursor: pointer;
 }
 
 .tab.active {
-  background: #2c3e50;
+  background: var(--accent);
   color: white;
 }
 
@@ -469,11 +469,11 @@ watch(activeTab, async (tab) => {
 .leaderboard-table td {
   padding: 0.75rem 1rem;
   text-align: left;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid var(--border);
 }
 
 .leaderboard-table th {
-  background: #f8f9fa;
+  background: var(--mist);
   font-weight: 600;
 }
 
@@ -482,7 +482,7 @@ watch(activeTab, async (tab) => {
 }
 
 .leaderboard-table tr.clickable:hover {
-  background: #f1f7ff;
+  background: color-mix(in srgb, var(--accent-link) 8%, var(--surface));
 }
 
 .participant-detail {
@@ -498,16 +498,16 @@ watch(activeTab, async (tab) => {
 
 .back-to-leaderboard {
   padding: 0.45rem 0.75rem;
-  border: 1px solid #ced4da;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: white;
-  color: #2c3e50;
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
   font: inherit;
 }
 
 .back-to-leaderboard:hover {
-  background: #f8f9fa;
+  background: var(--mist);
 }
 
 .participant-actions {
@@ -519,7 +519,7 @@ watch(activeTab, async (tab) => {
   padding: 0.65rem 1.25rem;
   border: none;
   border-radius: 4px;
-  background: #2c3e50;
+  background: var(--accent);
   color: white;
   cursor: pointer;
   font: inherit;
@@ -527,19 +527,19 @@ watch(activeTab, async (tab) => {
 }
 
 .compare-btn:hover {
-  background: #1f2d3a;
+  background: var(--ink-deep);
 }
 
 .status {
-  color: #6c757d;
+  color: var(--muted);
 }
 
 .status.error {
-  color: #dc3545;
+  color: var(--signal);
 }
 
 .empty {
-  color: #6c757d;
+  color: var(--muted);
 }
 
 .stats-grid {
@@ -552,7 +552,7 @@ watch(activeTab, async (tab) => {
 }
 
 .stats-grid li {
-  background: #f8f9fa;
+  background: var(--mist);
   border-radius: 8px;
   padding: 1rem;
 }
@@ -560,12 +560,12 @@ watch(activeTab, async (tab) => {
 .stats-grid .label {
   display: block;
   font-size: 0.85rem;
-  color: #6c757d;
+  color: var(--muted);
 }
 
 .stats-grid .value {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ink);
 }
 </style>

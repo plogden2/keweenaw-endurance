@@ -134,7 +134,7 @@ const teaserRaces: TeaserRace[] = [
 .hero {
   text-align: center;
   padding: 4rem 0;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--accent-link) 0%, var(--ink) 100%);
   color: white;
   border-radius: 12px;
   margin-bottom: 3rem;
@@ -155,7 +155,7 @@ const teaserRaces: TeaserRace[] = [
 .cta-button {
   display: inline-block;
   background: white;
-  color: #667eea;
+  color: var(--accent-link);
   padding: 1rem 2rem;
   border-radius: 8px;
   text-decoration: none;
@@ -177,7 +177,7 @@ const teaserRaces: TeaserRace[] = [
 
 .featured-event h2 {
   margin-bottom: 2rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .featured-logo {
@@ -189,7 +189,7 @@ const teaserRaces: TeaserRace[] = [
 }
 
 .featured-date {
-  color: #2c3e50;
+  color: var(--ink);
   font-weight: 600;
   margin-bottom: 1rem;
 }
@@ -206,7 +206,7 @@ const teaserRaces: TeaserRace[] = [
   display: inline-block;
   font-size: 1.1rem;
   color: white;
-  background: #e67e22;
+  background: var(--copper);
   padding: 0.75rem 1.5rem;
   border-radius: 8px;
   text-decoration: none;
@@ -215,28 +215,28 @@ const teaserRaces: TeaserRace[] = [
 }
 
 .featured-timing-link:hover {
-  background: #d35400;
+  background: color-mix(in srgb, var(--copper) 85%, var(--ink));
 }
 
 .featured-link {
   display: inline-block;
   font-size: 1.1rem;
-  color: #e74c3c;
+  color: var(--signal);
   text-decoration: none;
   font-weight: 600;
   padding: 0.75rem 1.5rem;
-  border: 2px solid #e74c3c;
+  border: 2px solid var(--signal);
   border-radius: 8px;
   transition: color 0.3s, background-color 0.3s;
 }
 
 .featured-link:hover {
   color: white;
-  background: #e74c3c;
+  background: var(--signal);
 }
 
 .featured-description {
-  color: #7f8c8d;
+  color: var(--muted);
   font-size: 1.1rem;
 }
 
@@ -247,7 +247,7 @@ const teaserRaces: TeaserRace[] = [
 .upcoming-races h2 {
   text-align: center;
   margin-bottom: 2rem;
-  color: #2c3e50;
+  color: var(--ink);
 }
 
 .race-grid {

@@ -1,9 +1,13 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import AppHeader from './AppHeader.vue'
 import { BLUFFET_EVENT_ID, BLUFFET_LOGO_PATH } from '@/themes/bluffetConstants'
+
+const headerVue = readFileSync(join(process.cwd(), 'src/components/AppHeader.vue'), 'utf8')
 
 async function mountHeader(path = '/') {
   const router = createRouter({
@@ -44,5 +48,9 @@ describe('AppHeader', () => {
     const wrapper = await mountHeader('/')
 
     expect(wrapper.find('[data-testid="bluffet-nav-mark"]').exists()).toBe(false)
+  })
+
+  it('uses evergreen ink token for header chrome', () => {
+    expect(headerVue).toMatch(/background(-color)?:\s*var\(--ink\)/)
   })
 })

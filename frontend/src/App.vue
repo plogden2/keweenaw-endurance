@@ -91,8 +91,9 @@ onUnmounted(() => {
 }
 
 .footer {
-  background-color: #34495e;
-  color: white;
+  background-color: var(--muted);
+  color: var(--surface);
+  border-top: 1px solid var(--border);
   padding: 2rem 0;
   margin-top: auto;
 }

@@ -176,6 +176,7 @@ import {
 import { buildCertificateFilename, saveElementAsImage } from '@/utils/saveElementAsImage'
 
 const SOCIAL_SQUARE_SIZE = 1080
+const INK_DEEP_COLOR = '#203429'
 
 const props = defineProps<{
   eventTitle: string
@@ -252,7 +253,7 @@ async function saveSocialSquareImage(): Promise<void> {
       socialSquareRef.value,
       resultsFilename('social'),
       {
-        backgroundColor: '#152536',
+        backgroundColor: INK_DEEP_COLOR,
         scale: 1,
         width: SOCIAL_SQUARE_SIZE,
         height: SOCIAL_SQUARE_SIZE,
@@ -290,8 +291,8 @@ async function saveSocialSquareImage(): Promise<void> {
   padding: 0.65rem 1.25rem;
   border: none;
   border-radius: 4px;
-  background: #2c3e50;
-  color: white;
+  background: var(--ink);
+  color: var(--surface);
   cursor: pointer;
   font: inherit;
   font-weight: 600;
@@ -299,7 +300,7 @@ async function saveSocialSquareImage(): Promise<void> {
 }
 
 .save-btn:hover:not(:disabled) {
-  background: #1f2d3a;
+  background: var(--ink-deep);
 }
 
 .save-btn:disabled {
@@ -314,7 +315,7 @@ async function saveSocialSquareImage(): Promise<void> {
 
 .save-error {
   margin: 0;
-  color: #dc3545;
+  color: var(--signal);
   font-size: 0.85rem;
   text-align: center;
 }
@@ -340,8 +341,8 @@ async function saveSocialSquareImage(): Promise<void> {
   box-sizing: border-box;
   color: #ffffff;
   background:
-    radial-gradient(circle at top right, rgba(20, 184, 166, 0.28), transparent 42%),
-    linear-gradient(160deg, #0f172a 0%, #1e293b 52%, #152536 100%);
+    radial-gradient(circle at top right, rgba(47, 107, 90, 0.28), transparent 42%),
+    linear-gradient(160deg, #1a3f3d 0%, #203429 52%, #203429 100%);
 }
 
 .social-square-main {
@@ -610,7 +611,7 @@ async function saveSocialSquareImage(): Promise<void> {
   font-size: 1.1rem;
   font-style: italic;
   font-weight: 700;
-  color: #1f4f82;
+  color: var(--accent-link);
   text-decoration: none;
 }
 

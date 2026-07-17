@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { mount, flushPromises } from '@vue/test-utils'
 import { Chart } from 'chart.js'
 import RaceFlowChart from './RaceFlowChart.vue'
 import { timingApi } from '@/services/api'
-import { assignContrastFlowColors, buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, resolveRaceStartMs } from '@/utils/raceFlowData'
+import { resolveCategoryColor } from '@/themes/defaultLegend'
+import { buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, resolveRaceStartMs } from '@/utils/raceFlowData'
 import { convertDistanceFromKm, KM_TO_MILES } from '@/utils/units'
 import { setupPinia } from '@/test/helpers'
 import type { TimingRecord } from '@/types/models'
@@ -430,11 +433,14 @@ describe('raceFlowData', () => {
   })
 
   it('assigns maximally spaced hues for selected participants', () => {
-    const colors = assignContrastFlowColors(['p-alpha', 'p-beta'])
+    const colors = new Map<string, string>()
+    for (const participantId of ['p-alpha', 'p-beta']) {
+      colors.set(participantId, resolveCategoryColor(participantId))
+    }
 
-    expect(colors.get('p-alpha')).toBe('hsl(0, 70%, 45%)')
-    expect(colors.get('p-beta')).toBe('hsl(180, 70%, 45%)')
     expect(colors.get('p-alpha')).not.toBe(colors.get('p-beta'))
+    expect(['#1a3f3d', '#2f6b5a', '#9b654e', '#a1b383', '#6b7a76']).toContain(colors.get('p-alpha'))
+    expect(['#1a3f3d', '#2f6b5a', '#9b654e', '#a1b383', '#6b7a76']).toContain(colors.get('p-beta'))
   })
 
   it('derives gender and age group filter keys from participant data', () => {
@@ -450,6 +456,14 @@ describe('RaceFlowChart.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setupPinia()
+  })
+
+  it('does not hardcode legacy signal or blue chrome', () => {
+    const src = readFileSync(join(process.cwd(), 'src/components/RaceFlowChart.vue'), 'utf8')
+    expect(src).not.toMatch(/#e74c3c|#1a5276/i)
+    const style = src.split('<style')[1] ?? ''
+    expect(style).not.toMatch(/#2c3e50|#3498db|#2980b9|#1f4f82/i)
+    expect(src).toMatch(/#c45c38|SIGNAL_COLOR/)
   })
 
   it('loads live timing data and renders chart canvas', async () => {
@@ -483,7 +497,10 @@ describe('RaceFlowChart.vue', () => {
 
     expect(colors).toHaveLength(2)
     expect(colors[0]).not.toBe(colors[1])
-    expect(colors).toEqual(['hsl(0, 70%, 45%)', 'hsl(180, 70%, 45%)'])
+    expect(colors).toEqual([
+      resolveCategoryColor('p1'),
+      resolveCategoryColor('p2'),
+    ])
   })
 
   it('draws current time line and dotted extrapolations for active races', async () => {
