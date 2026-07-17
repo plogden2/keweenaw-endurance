@@ -45,9 +45,9 @@ $labelLaptop = Get-LabelDrawText 'Laptop'
 $labelIphone = Get-LabelDrawText 'iPhone'
 
 $filterComplex = @(
-    "[0:v]scale=853:-2,pad=853:1440:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1$labelReader[v0]"
-    "[1:v]scale=853:-2,pad=853:1440:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1$labelLaptop[v1]"
-    "[2:v]scale=853:-2,pad=853:1440:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1$labelIphone[v2]"
+    "[0:v]scale=852:480,setsar=1,pad=w=852:h=1440:x=0:y=(oh-ih)/2:color=black$labelReader[v0]"
+    "[1:v]scale=852:480,setsar=1,pad=w=852:h=1440:x=0:y=(oh-ih)/2:color=black$labelLaptop[v1]"
+    "[2:v]scale=852:480,setsar=1,pad=w=852:h=1440:x=0:y=(oh-ih)/2:color=black$labelIphone[v2]"
     '[v0][v1][v2]hstack=inputs=3[v]'
 ) -join ';'
 
