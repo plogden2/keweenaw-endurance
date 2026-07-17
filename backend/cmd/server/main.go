@@ -159,6 +159,8 @@ func main() {
 			rfid.POST("/manual-entry", append(timerWrite, handlers.ManualTimingEntry)...)
 			rfid.GET("/sync-status", handlers.GetSyncStatus)
 			rfid.POST("/sync-pending", append(timerWrite, handlers.SyncPendingRecords)...)
+			rfid.GET("/bridge", handlers.BridgeWebSocket)
+			rfid.GET("/bridge/status", handlers.GetBridgeStatus)
 		}
 
 		syncGroup := api.Group("/sync")

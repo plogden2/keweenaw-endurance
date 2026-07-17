@@ -23,6 +23,31 @@ const REPO_ROOT = path.resolve(HERE, '..')
 const ARTIFACT_ROOT = path.join(REPO_ROOT, 'e2e-artifacts', 'bluffet-hardware')
 const FRONTEND_DIR = path.join(REPO_ROOT, 'frontend')
 
+// --prod [optionalUrl]
+const args = process.argv.slice(2)
+let mode = 'prod-like'
+let baseURL = process.env.E2E_BASE_URL || 'http://keweenawendurance.com'
+const prodIdx = args.indexOf('--prod')
+if (prodIdx !== -1) {
+  mode = 'prod'
+  const next = args[prodIdx + 1]
+  baseURL = next && !next.startsWith('-') ? next : 'https://keweenawendurance.com'
+  if (/keweenawendurance\.com/i.test(baseURL) && process.env.BLUFFET_HW_ALLOW_PROD !== '1') {
+    console.error('Refusing --prod against live domain without BLUFFET_HW_ALLOW_PROD=1')
+    process.exit(2)
+  }
+}
+
+const playwrightArgs = [...args]
+if (prodIdx !== -1) {
+  playwrightArgs.splice(prodIdx, 1)
+  if (playwrightArgs[prodIdx] && !playwrightArgs[prodIdx].startsWith('-')) {
+    playwrightArgs.splice(prodIdx, 1)
+  }
+}
+
+const apiURL = process.env.E2E_API_URL ?? baseURL
+
 const runId = new Date().toISOString().replace(/[:.]/g, '-')
 const runDir = path.join(ARTIFACT_ROOT, runId)
 
@@ -30,16 +55,27 @@ fs.mkdirSync(runDir, { recursive: true })
 fs.writeFileSync(path.join(runDir, 'issues.jsonl'), '')
 fs.writeFileSync(path.join(runDir, 'issues.md'), '# Issues\n\n')
 
-console.log(`[run-bluffet-hardware] artifacts -> ${runDir}`)
+console.log(`[run-bluffet-hardware] mode=${mode} baseURL=${baseURL} artifacts -> ${runDir}`)
 
 const child = spawn(
   'npx',
-  ['playwright', 'test', '--config=e2e/hardware-bluffet/playwright.config.ts'],
+  [
+    'playwright',
+    'test',
+    '--config=e2e/hardware-bluffet/playwright.config.ts',
+    ...playwrightArgs,
+  ],
   {
     cwd: FRONTEND_DIR,
     stdio: 'inherit',
     shell: process.platform === 'win32',
-    env: { ...process.env, BLUFFET_HW_ARTIFACT_DIR: runDir },
+    env: {
+      ...process.env,
+      BLUFFET_HW_ARTIFACT_DIR: runDir,
+      BLUFFET_HW_MODE: mode,
+      E2E_BASE_URL: baseURL,
+      E2E_API_URL: apiURL,
+    },
   },
 )
 

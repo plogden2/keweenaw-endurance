@@ -1,20 +1,31 @@
 <template>
   <div class="event-live" data-testid="live-view">
-    <p v-if="isReaderSession" class="meta-bar sync-bar">
+    <p
+      v-if="isReaderSession"
+      class="meta-bar sync-bar"
+      :class="{ 'sync-bar--overlay': rotatorOpen }"
+    >
       <span class="sync-group" data-testid="sync-status">
         <span
-          v-if="online"
+          v-if="chipState === 'online_synced'"
           class="badge online"
           data-testid="sync-online"
         >
-          Station online
+          {{ chipLabel }}
+        </span>
+        <span
+          v-else-if="chipState === 'syncing'"
+          class="badge syncing"
+          data-testid="sync-syncing"
+        >
+          {{ chipLabel }}
         </span>
         <span
           v-else
           class="badge offline"
           data-testid="sync-offline"
         >
-          Station offline
+          {{ chipLabel }}
         </span>
         <span
           v-if="pendingSync > 0"
@@ -354,9 +365,9 @@ import {
   getLocalPendingCount,
   onOnline,
   onPendingChange,
-  syncAll,
 } from '@/services/offlineQueue'
 import { setDisplayCache } from '@/services/timingStorage'
+import { useBridgeSyncStatus } from '@/composables/useBridgeSyncStatus'
 import { useReaderStation } from '@/composables/useReaderStation'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
@@ -370,6 +381,7 @@ const station = useStationStore()
 const pinAuth = usePinAuthStore()
 const { lastScan } = useReaderStation()
 const isReaderSession = computed(() => pinAuth.isAuthenticated)
+const { chipState, chipLabel } = useBridgeSyncStatus()
 
 const live = ref<EventLiveResponse | null>(null)
 const loading = ref(false)
@@ -480,11 +492,12 @@ function onKey(e: KeyboardEvent) {
 
 function onBrowserOnline() {
   online.value = true
-  void syncAll().then(() => refreshPending())
+  void refreshPending()
 }
 
 function onBrowserOffline() {
   online.value = false
+  void refreshPending()
 }
 
 watch(eventId, () => {
@@ -514,11 +527,7 @@ onMounted(() => {
     const next = typeof navigator !== 'undefined' ? navigator.onLine : true
     if (online.value !== next) {
       online.value = next
-      if (next) {
-        void syncAll().then(() => refreshPending())
-      } else {
-        void refreshPending()
-      }
+      void refreshPending()
     }
   }
 
@@ -605,6 +614,11 @@ onUnmounted(() => {
   color: var(--signal);
 }
 
+.badge.syncing {
+  background: #fdebd0;
+  color: #7d6608;
+}
+
 .badge.pending {
   background: color-mix(in srgb, var(--copper) 20%, var(--surface));
   color: var(--copper);
@@ -615,6 +629,19 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 0.4rem;
   align-items: center;
+}
+
+/* Keep bridge sync chip visible above the fullscreen rotator (race-day critical). */
+.sync-bar--overlay {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 1100;
+  margin: 0;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ink-deep) 88%, transparent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--ink-deep) 35%, transparent);
 }
 
 .toolbar {

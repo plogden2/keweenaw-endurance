@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/keweenaw-endurance/backend/internal/config"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
 	"github.com/keweenaw-endurance/backend/internal/uuidutil"
@@ -49,6 +50,8 @@ type RFIDService struct {
 	db     *gorm.DB
 	timing *TimingService
 	reader rfid.Reader
+	cfg    *config.Config
+	bridge *BridgeHub
 
 	mu          sync.Mutex
 	subscribers []chan TagReadEvent
@@ -63,6 +66,11 @@ func NewRFIDService(db *gorm.DB, reader rfid.Reader) *RFIDService {
 		timing: NewTimingService(db),
 		reader: reader,
 	}
+}
+
+func (s *RFIDService) ConfigureBridge(cfg *config.Config, hub *BridgeHub) {
+	s.cfg = cfg
+	s.bridge = hub
 }
 
 func (s *RFIDService) LookupParticipantByUID(uid string) (*models.Participant, error) {
@@ -178,11 +186,30 @@ func (s *RFIDService) WriteTag(participantID uuid.UUID) (*models.Participant, er
 		return nil, err
 	}
 
-	device := rfid.NewProxmark3(s.reader)
-	if err := device.WriteLogicalUUID(logical); err != nil {
+	if s.cfg != nil && s.cfg.RFID.Hardware {
+		device := rfid.NewProxmark3(s.reader)
+		if err := device.WriteLogicalUUID(logical); err != nil {
+			return nil, err
+		}
+		return partSvc.GetParticipant(participantID)
+	}
+
+	if s.bridge == nil {
+		return nil, ErrBridgeUnavailable
+	}
+	deviceID := s.bridgeDeviceID()
+	deviceID = s.bridge.TargetDeviceID(deviceID)
+	if err := s.bridge.RequestWrite(deviceID, logical, 0); err != nil {
 		return nil, err
 	}
 	return partSvc.GetParticipant(participantID)
+}
+
+func (s *RFIDService) bridgeDeviceID() string {
+	if s.cfg != nil && strings.TrimSpace(s.cfg.RFID.BridgeDeviceID) != "" {
+		return strings.TrimSpace(s.cfg.RFID.BridgeDeviceID)
+	}
+	return DefaultBridgeDeviceID
 }
 
 func (s *RFIDService) ensureLogicalTagUUID(participantID uuid.UUID) (string, error) {

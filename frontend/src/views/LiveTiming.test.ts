@@ -29,6 +29,8 @@ vi.mock('@/services/api', async () => {
       scan: vi.fn(),
       manualEntry: vi.fn(),
       getSyncStatus: vi.fn(),
+      getBridgeStatus: vi.fn(),
+      getLocalBridgeStatus: vi.fn(),
       syncPending: vi.fn(),
     },
     participantsApi: { list: vi.fn() },
@@ -79,6 +81,10 @@ describe('LiveTiming.vue', () => {
     ;(rfidApi.getSyncStatus as Mock).mockResolvedValue({
       data: { pending_count: 2, failed_count: 0, synced_count: 10 },
     })
+    ;(rfidApi.getBridgeStatus as Mock).mockResolvedValue({
+      data: { connected: true, pending_count: 0, syncing: false },
+    })
+    ;(rfidApi.getLocalBridgeStatus as Mock).mockResolvedValue(null)
   })
 
   it('loads race, checkpoints, and live records on mount', async () => {

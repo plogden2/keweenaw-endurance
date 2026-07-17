@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import EventLive from '@/views/EventLive.vue'
 import { setupPinia, createTestRouter } from '@/test/helpers'
-import { eventsLiveApi } from '@/services/api'
+import { eventsLiveApi, rfidApi } from '@/services/api'
 
 vi.mock('@/services/api', async () => {
   const actual = await vi.importActual<typeof import('@/services/api')>('@/services/api')
@@ -16,6 +16,11 @@ vi.mock('@/services/api', async () => {
       getSyncStatus: vi.fn().mockResolvedValue({
         data: { pending_count: 0, failed_count: 0, synced_count: 0 },
       }),
+      getBridgeStatus: vi.fn().mockResolvedValue({
+        data: { connected: true, pending_count: 0, syncing: false },
+      }),
+      getLocalBridgeStatus: vi.fn().mockResolvedValue(null),
+      syncPending: vi.fn().mockResolvedValue({ data: { synced_count: 0 } }),
     },
   }
 })
@@ -179,6 +184,49 @@ describe('EventLive.vue', () => {
     expect(wrapper.find('[data-testid="sync-status"]').exists()).toBe(true)
   })
 
+  async function mountReaderLive() {
+    const { usePinAuthStore } = await import('@/stores/pinAuth')
+    const pin = usePinAuthStore()
+    pin.token = 'test-token'
+    pin.role = 'organizer'
+    pin.expiresAt = Math.floor(Date.now() / 1000) + 3600
+    return mountLive()
+  }
+
+  it('shows Online · Synced chip when bridge is connected with no pending', async () => {
+    ;(rfidApi.getBridgeStatus as Mock).mockResolvedValue({
+      data: { connected: true, pending_count: 0, syncing: false },
+    })
+
+    const wrapper = await mountReaderLive()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="sync-online"]').text()).toBe('Online · Synced')
+    expect(wrapper.find('[data-testid="sync-offline"]').exists()).toBe(false)
+  })
+
+  it('shows Offline chip when navigator is offline', async () => {
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+    const wrapper = await mountReaderLive()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="sync-offline"]').text()).toBe('Offline')
+
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+  })
+
+  it('shows Syncing chip when bridge reports syncing', async () => {
+    ;(rfidApi.getBridgeStatus as Mock).mockResolvedValue({
+      data: { connected: true, pending_count: 2, syncing: true },
+    })
+
+    const wrapper = await mountReaderLive()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="sync-syncing"]').text()).toBe('Syncing')
+  })
+
   it('switches race tabs 12h / 6h / 90m', async () => {
     const wrapper = await mountLive()
 
@@ -207,5 +255,14 @@ describe('EventLive.vue', () => {
     expect(wrapper.find('[data-testid="fullscreen-rotator"]').isVisible()).toBe(true)
     expect(wrapper.find('[data-testid="rotator-flow"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="rotator-leaderboard"]').exists()).toBe(true)
+  })
+
+  it('keeps sync chip mounted while fullscreen rotator is open', async () => {
+    const wrapper = await mountReaderLive()
+    await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="fullscreen-rotator"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sync-status"]').exists()).toBe(true)
+    expect(wrapper.find('.sync-bar--overlay').exists()).toBe(true)
   })
 })

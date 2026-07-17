@@ -193,7 +193,8 @@ func respondServiceError(c *gin.Context, err error) {
 		errors.Is(err, uuidutil.ErrInvalidID),
 		errors.Is(err, uuidutil.ErrAmbiguousID):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	case errors.Is(err, services.ErrHardwareUnavailable):
+	case errors.Is(err, services.ErrHardwareUnavailable),
+		errors.Is(err, services.ErrBridgeUnavailable):
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})

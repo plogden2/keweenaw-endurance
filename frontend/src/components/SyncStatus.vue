@@ -2,6 +2,30 @@
   <section class="sync-status" data-testid="sync-status">
     <h2 class="section-title">Sync Status</h2>
 
+    <p class="chip-row">
+      <span
+        v-if="chipState === 'online_synced'"
+        class="chip online"
+        data-testid="sync-chip-online"
+      >
+        {{ chipLabel }}
+      </span>
+      <span
+        v-else-if="chipState === 'syncing'"
+        class="chip syncing"
+        data-testid="sync-chip-syncing"
+      >
+        {{ chipLabel }}
+      </span>
+      <span
+        v-else
+        class="chip offline"
+        data-testid="sync-chip-offline"
+      >
+        {{ chipLabel }}
+      </span>
+    </p>
+
     <div v-if="loading" class="status">Loading sync status…</div>
     <div v-else-if="error" class="status error">{{ error }}</div>
 
@@ -48,7 +72,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useBridgeSyncStatus } from '@/composables/useBridgeSyncStatus'
 import { rfidApi } from '@/services/api'
 import {
   getLocalPendingCount,
@@ -62,13 +87,14 @@ const emit = defineEmits<{
   synced: []
 }>()
 
+const { chipState, chipLabel, refresh: refreshBridge } = useBridgeSyncStatus()
 const status = ref<SyncStatusResponse | null>(null)
 const localPendingCount = ref(0)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const syncing = ref(false)
 const syncMessage = ref<string | null>(null)
-const isOffline = ref(typeof navigator !== 'undefined' ? !navigator.onLine : false)
+const isOffline = computed(() => chipState.value === 'offline')
 
 let removeOnlineListener: (() => void) | undefined
 
@@ -79,10 +105,10 @@ async function loadLocalPendingCount(): Promise<void> {
 async function loadStatus(): Promise<void> {
   loading.value = true
   error.value = null
-  isOffline.value = !navigator.onLine
   await loadLocalPendingCount()
+  await refreshBridge()
 
-  if (isOffline.value) {
+  if (!navigator.onLine) {
     status.value = null
     loading.value = false
     return
@@ -149,6 +175,33 @@ defineExpose({ loadStatus, syncPending })
   margin: 0 0 1rem;
   font-size: 1.1rem;
   color: var(--ink);
+}
+
+.chip-row {
+  margin: 0 0 1rem;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.chip.online {
+  background: #d5f5e3;
+  color: #1e8449;
+}
+
+.chip.offline {
+  background: #fadbd8;
+  color: #922b21;
+}
+
+.chip.syncing {
+  background: #fdebd0;
+  color: #7d6608;
 }
 
 .counts {

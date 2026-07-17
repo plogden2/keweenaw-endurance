@@ -30,7 +30,7 @@ func createTestRaceForEvent(t *testing.T, db *gorm.DB, event *models.Event) *mod
 func TestCSVExport_WriteLiveSnapshotContainsSections(t *testing.T) {
 	db := setupServiceTestDB(t)
 	dir := t.TempDir()
-	svc := NewCSVExportService(db, dir)
+	svc := NewCSVExportService(db, dir, "")
 
 	event := createTestEvent(t, db)
 	race, err := NewRaceService(db).CreateRace(&models.Race{
@@ -99,7 +99,7 @@ func TestCSVExport_WriteLiveSnapshotContainsSections(t *testing.T) {
 func TestCSVExport_LiveSnapshotUpdatesOnRefresh(t *testing.T) {
 	db := setupServiceTestDB(t)
 	dir := t.TempDir()
-	svc := NewCSVExportService(db, dir)
+	svc := NewCSVExportService(db, dir, "")
 
 	event := createTestEvent(t, db)
 	race := createTestRaceForEvent(t, db, event)
@@ -131,7 +131,7 @@ func TestCSVExport_LiveSnapshotUpdatesOnRefresh(t *testing.T) {
 func TestCSVExport_RoundTripPreservesLapsAndTags(t *testing.T) {
 	db := setupServiceTestDB(t)
 	dir := t.TempDir()
-	svc := NewCSVExportService(db, dir)
+	svc := NewCSVExportService(db, dir, "")
 
 	event := createTestEvent(t, db)
 	race := createTestRaceForEvent(t, db, event)
@@ -193,7 +193,7 @@ func TestCSVExport_RoundTripPreservesLapsAndTags(t *testing.T) {
 func TestCSVExport_ImportDoesNotDeleteUnrelatedEvents(t *testing.T) {
 	db := setupServiceTestDB(t)
 	dir := t.TempDir()
-	svc := NewCSVExportService(db, dir)
+	svc := NewCSVExportService(db, dir, "")
 
 	keep := createTestEvent(t, db)
 	keepRace := createTestRaceForEvent(t, db, keep)
@@ -214,10 +214,80 @@ func TestCSVExport_ImportDoesNotDeleteUnrelatedEvents(t *testing.T) {
 	assert.Equal(t, int64(1), keepParts)
 }
 
+func TestCSVExport_WriteLiveSnapshotMirrorsWhenConfigured(t *testing.T) {
+	db := setupServiceTestDB(t)
+	dataDir := t.TempDir()
+	mirrorDir := t.TempDir()
+	svc := NewCSVExportService(db, dataDir, mirrorDir)
+
+	event := createTestEvent(t, db)
+	_, err := svc.WriteLiveSnapshot(event.ID.UUID())
+	require.NoError(t, err)
+
+	primaryPath := filepath.Join(dataDir, "events", event.ID.String(), "live-snapshot.csv")
+	mirrorPath := filepath.Join(mirrorDir, "events", event.ID.String(), "live-snapshot.csv")
+
+	primaryBody, err := os.ReadFile(primaryPath)
+	require.NoError(t, err)
+
+	mirrorBody, err := os.ReadFile(mirrorPath)
+	require.NoError(t, err)
+	assert.Equal(t, primaryBody, mirrorBody)
+	assert.Contains(t, string(mirrorBody), "#SECTION,event")
+	assert.Contains(t, string(mirrorBody), event.ID.String())
+}
+
+func TestCSVExport_ImportCSVMirrorsWhenConfigured(t *testing.T) {
+	db := setupServiceTestDB(t)
+	dataDir := t.TempDir()
+	mirrorDir := t.TempDir()
+	svc := NewCSVExportService(db, dataDir, mirrorDir)
+
+	event := createTestEvent(t, db)
+	race := createTestRaceForEvent(t, db, event)
+	_ = createTestParticipant(t, db, race.ID, "1")
+
+	csvBytes, err := svc.BuildCSV(event.ID.UUID())
+	require.NoError(t, err)
+
+	_, err = svc.ImportCSV(event.ID.UUID(), csvBytes)
+	require.NoError(t, err)
+
+	primaryPath := filepath.Join(dataDir, "events", event.ID.String(), "live-snapshot.csv")
+	mirrorPath := filepath.Join(mirrorDir, "events", event.ID.String(), "live-snapshot.csv")
+
+	primaryBody, err := os.ReadFile(primaryPath)
+	require.NoError(t, err)
+	mirrorBody, err := os.ReadFile(mirrorPath)
+	require.NoError(t, err)
+	assert.Equal(t, primaryBody, mirrorBody)
+	assert.Contains(t, string(mirrorBody), "#SECTION,event")
+}
+
+func TestCSVExport_WriteLiveSnapshotSucceedsWhenMirrorUnwritable(t *testing.T) {
+	db := setupServiceTestDB(t)
+	dataDir := t.TempDir()
+	mirrorBlocked := filepath.Join(t.TempDir(), "blocked")
+	require.NoError(t, os.WriteFile(mirrorBlocked, []byte("x"), 0o644))
+
+	svc := NewCSVExportService(db, dataDir, mirrorBlocked)
+	event := createTestEvent(t, db)
+
+	path, err := svc.WriteLiveSnapshot(event.ID.UUID())
+	require.NoError(t, err)
+
+	primaryBody, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(primaryBody), "#SECTION,event")
+
+	_, err = os.Stat(filepath.Join(mirrorBlocked, "events", event.ID.String(), "live-snapshot.csv"))
+	require.Error(t, err)
+}
+
 func TestCSVExport_ReadLiveSnapshotAndStatus(t *testing.T) {
 	db := setupServiceTestDB(t)
 	dir := t.TempDir()
-	svc := NewCSVExportService(db, dir)
+	svc := NewCSVExportService(db, dir, "")
 
 	event := createTestEvent(t, db)
 	_, err := svc.WriteLiveSnapshot(event.ID.UUID())

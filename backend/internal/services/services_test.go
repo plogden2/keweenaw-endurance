@@ -41,4 +41,5 @@ func TestNewServices(t *testing.T) {
 	assert.NotNil(t, services.CSV)
 	assert.NotNil(t, services.Scan)
 	assert.NotNil(t, services.Stations)
+	assert.NotNil(t, services.Bridge)
 }

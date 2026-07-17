@@ -6,7 +6,10 @@ import type { APIRequestContext, APIResponse, Page } from '@playwright/test'
 
 export const ORGANIZER_PIN = '1738'
 export const PIN = ORGANIZER_PIN
-export const API_BASE = process.env.E2E_API_URL ?? 'http://localhost:8080'
+export const API_BASE =
+  process.env.E2E_API_URL ??
+  process.env.E2E_BASE_URL ??
+  'http://localhost:8080'
 
 export function apiBase(): string {
   return API_BASE

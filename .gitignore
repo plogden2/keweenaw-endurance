@@ -6,12 +6,17 @@ build/
 .env
 .env.*
 !.env.example
+!.env.prod.example
 
 # Go
 backend/vendor/
 *.exe
 *.test
 *.out
+# Runtime CSV snapshots written by handler/service tests
+backend/internal/handlers/data/
+backend/internal/services/data/
+bridge-data/
 
 # Python
 __pycache__/

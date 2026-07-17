@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/keweenaw-endurance/backend/internal/config"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
 	"github.com/stretchr/testify/assert"
@@ -47,6 +48,7 @@ func TestRFIDService_WriteTag(t *testing.T) {
 
 	mock := rfid.NewMockReader()
 	svc := NewRFIDService(db, mock)
+	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: true}}, nil)
 
 	updated, err := svc.WriteTag(participant.ID.UUID())
 	require.NoError(t, err)
@@ -71,6 +73,7 @@ func TestWriteTag_ProgramsLogicalUUIDWithoutSilicon(t *testing.T) {
 
 	mock := rfid.NewMockReader()
 	svc := NewRFIDService(db, mock)
+	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: true}}, nil)
 	logical := uuid.New().String()
 	_, err = svc.AssociateTag(p.ID.UUID(), logical)
 	require.NoError(t, err)
@@ -162,6 +165,7 @@ func TestRFIDService_WriteTag_ReusesLegacyRFIDTagUID(t *testing.T) {
 
 	mock := rfid.NewMockReader()
 	svc := NewRFIDService(db, mock)
+	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: true}}, nil)
 
 	updated, err := svc.WriteTag(participant.ID.UUID())
 	require.NoError(t, err)
@@ -185,6 +189,7 @@ func TestRFIDService_WriteTag_RetriesSameLogicalAfterWriteFailure(t *testing.T) 
 
 	mock := rfid.NewMockReader()
 	svc := NewRFIDService(db, mock)
+	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: true}}, nil)
 
 	mock.WriteErr = errors.New("hardware write failed")
 	_, err = svc.WriteTag(participant.ID.UUID())
@@ -218,6 +223,7 @@ func TestRFIDService_WriteTag_HardwareUnavailable(t *testing.T) {
 	mock := rfid.NewMockReader()
 	mock.Available = false
 	svc := NewRFIDService(db, mock)
+	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: true}}, nil)
 
 	_, err = svc.WriteTag(participant.ID.UUID())
 	assert.ErrorIs(t, err, ErrHardwareUnavailable)
@@ -383,4 +389,57 @@ func TestRFIDService_ManualEntry_WrongRaceForRFID(t *testing.T) {
 		RFIDTagUID: "TAG-RACE-1", Timestamp: time.Now().UTC(),
 	})
 	assert.ErrorIs(t, err, ErrInvalidRFIDInput)
+}
+
+func TestRFIDService_WriteTag_ViaBridge(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "77", FirstName: "Bridge", LastName: "Write",
+	})
+	require.NoError(t, err)
+
+	hub := NewBridgeHub()
+	conn := newFakeBridgeConn(4)
+	hub.Register("laptop-finish-1", conn)
+
+	svc := NewRFIDService(db, rfid.NewMockReader())
+	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: false, BridgeDeviceID: "laptop-finish-1"}}, hub)
+
+	done := make(chan struct{})
+	go func() {
+		msg, err := conn.awaitOutbound(time.Second)
+		require.NoError(t, err)
+		ok := true
+		require.NoError(t, hub.HandleMessage("laptop-finish-1", &BridgeMessage{
+			Type:      "write_ack",
+			RequestID: msg.RequestID,
+			OK:        &ok,
+		}))
+		close(done)
+	}()
+
+	updated, err := svc.WriteTag(participant.ID.UUID())
+	require.NoError(t, err)
+	require.NotEmpty(t, updated.RFIDTagUID)
+	<-done
+}
+
+func TestRFIDService_WriteTag_BridgeUnavailable(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "78", FirstName: "No", LastName: "Bridge",
+	})
+	require.NoError(t, err)
+
+	svc := NewRFIDService(db, rfid.NewMockReader())
+	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: false}}, NewBridgeHub())
+
+	_, err = svc.WriteTag(participant.ID.UUID())
+	assert.ErrorIs(t, err, ErrBridgeUnavailable)
 }

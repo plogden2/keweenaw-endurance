@@ -121,6 +121,24 @@ func seedActiveLapFixture(t *testing.T, raceStatus string) *scanFixture {
 	}
 }
 
+func TestProcessScan_BridgeRecordIDIsStable(t *testing.T) {
+	fx := seedActiveLapFixture(t, "active")
+	svc := NewScanService(fx.db, nil)
+
+	bridgeID := uuid.New().String()
+	now := time.Now().UTC().Truncate(time.Second)
+	result, err := svc.ProcessScan(fx.event.ID.UUID(), fx.tagUID, "laptop-finish-1", now, ScanOptions{
+		BridgeRecordID: bridgeID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result.TimingRecordID)
+	assert.Equal(t, bridgeID, result.TimingRecordID.String())
+
+	var count int64
+	require.NoError(t, fx.db.Model(&models.TimingRecord{}).Where("id = ?", bridgeID).Count(&count).Error)
+	assert.Equal(t, int64(1), count)
+}
+
 func TestProcessScan_ActiveLap(t *testing.T) {
 	fx := seedActiveLapFixture(t, "active")
 	svc := NewScanService(fx.db, nil)
