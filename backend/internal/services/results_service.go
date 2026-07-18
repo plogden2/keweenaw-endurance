@@ -61,6 +61,7 @@ type LiveRaceView struct {
 	RaceType           string              `json:"race_type"`
 	Status             string              `json:"status"`
 	StartTime          time.Time           `json:"start_time"`
+	DurationMinutes    int                 `json:"duration_minutes"`
 	CountdownSeconds   int                 `json:"countdown_seconds"`
 	LeaderboardOverall []LiveOverallEntry  `json:"leaderboard_overall"`
 	FlowSeries         []interface{}       `json:"flow_series"`
@@ -211,6 +212,7 @@ func (s *ResultsService) GetEventLive(eventID uuid.UUID, categoryID *uuid.UUID) 
 			RaceType:           race.RaceType,
 			Status:             race.Status,
 			StartTime:          race.StartTime,
+			DurationMinutes:    race.DurationMinutes,
 			CountdownSeconds:   countdown,
 			LeaderboardOverall: board,
 			FlowSeries:         []interface{}{},

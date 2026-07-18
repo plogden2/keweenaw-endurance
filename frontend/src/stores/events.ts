@@ -95,5 +95,16 @@ export const useEventsStore = defineStore('events', {
         this.currentEvent = null
       }
     },
+
+    setCurrentEventSummary(summary: { id: string; name: string }) {
+      this.currentEvent = {
+        ...(this.currentEvent ?? {
+          event_date: '',
+          status: 'active' as const,
+        }),
+        id: summary.id,
+        name: summary.name,
+      }
+    },
   },
 })

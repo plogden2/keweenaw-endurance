@@ -29,10 +29,12 @@ import type { RaceStatus, RaceType, TimingRecord } from '@/types/models'
 import {
   buildExtrapolationPoint,
   buildParticipantFlows,
+  clampElapsedToDuration,
   getCurrentElapsedMinutes,
   getFlowChartTitle,
   getFlowLineColor,
   getFlowYAxisLabel,
+  resolveRaceFlowXAxisMax,
   resolveRaceStartMs,
 } from '@/utils/raceFlowData'
 import { getErrorMessage } from '@/utils/error'
@@ -53,6 +55,7 @@ const props = defineProps<{
   raceStatus?: RaceStatus
   raceStartTime?: string
   raceType?: RaceType
+  durationMinutes?: number
 }>()
 
 const unitsStore = useUnitsStore()
@@ -89,7 +92,10 @@ const currentElapsedMinutes = computed(() => {
     return null
   }
 
-  const elapsed = getCurrentElapsedMinutes(raceStartMs.value, nowMs.value)
+  const elapsed = clampElapsedToDuration(
+    getCurrentElapsedMinutes(raceStartMs.value, nowMs.value),
+    props.durationMinutes,
+  )
   const lastPoint = participantFlow.value?.points.at(-1)
   const latestRecordedMinute = lastPoint?.elapsedMinutes ?? 0
 
@@ -158,6 +164,17 @@ function renderChart(): void {
     })
   }
 
+  const recordedMaxMinutes = flow.points.reduce(
+    (max, point) => Math.max(max, point.elapsedMinutes),
+    0,
+  )
+  const xAxisMax = resolveRaceFlowXAxisMax(
+    props.durationMinutes,
+    extrapolation?.elapsedMinutes ?? recordedMaxMinutes,
+    currentElapsedMinutes.value,
+    showCurrentTime,
+  )
+
   chartInstance.value = new Chart(canvasRef.value, {
     type: 'line',
     data: {
@@ -192,6 +209,7 @@ function renderChart(): void {
         x: {
           type: 'linear',
           title: { display: true, text: 'Elapsed time (minutes)' },
+          max: xAxisMax,
         },
         y: {
           beginAtZero: true,
@@ -227,14 +245,14 @@ watch(
 )
 
 watch(
-  () => [props.raceStatus, props.raceStartTime, props.raceType],
+  () => [props.raceStatus, props.raceStartTime, props.raceType, props.durationMinutes],
   () => {
     startLiveRefreshTimer()
   },
 )
 
 watch(
-  [participantFlow, loading, currentElapsedMinutes, chartRaceType, () => unitsStore.unitSystem],
+  [participantFlow, loading, currentElapsedMinutes, chartRaceType, () => props.durationMinutes, () => unitsStore.unitSystem],
   async () => {
     if (!loading.value) {
       await nextTick()

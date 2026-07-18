@@ -90,7 +90,7 @@ const bluffetEventId = computed(() => {
   return event?.id
 })
 
-/** Spectators land on event live view when Bluffet is known; else the events list. */
+/** Hero CTA links to Bluffet live when known; otherwise the events list. Home never auto-redirects. */
 const liveTimingTarget = computed(() =>
   bluffetEventId.value ? `/events/${bluffetEventId.value}/live` : '/timing',
 )

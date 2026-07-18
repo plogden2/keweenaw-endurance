@@ -261,6 +261,47 @@ export function getCurrentElapsedMinutes(
   return Math.max(0, (nowMs - raceStartMs) / 60000)
 }
 
+export function clampElapsedToDuration(
+  elapsedMinutes: number,
+  durationMinutes?: number | null,
+): number {
+  if (durationMinutes != null && durationMinutes > 0) {
+    return Math.min(elapsedMinutes, durationMinutes)
+  }
+  return elapsedMinutes
+}
+
+export function resolveRaceFlowAxisMaxMinutes(
+  durationMinutes: number | null | undefined,
+  recordedMaxMinutes: number,
+  currentElapsedMinutes: number | null,
+): number {
+  if (durationMinutes != null && durationMinutes > 0) {
+    return durationMinutes
+  }
+  return Math.max(recordedMaxMinutes, currentElapsedMinutes ?? 0)
+}
+
+export function resolveRaceFlowXAxisMax(
+  durationMinutes: number | null | undefined,
+  recordedMaxMinutes: number,
+  currentElapsedMinutes: number | null,
+  showCurrentTime: boolean,
+): number | undefined {
+  const axisMax = resolveRaceFlowAxisMaxMinutes(
+    durationMinutes,
+    recordedMaxMinutes,
+    currentElapsedMinutes,
+  )
+  if (durationMinutes != null && durationMinutes > 0) {
+    return axisMax
+  }
+  if (showCurrentTime) {
+    return Math.ceil(axisMax * 1.05)
+  }
+  return undefined
+}
+
 export function buildExtrapolationPoint(
   flow: ParticipantFlow,
   currentElapsedMinutes: number,

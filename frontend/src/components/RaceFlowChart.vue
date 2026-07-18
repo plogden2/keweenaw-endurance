@@ -223,6 +223,7 @@ import {
   buildExtrapolationPoint,
   buildParticipantFlowTooltip,
   buildParticipantFlows,
+  clampElapsedToDuration,
   compareAgeGroupKeys,
   compareGenderKeys,
   getCurrentElapsedMinutes,
@@ -231,6 +232,7 @@ import {
   getParticipantAgeGroupLabel,
   getParticipantGenderLabel,
   getParticipantStatusLabel,
+  resolveRaceFlowXAxisMax,
   resolveRaceStartMs,
   type ParticipantFlowTooltip,
 } from '@/utils/raceFlowData'
@@ -321,6 +323,7 @@ const props = defineProps<{
   raceStatus?: RaceStatus
   raceStartTime?: string
   raceType?: RaceType
+  durationMinutes?: number
   highlightParticipantId?: string
 }>()
 
@@ -360,7 +363,10 @@ const currentElapsedMinutes = computed(() => {
     return null
   }
 
-  const elapsed = getCurrentElapsedMinutes(raceStartMs.value, nowMs.value)
+  const elapsed = clampElapsedToDuration(
+    getCurrentElapsedMinutes(raceStartMs.value, nowMs.value),
+    props.durationMinutes,
+  )
   const latestRecordedMinute = flows.value.reduce((latest, flow) => {
     const lastPoint = flow.points.at(-1)
     return lastPoint ? Math.max(latest, lastPoint.elapsedMinutes) : latest
@@ -646,6 +652,25 @@ function destroyChart(): void {
   chartInstance.value = null
 }
 
+function getLiveDisplayScale(): number {
+  if (typeof window === 'undefined') {
+    return 1
+  }
+
+  const host = canvasRef.value?.closest('.event-live, [data-testid=fullscreen-rotator]')
+  if (!host) {
+    return 1
+  }
+
+  const raw = getComputedStyle(host).getPropertyValue('--live-display-scale').trim()
+  const scale = Number.parseFloat(raw || '1')
+  return Number.isFinite(scale) && scale > 0 ? scale : 1
+}
+
+function chartFontSize(base: number): number {
+  return Math.round(base * getLiveDisplayScale())
+}
+
 function withAlpha(color: string, alpha: number): string {
   if (color.startsWith('hsl(')) {
     return color.replace(')', `, ${alpha})`).replace('hsl(', 'hsla(')
@@ -776,6 +801,16 @@ function renderChart(): void {
   }, 0)
 
   const orderedFlows = getOrderedVisibleFlows()
+  const xAxisMax = resolveRaceFlowXAxisMax(
+    props.durationMinutes,
+    maxElapsedMinutes,
+    currentElapsedMinutes.value,
+    showCurrentTime,
+  )
+
+  const tickSize = chartFontSize(12)
+  const axisTitleSize = chartFontSize(13)
+  const chartTitleSize = chartFontSize(14)
 
   chartInstance.value = new Chart(canvasRef.value, {
     type: 'line',
@@ -801,16 +836,25 @@ function renderChart(): void {
       scales: {
         x: {
           type: 'linear',
-          title: { display: true, text: 'Elapsed time (minutes)' },
-          max: showCurrentTime ? Math.ceil(maxElapsedMinutes * 1.05) : undefined,
+          title: {
+            display: true,
+            text: 'Elapsed time (minutes)',
+            font: { size: axisTitleSize },
+          },
+          ticks: { font: { size: tickSize } },
+          max: xAxisMax,
         },
         y: {
           beginAtZero: true,
           title: {
             display: true,
             text: getFlowYAxisLabel(chartRaceType.value, unitsStore.unitSystem),
+            font: { size: axisTitleSize },
           },
-          ticks: chartRaceType.value === 'lap_based' ? { stepSize: 1 } : undefined,
+          ticks: {
+            ...(chartRaceType.value === 'lap_based' ? { stepSize: 1 } : {}),
+            font: { size: tickSize },
+          },
         },
       },
       plugins: {
@@ -819,6 +863,7 @@ function renderChart(): void {
         title: {
           display: true,
           text: getFlowChartTitle(chartRaceType.value, showCurrentTime),
+          font: { size: chartTitleSize },
         },
       } as Record<string, unknown>,
     },
@@ -840,7 +885,7 @@ watch(
 )
 
 watch(
-  () => [props.raceStatus, props.raceStartTime, props.raceType],
+  () => [props.raceStatus, props.raceStartTime, props.raceType, props.durationMinutes],
   () => {
     startLiveRefreshTimer()
   },
@@ -857,6 +902,7 @@ watch(
     loading,
     currentElapsedMinutes,
     chartRaceType,
+    () => props.durationMinutes,
     () => unitsStore.unitSystem,
     () => props.highlightParticipantId,
   ],
@@ -925,6 +971,7 @@ canvas {
   background: var(--mist);
   border-radius: 8px;
   padding: 1rem;
+  font-size: calc(0.9rem * var(--live-display-scale, 1));
 }
 
 .legend-controls {
@@ -997,7 +1044,7 @@ canvas {
 }
 
 .filter-dropdown-label {
-  font-size: 0.72rem;
+  font-size: calc(0.72rem * var(--live-display-scale, 1));
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
@@ -1005,7 +1052,7 @@ canvas {
 }
 
 .filter-dropdown-value {
-  font-size: 0.85rem;
+  font-size: calc(0.85rem * var(--live-display-scale, 1));
   color: var(--ink);
 }
 
@@ -1069,7 +1116,6 @@ canvas {
 .legend-empty {
   margin: 0;
   color: var(--muted);
-  font-size: 0.9rem;
 }
 
 .legend-items {
@@ -1084,7 +1130,7 @@ canvas {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.85rem;
+  font-size: calc(0.85rem * var(--live-display-scale, 1));
   color: var(--ink);
   cursor: pointer;
 }
@@ -1123,14 +1169,14 @@ canvas {
   border-radius: 6px;
   background: var(--ink-deep);
   color: var(--mist);
-  font-size: 0.8rem;
+  font-size: calc(0.8rem * var(--live-display-scale, 1));
   line-height: 1.35;
   pointer-events: none;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
 .tooltip-name {
-  font-size: 0.85rem;
+  font-size: calc(0.85rem * var(--live-display-scale, 1));
 }
 
 .status,
