@@ -98,6 +98,19 @@ describe('Home.vue', () => {
     )
   })
 
+  it('uses IBM Plex for Bluffet titles, not Yuji Mai', () => {
+    expect(bluffetCss).not.toMatch(/Yuji Mai/)
+    expect(bluffetCss).toMatch(
+      /#app\.theme-bluffet\s*\{[^}]*font-family:\s*'IBM Plex Sans'/s,
+    )
+  })
+
+  it('does not paint legend-item solid Bluffet red', () => {
+    expect(bluffetCss).not.toMatch(
+      /#app\.theme-bluffet\s+\.legend-item\s*\{[^}]*background:\s*var\(--bluffet-red\)/s,
+    )
+  })
+
   it('renders teaser race cards with external links only', () => {
     const router = createHomeRouter()
     const wrapper = mount(Home, { global: { plugins: [router] } })

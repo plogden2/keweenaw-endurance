@@ -311,6 +311,7 @@ export interface EventLiveRace {
   race_type: RaceType
   status: string
   start_time: string
+  duration_minutes?: number
   countdown_seconds: number
   leaderboard_overall: LiveLeaderboardEntry[]
   flow_series: unknown[]

@@ -16,14 +16,6 @@
   font-family: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
 }
 
-#app.theme-bluffet .bluffet-display,
-#app.theme-bluffet h1.page-title,
-#app.theme-bluffet .featured-event h2 {
-  font-family: 'Yuji Mai', 'Segoe UI', system-ui, sans-serif;
-  font-weight: 400;
-  letter-spacing: 0.02em;
-}
-
 #app.theme-bluffet .bluffet-panel,
 #app.theme-bluffet .race-link,
 #app.theme-bluffet .panel {
@@ -34,11 +26,31 @@
 }
 
 #app.theme-bluffet .bluffet-chip,
-#app.theme-bluffet .legend-item,
 #app.theme-bluffet .race-tabs button[aria-selected='true'] {
   background: var(--bluffet-red);
   color: #fff;
   border: var(--bluffet-outline);
+}
+
+#app.theme-bluffet .legend-item {
+  background: var(--bluffet-panel);
+  color: var(--bluffet-ink);
+  border: 1px solid color-mix(in srgb, var(--bluffet-ink) 20%, transparent);
+}
+
+#app.theme-bluffet .legend-item-hovered,
+#app.theme-bluffet .filter-dropdown-option.selected {
+  background: color-mix(in srgb, var(--bluffet-red) 12%, var(--bluffet-panel));
+  color: var(--bluffet-ink);
+}
+
+#app.theme-bluffet .event-live .panel,
+#app.theme-bluffet .event-live .chart-wrap,
+#app.theme-bluffet .event-live .legend {
+  background: var(--bluffet-panel);
+  border: var(--bluffet-outline);
+  box-shadow: var(--bluffet-shadow);
+  border-radius: 6px;
 }
 
 #app.theme-bluffet .countdown {

@@ -80,6 +80,7 @@
             :race-status="racesStore.currentRace.status"
             :race-start-time="racesStore.currentRace.start_time"
             :race-type="racesStore.currentRace.race_type"
+            :duration-minutes="racesStore.currentRace.duration_minutes"
           />
 
           <div class="participant-actions">
@@ -129,6 +130,7 @@
           :race-status="racesStore.currentRace.status"
           :race-start-time="racesStore.currentRace.start_time"
           :race-type="racesStore.currentRace.race_type"
+          :duration-minutes="racesStore.currentRace.duration_minutes"
           :highlight-participant-id="highlightParticipantId"
         />
       </section>

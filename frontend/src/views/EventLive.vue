@@ -132,6 +132,7 @@
             :race-status="asRaceStatus(race12.status)"
             :race-start-time="race12.start_time"
             :race-type="race12.race_type"
+            :duration-minutes="race12.duration_minutes"
           />
         </div>
         <section class="panel">
@@ -192,6 +193,7 @@
             :race-status="asRaceStatus(race6.status)"
             :race-start-time="race6.start_time"
             :race-type="race6.race_type"
+            :duration-minutes="race6.duration_minutes"
           />
         </div>
         <section class="panel">
@@ -242,6 +244,7 @@
             :race-status="asRaceStatus(race90.status)"
             :race-start-time="race90.start_time"
             :race-type="race90.race_type"
+            :duration-minutes="race90.duration_minutes"
           />
         </div>
         <section class="panel">
@@ -282,6 +285,7 @@
             :race-status="asRaceStatus(race12.status)"
             :race-start-time="race12.start_time"
             :race-type="race12.race_type"
+            :duration-minutes="race12.duration_minutes"
           />
           <RaceFlowChart
             v-if="race6?.id"
@@ -289,6 +293,7 @@
             :race-status="asRaceStatus(race6.status)"
             :race-start-time="race6.start_time"
             :race-type="race6.race_type"
+            :duration-minutes="race6.duration_minutes"
           />
         </div>
       </div>
@@ -318,6 +323,7 @@
                 :race-status="asRaceStatus(race12.status)"
                 :race-start-time="race12.start_time"
                 :race-type="race12.race_type"
+                :duration-minutes="race12.duration_minutes"
               />
             </div>
           </div>
@@ -370,6 +376,7 @@ import { setDisplayCache } from '@/services/timingStorage'
 import { useBridgeSyncStatus } from '@/composables/useBridgeSyncStatus'
 import { useReaderStation } from '@/composables/useReaderStation'
 import { usePinAuthStore } from '@/stores/pinAuth'
+import { useEventsStore } from '@/stores/events'
 import { useStationStore } from '@/stores/station'
 import { getErrorMessage } from '@/utils/error'
 import type { RaceStatus } from '@/types/models'
@@ -378,6 +385,7 @@ import { resolveCategoryColor } from '@/themes/defaultLegend'
 const route = useRoute()
 const eventId = computed(() => String(route.params.eventId))
 const station = useStationStore()
+const eventsStore = useEventsStore()
 const pinAuth = usePinAuthStore()
 const { lastScan } = useReaderStation()
 const isReaderSession = computed(() => pinAuth.isAuthenticated)
@@ -468,15 +476,20 @@ async function cacheLiveLabels(data: EventLiveResponse) {
   })
 }
 
+async function applyLiveData(data: EventLiveResponse) {
+  live.value = data
+  eventsStore.setCurrentEventSummary(data.event)
+  void cacheLiveLabels(data)
+}
+
 async function loadLive() {
   loading.value = true
   error.value = null
   online.value = navigator.onLine
   try {
     const { data } = await eventsLiveApi.getLive(eventId.value)
-    live.value = data
+    await applyLiveData(data)
     online.value = navigator.onLine
-    void cacheLiveLabels(data)
   } catch (err) {
     error.value = getErrorMessage(err, 'Failed to load live view')
     online.value = navigator.onLine
@@ -540,7 +553,7 @@ onMounted(() => {
     void eventsLiveApi
       .getLive(eventId.value)
       .then(({ data }) => {
-        live.value = data
+        void applyLiveData(data)
         online.value = navigator.onLine
         void refreshPending()
       })
@@ -580,11 +593,16 @@ onUnmounted(() => {
   margin: 0 auto;
   padding: 0 2rem;
   --line: var(--border);
+  --live-display-scale: 1;
+  --live-title-size: calc(1.75rem * var(--live-display-scale));
+  --live-tab-size: calc(1rem * var(--live-display-scale));
+  --live-body-size: calc(1rem * var(--live-display-scale));
 }
 
 .page-title {
   color: var(--ink);
   margin: 0 0 1rem;
+  font-size: var(--live-title-size);
 }
 
 .meta-bar {
@@ -593,7 +611,7 @@ onUnmounted(() => {
   gap: 0.75rem;
   align-items: center;
   color: var(--muted);
-  font-size: 0.95rem;
+  font-size: calc(0.95rem * var(--live-display-scale));
 }
 
 .badge {
@@ -665,6 +683,7 @@ onUnmounted(() => {
   border-radius: 4px;
   cursor: pointer;
   font: inherit;
+  font-size: var(--live-tab-size);
 }
 
 .race-tabs button[aria-selected='true'] {
@@ -692,7 +711,7 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem 1.1rem;
-  font-size: 0.85rem;
+  font-size: calc(0.85rem * var(--live-display-scale));
   margin: 0.5rem 0 1rem;
   padding: 0.65rem 0.85rem;
   background: var(--surface);
@@ -720,6 +739,7 @@ onUnmounted(() => {
   border-radius: 6px;
   padding: 1rem 1.15rem;
   margin-bottom: 1rem;
+  font-size: var(--live-body-size);
 }
 
 .countdown-label {
@@ -849,6 +869,17 @@ td {
   position: absolute;
   top: 1rem;
   right: 1rem;
+}
+
+@media (min-width: 900px) {
+  .event-live {
+    --live-display-scale: 1.15;
+  }
+}
+
+[data-testid='fullscreen-rotator'] {
+  --live-display-scale: 1.35;
+  font-size: calc(1rem * var(--live-display-scale));
 }
 
 @media (max-width: 900px) {

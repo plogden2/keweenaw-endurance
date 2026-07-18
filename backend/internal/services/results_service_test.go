@@ -175,6 +175,7 @@ func TestResultsService_OverallLeaderboardIncludesKaraokeBonus(t *testing.T) {
 	live, err := resultsSvc.GetEventLive(event.ID.UUID(), nil)
 	require.NoError(t, err)
 	require.Len(t, live.Races, 1)
+	require.Equal(t, 720, live.Races[0].DurationMinutes)
 	require.Len(t, live.Races[0].LeaderboardOverall, 1)
 	assert.Equal(t, 2, live.Races[0].LeaderboardOverall[0].Laps)
 	assert.Equal(t, 1, live.Races[0].LeaderboardOverall[0].Place)

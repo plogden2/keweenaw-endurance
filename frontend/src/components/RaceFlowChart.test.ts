@@ -6,7 +6,7 @@ import { Chart } from 'chart.js'
 import RaceFlowChart from './RaceFlowChart.vue'
 import { timingApi } from '@/services/api'
 import { resolveCategoryColor } from '@/themes/defaultLegend'
-import { buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, resolveRaceStartMs } from '@/utils/raceFlowData'
+import { buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
 import { convertDistanceFromKm, KM_TO_MILES } from '@/utils/units'
 import { setupPinia } from '@/test/helpers'
 import type { TimingRecord } from '@/types/models'
@@ -450,6 +450,28 @@ describe('raceFlowData', () => {
     expect(getParticipantAgeGroupKey(17)).toBe('under-20')
     expect(getParticipantAgeGroupLabel('30-34')).toBe('30–34')
   })
+
+  it('clamps wall-clock elapsed to duration', () => {
+    expect(clampElapsedToDuration(2559, 720)).toBe(720)
+    expect(clampElapsedToDuration(100, 720)).toBe(100)
+    expect(clampElapsedToDuration(100, undefined)).toBe(100)
+  })
+
+  it('uses duration as axis max when present', () => {
+    expect(resolveRaceFlowAxisMaxMinutes(720, 12, 2559)).toBe(720)
+    expect(resolveRaceFlowAxisMaxMinutes(360, 5, 40)).toBe(360)
+  })
+
+  it('falls back to recorded/live max when duration missing', () => {
+    expect(resolveRaceFlowAxisMaxMinutes(undefined, 45, 50)).toBe(50)
+    expect(resolveRaceFlowAxisMaxMinutes(0, 45, null)).toBe(45)
+  })
+
+  it('resolves chart x-axis max with optional padding', () => {
+    expect(resolveRaceFlowXAxisMax(720, 12, 2559, true)).toBe(720)
+    expect(resolveRaceFlowXAxisMax(undefined, 100, 100, true)).toBe(105)
+    expect(resolveRaceFlowXAxisMax(undefined, 100, 100, false)).toBeUndefined()
+  })
 })
 
 describe('RaceFlowChart.vue', () => {
@@ -464,6 +486,12 @@ describe('RaceFlowChart.vue', () => {
     const style = src.split('<style')[1] ?? ''
     expect(style).not.toMatch(/#2c3e50|#3498db|#2980b9|#1f4f82/i)
     expect(src).toMatch(/#c45c38|SIGNAL_COLOR/)
+  })
+
+  it('scales legend typography with live display scale', () => {
+    const src = readFileSync(join(process.cwd(), 'src/components/RaceFlowChart.vue'), 'utf8')
+    const style = src.split('<style scoped>')[1]?.split('</style>')[0] ?? ''
+    expect(style).toMatch(/\.legend-panel[\s\S]*--live-display-scale/)
   })
 
   it('loads live timing data and renders chart canvas', async () => {
@@ -540,6 +568,42 @@ describe('RaceFlowChart.vue', () => {
     expect(
       chartConfig.data.datasets[0].segment?.borderDash({ p1DataIndex: 1 }),
     ).toEqual([6, 6])
+
+    vi.useRealTimers()
+  })
+
+  it('caps x-axis and extrapolations to duration_minutes for active races', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-06-03T12:00:00.000Z'))
+
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: sampleRecords },
+    })
+
+    mount(RaceFlowChart, {
+      props: {
+        raceId: 'race-1',
+        raceStatus: 'active',
+        raceStartTime: '2024-06-01T10:30:00.000Z',
+        raceType: 'lap_based',
+        durationMinutes: 720,
+      },
+    })
+    await flushPromises()
+
+    const chartConfig = (Chart as unknown as Mock).mock.calls.at(-1)?.[1] as {
+      options: {
+        scales: { x: { max?: number } }
+        plugins: { currentTimeLine: { xMinutes: number | null } }
+      }
+      data: { datasets: Array<{ data: Array<{ x: number }> }> }
+    }
+
+    expect(chartConfig.options.scales.x.max).toBe(720)
+    expect(chartConfig.options.plugins.currentTimeLine.xMinutes).toBe(720)
+
+    const xs = chartConfig.data.datasets.flatMap((d) => d.data.map((p) => p.x))
+    expect(Math.max(...xs)).toBeLessThanOrEqual(720)
 
     vi.useRealTimers()
   })

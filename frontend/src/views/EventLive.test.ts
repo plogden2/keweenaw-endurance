@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
@@ -49,6 +51,7 @@ const livePayload = {
       race_type: 'lap_based',
       status: 'scheduled',
       start_time: '2026-08-01T08:00:00-04:00',
+      duration_minutes: 720,
       countdown_seconds: 3600,
       leaderboard_overall: [
         {
@@ -69,6 +72,7 @@ const livePayload = {
       race_type: 'lap_based',
       status: 'scheduled',
       start_time: '2026-08-01T08:00:00-04:00',
+      duration_minutes: 360,
       countdown_seconds: 3600,
       leaderboard_overall: [],
       flow_series: [],
@@ -79,6 +83,7 @@ const livePayload = {
       race_type: 'lap_based',
       status: 'scheduled',
       start_time: '2026-08-01T15:00:00-04:00',
+      duration_minutes: 90,
       countdown_seconds: 25200,
       leaderboard_overall: [],
       flow_series: [],
@@ -111,7 +116,7 @@ describe('EventLive.vue', () => {
           ScanPopup: true,
           RaceFlowChart: {
             name: 'RaceFlowChart',
-            props: ['raceId', 'raceStatus', 'raceStartTime', 'raceType'],
+            props: ['raceId', 'raceStatus', 'raceStartTime', 'raceType', 'durationMinutes'],
             template: '<div data-testid="race-flow-chart-stub" />',
           },
         },
@@ -120,6 +125,33 @@ describe('EventLive.vue', () => {
     await flushPromises()
     return wrapper
   }
+
+  it('sets currentEvent from live payload after load', async () => {
+    const { useEventsStore } = await import('@/stores/events')
+    const events = useEventsStore()
+    expect(events.currentEvent).toBeNull()
+
+    await mountLive()
+
+    expect(events.currentEvent).toEqual(
+      expect.objectContaining({
+        id: livePayload.event.id,
+        name: 'All You Can East Bluffet',
+      }),
+    )
+  })
+
+  it('does not clear currentEvent when live fetch fails', async () => {
+    const { useEventsStore } = await import('@/stores/events')
+    const events = useEventsStore()
+    events.setCurrentEventSummary(livePayload.event)
+    ;(eventsLiveApi.getLive as Mock).mockRejectedValueOnce(new Error('network'))
+
+    await mountLive()
+
+    expect(events.currentEvent?.name).toBe('All You Can East Bluffet')
+    expect(events.currentEvent?.id).toBe(livePayload.event.id)
+  })
 
   it('renders live-view with countdown, overall board, and category legend', async () => {
     const wrapper = await mountLive()
@@ -171,6 +203,7 @@ describe('EventLive.vue', () => {
     expect(chart.props('raceType')).toBe('lap_based')
     expect(chart.props('raceStatus')).toBe('scheduled')
     expect(chart.props('raceStartTime')).toBe('2026-08-01T08:00:00-04:00')
+    expect(chart.props('durationMinutes')).toBe(720)
   })
 
   it('shows sync status when PIN-unlocked as a reader session', async () => {
@@ -264,5 +297,13 @@ describe('EventLive.vue', () => {
     expect(wrapper.find('[data-testid="fullscreen-rotator"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="sync-status"]').exists()).toBe(true)
     expect(wrapper.find('.sync-bar--overlay').exists()).toBe(true)
+  })
+
+  it('defines baseline and fullscreen display type scales', () => {
+    const src = readFileSync(join(process.cwd(), 'src/views/EventLive.vue'), 'utf8')
+    expect(src).toMatch(/--live-display-scale:\s*1/)
+    expect(src).toMatch(
+      /fullscreen-rotator[\s\S]*--live-display-scale:\s*1\.35|--live-display-scale:\s*1\.25/,
+    )
   })
 })

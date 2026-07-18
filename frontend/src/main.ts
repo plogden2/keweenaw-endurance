@@ -10,7 +10,6 @@ import '@fontsource/outfit/700.css'
 import '@fontsource/ibm-plex-sans/400.css'
 import '@fontsource/ibm-plex-sans/600.css'
 import '@fontsource/ibm-plex-sans/700.css'
-import '@fontsource/yuji-mai/400.css'
 import './assets/main.css'
 import './themes/bluffet.css'
 
