@@ -241,4 +241,57 @@ describe('RaceDetails.vue', () => {
     expect(wrapper.find('.event-logo-image').exists()).toBe(true)
     expect(participantsApi.get).toHaveBeenCalledWith('p1')
   })
+
+  it('binds highlightParticipantId as v-model on the race flow chart', async () => {
+    racesStore.currentRace = {
+      id: 'race-1',
+      name: 'Marathon',
+      race_type: 'time_based',
+      status: 'active',
+    }
+    ;(timingApi.getLeaderboard as Mock).mockResolvedValue({ data: { data: [] } })
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: [] },
+    })
+
+    const router = createTestRouter()
+    await router.push('/timing/evt-1/race/race-1')
+    await router.isReady()
+
+    const wrapper = mount(RaceDetails, {
+      global: {
+        plugins: [router],
+        stubs: {
+          RaceFlowChart: {
+            name: 'RaceFlowChart',
+            props: [
+              'raceId',
+              'raceStatus',
+              'raceStartTime',
+              'raceType',
+              'durationMinutes',
+              'highlightParticipantId',
+            ],
+            template: '<div data-testid="race-flow-chart-stub" />',
+          },
+        },
+      },
+    })
+    await flushPromises()
+
+    const raceFlowTab = wrapper.findAll('.tab').find((tab) => tab.text() === 'Race Flow')
+    await raceFlowTab?.trigger('click')
+    await flushPromises()
+
+    const chart = wrapper.findComponent({ name: 'RaceFlowChart' })
+    expect(chart.exists()).toBe(true)
+
+    await chart.vm.$emit('update:highlightParticipantId', 'p1')
+    await flushPromises()
+    expect(chart.props('highlightParticipantId')).toBe('p1')
+
+    await chart.vm.$emit('update:highlightParticipantId', undefined)
+    await flushPromises()
+    expect(chart.props('highlightParticipantId')).toBeUndefined()
+  })
 })

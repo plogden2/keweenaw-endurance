@@ -131,7 +131,7 @@
           :race-start-time="racesStore.currentRace.start_time"
           :race-type="racesStore.currentRace.race_type"
           :duration-minutes="racesStore.currentRace.duration_minutes"
-          :highlight-participant-id="highlightParticipantId"
+          v-model:highlight-participant-id="highlightParticipantId"
         />
       </section>
 
