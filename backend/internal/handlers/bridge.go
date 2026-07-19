@@ -136,10 +136,6 @@ func (h *Handlers) handleBridgeRead(c *gin.Context, deviceID string, msg *servic
 		}
 	}
 
-	if err := h.services.RFID.InjectTag(logicalUUID); err != nil {
-		c.Error(err)
-	}
-
 	eventID, err := h.services.Stations.EventIDForDevice(deviceID)
 	if err != nil {
 		log.Printf("bridge read: event lookup failed device_id=%s logical_uuid=%s: %v", deviceID, logicalUUID, err)
@@ -156,6 +152,13 @@ func (h *Handlers) handleBridgeRead(c *gin.Context, deviceID string, msg *servic
 		c.Error(err)
 		return
 	}
+	// Do NOT InjectTag here — that fans out tag_read and the reader UI would
+	// POST /scans again, double-scoring within the cooldown race window.
+	// Publish the already-scored result for ScanPopup feedback instead.
+	if result != nil && h.services.RFID != nil {
+		h.services.RFID.PublishScanResult(logicalUUID, result)
+	}
+	h.publishLapRecorded(eventID, result)
 	if result != nil && result.Result != scan.ResultUnknownTag {
 		h.refreshLiveCSV(eventID)
 	}

@@ -129,6 +129,21 @@ func (s *ResultsService) GetLeaderboard(raceID uuid.UUID, categoryID *uuid.UUID)
 	return entries, nil
 }
 
+// InvalidateLeaderboardForEvent drops cached leaderboards for every race in the event.
+func (s *ResultsService) InvalidateLeaderboardForEvent(eventID uuid.UUID) {
+	if s.cache == nil {
+		return
+	}
+	var races []models.Race
+	if err := s.db.Select("id").Where("event_id = ?", eventID).Find(&races).Error; err != nil {
+		return
+	}
+	ctx := context.Background()
+	for _, race := range races {
+		_ = s.cache.Delete(ctx, leaderboardCacheKey(race.ID.UUID(), nil))
+	}
+}
+
 func leaderboardCacheKey(raceID uuid.UUID, categoryID *uuid.UUID) string {
 	if categoryID == nil {
 		return fmt.Sprintf("leaderboard:%s:all", raceID)
@@ -261,17 +276,7 @@ func (s *ResultsService) buildOverallLeaderboard(raceID uuid.UUID, categoryFilte
 		).Order("timestamp ASC").Find(&records).Error; err != nil {
 			return nil, err
 		}
-		if len(records) == 0 {
-			continue
-		}
 
-		lastLapAt := records[0].Timestamp
-		for _, r := range records {
-			if r.RecordType == "rfid_lap" && r.Timestamp.After(lastLapAt) {
-				lastLapAt = r.Timestamp
-			}
-		}
-		last := lastLapAt
 		key := categoryKey(p.Category)
 		if p.Category != nil {
 			legend[key] = CategoryLegendEntry{
@@ -281,23 +286,38 @@ func (s *ResultsService) buildOverallLeaderboard(raceID uuid.UUID, categoryFilte
 			}
 		}
 
+		entry := LiveOverallEntry{
+			ParticipantID: p.ID,
+			BibNumber:     p.BibNumber,
+			Name:          strings.TrimSpace(p.FirstName + " " + p.LastName),
+			CategoryKey:   key,
+			Laps:          len(records),
+		}
+		var lastLapAt time.Time
+		if len(records) > 0 {
+			lastLapAt = records[0].Timestamp
+			for _, r := range records {
+				if r.RecordType == "rfid_lap" && r.Timestamp.After(lastLapAt) {
+					lastLapAt = r.Timestamp
+				}
+			}
+			last := lastLapAt
+			entry.LastLapAt = &last
+		}
+
 		scoredResults = append(scoredResults, scored{
-			entry: LiveOverallEntry{
-				ParticipantID: p.ID,
-				BibNumber:     p.BibNumber,
-				Name:          strings.TrimSpace(p.FirstName + " " + p.LastName),
-				CategoryKey:   key,
-				Laps:          len(records),
-				LastLapAt:     &last,
-			},
-			laps: len(records),
-			last: lastLapAt,
+			entry: entry,
+			laps:  len(records),
+			last:  lastLapAt,
 		})
 	}
 
 	sort.Slice(scoredResults, func(i, j int) bool {
 		if scoredResults[i].laps != scoredResults[j].laps {
 			return scoredResults[i].laps > scoredResults[j].laps
+		}
+		if scoredResults[i].laps == 0 {
+			return scoredResults[i].entry.BibNumber < scoredResults[j].entry.BibNumber
 		}
 		return scoredResults[i].last.Before(scoredResults[j].last)
 	})
@@ -428,22 +448,7 @@ func (s *ResultsService) calculateLapResults(raceID uuid.UUID) ([]LeaderboardEnt
 		).Order("timestamp ASC").Find(&records).Error; err != nil {
 			return nil, err
 		}
-		if len(records) == 0 {
-			continue
-		}
 
-		lastLapAt := records[0].Timestamp
-		firstRFID := time.Time{}
-		for _, r := range records {
-			if r.RecordType == "rfid_lap" {
-				if firstRFID.IsZero() {
-					firstRFID = r.Timestamp
-				}
-				if r.Timestamp.After(lastLapAt) {
-					lastLapAt = r.Timestamp
-				}
-			}
-		}
 		entry := LeaderboardEntry{
 			ParticipantID: participant.ID,
 			BibNumber:     participant.BibNumber,
@@ -452,8 +457,23 @@ func (s *ResultsService) calculateLapResults(raceID uuid.UUID) ([]LeaderboardEnt
 			Status:        participant.Status,
 			Laps:          len(records),
 		}
-		if !firstRFID.IsZero() && lastLapAt.After(firstRFID) {
-			entry.TotalTimeSeconds = lastLapAt.Sub(firstRFID).Seconds()
+		var lastLapAt time.Time
+		if len(records) > 0 {
+			lastLapAt = records[0].Timestamp
+			firstRFID := time.Time{}
+			for _, r := range records {
+				if r.RecordType == "rfid_lap" {
+					if firstRFID.IsZero() {
+						firstRFID = r.Timestamp
+					}
+					if r.Timestamp.After(lastLapAt) {
+						lastLapAt = r.Timestamp
+					}
+				}
+			}
+			if !firstRFID.IsZero() && lastLapAt.After(firstRFID) {
+				entry.TotalTimeSeconds = lastLapAt.Sub(firstRFID).Seconds()
+			}
 		}
 		scoredResults = append(scoredResults, scored{entry: entry, laps: len(records), time: lastLapAt})
 	}
@@ -461,6 +481,9 @@ func (s *ResultsService) calculateLapResults(raceID uuid.UUID) ([]LeaderboardEnt
 	sort.Slice(scoredResults, func(i, j int) bool {
 		if scoredResults[i].laps != scoredResults[j].laps {
 			return scoredResults[i].laps > scoredResults[j].laps
+		}
+		if scoredResults[i].laps == 0 {
+			return scoredResults[i].entry.BibNumber < scoredResults[j].entry.BibNumber
 		}
 		return scoredResults[i].time.Before(scoredResults[j].time)
 	})

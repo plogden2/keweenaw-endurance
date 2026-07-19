@@ -140,6 +140,84 @@ func TestResultsService_Leaderboard(t *testing.T) {
 	assert.Equal(t, "Jane", leaderboard[0].FirstName)
 }
 
+func TestResultsService_OverallLeaderboardIncludesZeroLapParticipants(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	race, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "12 Hour", RaceType: "lap_based", DurationMinutes: 720,
+		Status: "active", StartTime: time.Now().Add(-time.Hour),
+	})
+	require.NoError(t, err)
+	finish := createCheckpoint(t, db, race.ID, "Finish", "finish")
+
+	partSvc := NewParticipantService(db)
+	scored, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "10", FirstName: "Alex", LastName: "Rivera", Status: "started",
+	})
+	require.NoError(t, err)
+	_, err = partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "11", FirstName: "Zero", LastName: "Laps", Status: "registered",
+	})
+	require.NoError(t, err)
+
+	base := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, db.Create(&models.TimingRecord{
+		ParticipantID: scored.ID, CheckpointID: finish.ID,
+		Timestamp: base, LocalTimestamp: base,
+		RecordType: "rfid_lap", SyncStatus: "synced",
+	}).Error)
+
+	resultsSvc := NewResultsService(db, nil)
+	live, err := resultsSvc.GetEventLive(event.ID.UUID(), nil)
+	require.NoError(t, err)
+	require.Len(t, live.Races, 1)
+	require.Len(t, live.Races[0].LeaderboardOverall, 2)
+	assert.Equal(t, 1, live.Races[0].LeaderboardOverall[0].Laps)
+	assert.Equal(t, "10", live.Races[0].LeaderboardOverall[0].BibNumber)
+	assert.Equal(t, 0, live.Races[0].LeaderboardOverall[1].Laps)
+	assert.Equal(t, "11", live.Races[0].LeaderboardOverall[1].BibNumber)
+	assert.Equal(t, 2, live.Races[0].LeaderboardOverall[1].Place)
+}
+
+func TestResultsService_LapLeaderboardIncludesZeroLapParticipants(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	race, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "6 Hour", RaceType: "lap_based", DurationMinutes: 360,
+		Status: "active", StartTime: time.Now().Add(-time.Hour),
+	})
+	require.NoError(t, err)
+	finish := createCheckpoint(t, db, race.ID, "Finish", "finish")
+
+	partSvc := NewParticipantService(db)
+	scored, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "20", FirstName: "Has", LastName: "Lap", Status: "started",
+	})
+	require.NoError(t, err)
+	_, err = partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "21", FirstName: "No", LastName: "Lap", Status: "registered",
+	})
+	require.NoError(t, err)
+
+	base := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, db.Create(&models.TimingRecord{
+		ParticipantID: scored.ID, CheckpointID: finish.ID,
+		Timestamp: base, LocalTimestamp: base,
+		RecordType: "rfid_lap", SyncStatus: "synced",
+	}).Error)
+
+	resultsSvc := NewResultsService(db, nil)
+	board, err := resultsSvc.GetLeaderboard(race.ID.UUID(), nil)
+	require.NoError(t, err)
+	require.Len(t, board, 2)
+	assert.Equal(t, 1, board[0].Laps)
+	assert.Equal(t, "20", board[0].BibNumber)
+	assert.Equal(t, 0, board[1].Laps)
+	assert.Equal(t, "21", board[1].BibNumber)
+}
+
 func TestResultsService_OverallLeaderboardIncludesKaraokeBonus(t *testing.T) {
 	db := setupServiceTestDB(t)
 	event := createTestEvent(t, db)

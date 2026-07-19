@@ -171,6 +171,51 @@ func TestGetBridgeStatus(t *testing.T) {
 	assert.True(t, svc.Bridge.IsConnected("laptop-finish-1"))
 }
 
+func TestBridgeRead_DoesNotDoubleScoreViaInjectFanout(t *testing.T) {
+	router, svc, server := setupBridgeHandlerTest(t)
+	_, _, tagUID := seedBridgeReadFixture(t, svc)
+
+	// Simulate the reader UI subscribed to /api/rfid/stream — historically
+	// InjectTag fan-out caused a second ProcessScan for the same physical tap.
+	streamSub := svc.RFID.SubscribeTagReads(8)
+	_ = router
+
+	wsURL := "ws" + server.URL[len("http"):] + "/api/rfid/bridge?device_id=laptop-finish-1"
+	header := http.Header{}
+	header.Set("X-Bridge-Token", "bridge-secret")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	ts := time.Now().UTC().Format(time.RFC3339Nano)
+	require.NoError(t, conn.WriteJSON(services.BridgeMessage{
+		Type:        "read",
+		LogicalUUID: tagUID,
+		TS:          ts,
+	}))
+
+	deadline := time.Now().Add(2 * time.Second)
+	var sawScanResult bool
+	for time.Now().Before(deadline) {
+		select {
+		case ev := <-streamSub:
+			if ev.Type == "scan_result" {
+				sawScanResult = true
+			}
+			assert.NotEqual(t, "tag_read", ev.Type, "bridge must not fan out raw tag_read (re-scores via reader UI)")
+		default:
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	assert.True(t, sawScanResult, "reader UI should receive scan_result for popup feedback")
+
+	var count int64
+	require.NoError(t, svc.DB.Model(&models.TimingRecord{}).
+		Where("record_type = ?", "rfid_lap").
+		Count(&count).Error)
+	assert.Equal(t, int64(1), count, "one physical bridge read must score exactly one lap")
+}
+
 func TestBridgeRead_SkipsDuplicateSourceLapID(t *testing.T) {
 	_, svc, server := setupBridgeHandlerTest(t)
 	_, _, tagUID := seedBridgeReadFixture(t, svc)

@@ -44,6 +44,8 @@ type TagReadEvent struct {
 	TagUID   string    `json:"tag_uid"`
 	ReadAt   time.Time `json:"read_at"`
 	DeviceID string    `json:"device_id"`
+	// Scan is set when Type is "scan_result" — reader UI applies it without POST /scans.
+	Scan any `json:"scan,omitempty"`
 }
 
 type RFIDService struct {
@@ -341,6 +343,21 @@ func (s *RFIDService) InjectTag(tagUID string) error {
 		ReadAt: time.Now(),
 	})
 	return nil
+}
+
+// PublishScanResult fans out an already-scored scan to reader UIs.
+// Use this after bridge ProcessScan so the popup updates without a second POST /scans.
+func (s *RFIDService) PublishScanResult(tagUID string, scan any) {
+	tagUID = strings.TrimSpace(tagUID)
+	if tagUID == "" || scan == nil {
+		return
+	}
+	s.broadcastTag(TagReadEvent{
+		Type:   "scan_result",
+		TagUID: tagUID,
+		ReadAt: time.Now(),
+		Scan:   scan,
+	})
 }
 
 // StartPolling continuously polls the reader and fans out tag_read events.
