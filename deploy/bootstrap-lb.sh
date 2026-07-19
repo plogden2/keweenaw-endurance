@@ -19,11 +19,11 @@ gcloud compute network-endpoint-groups describe keweenaw-frontend-neg --region="
        --region="${REGION}" --network-endpoint-type=serverless \
        --cloud-run-service=keweenaw-frontend
 
+# Serverless NEGs do not support custom timeoutSec (Cloud Run owns request/WS timeouts).
 gcloud compute backend-services describe keweenaw-backend-bes --global \
   || gcloud compute backend-services create keweenaw-backend-bes \
        --global --load-balancing-scheme=EXTERNAL_MANAGED \
-       --protocol=HTTP --timeout=3600
-gcloud compute backend-services update keweenaw-backend-bes --global --timeout=3600 || true
+       --protocol=HTTP
 gcloud compute backend-services add-backend keweenaw-backend-bes --global \
   --network-endpoint-group=keweenaw-backend-neg \
   --network-endpoint-group-region="${REGION}" 2>/dev/null || true
