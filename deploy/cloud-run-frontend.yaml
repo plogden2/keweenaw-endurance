@@ -6,7 +6,7 @@
 #   PROJECT_ID PROJECT_NUMBER REGION CLOUD_SQL_INSTANCE IMAGE_TAG
 #
 # Apply rendered manifest:
-#   gcloud run services replace deploy/cloud-run-frontend.yaml \
+#   gcloud run services replace deploy/.generated/cloud-run-frontend.yaml \
 #     --region=${REGION} --project=${PROJECT_ID}
 #
 # Domain mapping (see deploy/README.md):

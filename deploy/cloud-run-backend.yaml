@@ -6,7 +6,7 @@
 #   PROJECT_ID PROJECT_NUMBER REGION CLOUD_SQL_INSTANCE IMAGE_TAG
 #
 # Apply rendered manifest:
-#   gcloud run services replace deploy/cloud-run-backend.yaml \
+#   gcloud run services replace deploy/.generated/cloud-run-backend.yaml \
 #     --region=${REGION} --project=${PROJECT_ID}
 #
 # Or export/edit an existing service and merge env/annotations from this file.
