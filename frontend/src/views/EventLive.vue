@@ -135,7 +135,7 @@
             :race-start-time="race12.start_time"
             :race-type="race12.race_type"
             :duration-minutes="race12.duration_minutes"
-            :highlight-participant-id="highlightParticipantId"
+            v-model:highlight-participant-id="highlightParticipantId"
           />
         </div>
         <section class="panel">
@@ -200,7 +200,7 @@
             :race-start-time="race6.start_time"
             :race-type="race6.race_type"
             :duration-minutes="race6.duration_minutes"
-            :highlight-participant-id="highlightParticipantId"
+            v-model:highlight-participant-id="highlightParticipantId"
           />
         </div>
         <section class="panel">
@@ -259,7 +259,7 @@
             :race-start-time="race90.start_time"
             :race-type="race90.race_type"
             :duration-minutes="race90.duration_minutes"
-            :highlight-participant-id="highlightParticipantId"
+            v-model:highlight-participant-id="highlightParticipantId"
           />
         </div>
         <section class="panel">
@@ -308,7 +308,7 @@
             :race-start-time="race12.start_time"
             :race-type="race12.race_type"
             :duration-minutes="race12.duration_minutes"
-            :highlight-participant-id="highlightParticipantId"
+            v-model:highlight-participant-id="highlightParticipantId"
           />
           <RaceFlowChart
             v-if="race6?.id"
@@ -318,7 +318,7 @@
             :race-start-time="race6.start_time"
             :race-type="race6.race_type"
             :duration-minutes="race6.duration_minutes"
-            :highlight-participant-id="highlightParticipantId"
+            v-model:highlight-participant-id="highlightParticipantId"
           />
         </div>
       </div>
@@ -354,7 +354,7 @@
                 :race-start-time="race12.start_time"
                 :race-type="race12.race_type"
                 :duration-minutes="race12.duration_minutes"
-                :highlight-participant-id="highlightParticipantId"
+                v-model:highlight-participant-id="highlightParticipantId"
               />
             </div>
           </div>
@@ -800,6 +800,12 @@ watch(visibleRaceIds, (ids) => {
   if (celebrationRaceId.value && !ids.includes(celebrationRaceId.value)) {
     clearCelebrationTimers()
     clearFocusState()
+  }
+})
+
+watch(highlightParticipantId, (participantId) => {
+  if (!participantId) {
+    focusParticipantId.value = undefined
   }
 })
 
