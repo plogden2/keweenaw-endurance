@@ -1,21 +1,5 @@
 <template>
   <div class="home">
-    <!--
-    <section class="hero">
-      <div class="hero-content">
-        <h1 class="hero-title">Keweenaw Endurance Syndicate Race Timing</h1>
-        <p class="hero-subtitle">Comprehensive race timing and indexing for endurance events</p>
-        <router-link
-          :to="liveTimingTarget"
-          class="cta-button"
-          data-testid="timing-cta"
-        >
-          View Live Timing
-        </router-link>
-      </div>
-    </section>
-    -->
-
     <section class="featured-event bluffet-theme" aria-labelledby="featured-event">
       <h2 id="featured-event">Featured Event</h2>
       <div class="featured-content">
@@ -30,8 +14,8 @@
         <p class="featured-date">Saturday, August 1, 2026 · East Bluff Bike Park, Copper Harbor, MI</p>
         <div class="featured-actions">
           <router-link
-            v-if="bluffetEventId"
-            :to="`/events/${bluffetEventId}/live`"
+            v-if="bluffetEventId || eventIsOver"
+            :to="featuredTimingTarget"
             class="featured-timing-link"
             data-testid="bluffet-timing-link"
           >
@@ -51,6 +35,20 @@
           Feast on the Copper Harbor Trails Club's newest event. A brand new endurance enduro — spin
           the wheel, shred the trails, and push your limits all day long!
         </p>
+      </div>
+    </section>
+
+    <section class="hero">
+      <div class="hero-content">
+        <h1 class="hero-title">Keweenaw Endurance Syndicate Race Timing</h1>
+        <p class="hero-subtitle">Comprehensive race timing and indexing for endurance events</p>
+        <router-link
+          to="/timing"
+          class="cta-button"
+          data-testid="timing-cta"
+        >
+          View Live Timing
+        </router-link>
       </div>
     </section>
 
@@ -114,6 +112,12 @@ const eventIsOver = computed(() => {
 const featuredTimingLabel = computed(() =>
   eventIsOver.value ? 'Results' : 'Live race flow',
 )
+
+/** Results go to the timing index; live race flow stays on the public live view. */
+const featuredTimingTarget = computed(() => {
+  if (eventIsOver.value) return '/timing'
+  return bluffetEventId.value ? `/events/${bluffetEventId.value}/live` : '/timing'
+})
 
 async function loadBluffetRaceStatuses(eventId: string | undefined) {
   if (!eventId) {

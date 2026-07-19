@@ -49,18 +49,20 @@ describe('Home.vue', () => {
     vi.mocked(racesApi.list).mockResolvedValue({ data: { data: [] } } as never)
   })
 
-  it('shows only the featured event (hero and upcoming races commented out)', async () => {
+  it('shows featured event above the syndicate hero (upcoming races commented out)', async () => {
     const router = createHomeRouter()
     await router.push('/')
     await router.isReady()
 
     const wrapper = mount(Home, { global: { plugins: [router] } })
+    const html = wrapper.html()
 
-    expect(wrapper.find('[data-testid="timing-cta"]').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('Keweenaw Endurance Syndicate Race Timing')
+    expect(wrapper.find('#featured-event').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="timing-cta"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Keweenaw Endurance Syndicate Race Timing')
     expect(wrapper.text()).not.toContain('Upcoming Races')
     expect(wrapper.findAll('[data-testid="race-card"]')).toHaveLength(0)
-    expect(wrapper.find('#featured-event').exists()).toBe(true)
+    expect(html.indexOf('featured-event')).toBeLessThan(html.indexOf('timing-cta'))
   })
 
   it('shows featured Bluffet links with Live race flow before races finish', async () => {
@@ -130,7 +132,7 @@ describe('Home.vue', () => {
 
     const timingLink = wrapper.find('[data-testid="bluffet-timing-link"]')
     expect(timingLink.text()).toBe('Results')
-    expect(timingLink.attributes('href')).toBe('/events/a1b2c3/live')
+    expect(timingLink.attributes('href')).toBe('/timing')
   })
 
   it('keeps Live race flow while any race is still active', async () => {
