@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { computed, defineComponent, ref } from 'vue'
+import { defineComponent, ref, type ComputedRef, type Ref } from 'vue'
 import { eventLiveStreamUrl } from '@/services/api'
 
 vi.mock('@/services/api', async () => {
@@ -47,7 +47,7 @@ class MockWebSocket {
   }
 }
 
-function mountComposable(eventId: ReturnType<typeof ref<string>> | ReturnType<typeof computed<string>>) {
+function mountComposable(eventId: Ref<string> | ComputedRef<string>) {
   let exposed: ReturnType<typeof import('./useEventLiveStream').useEventLiveStream> | undefined
   const Host = defineComponent({
     setup() {
@@ -205,7 +205,7 @@ describe('useEventLiveStream', () => {
 
   it('restarts stream when eventId changes', async () => {
     const eventId = ref('evt-1')
-    const { exposed, wrapper } = mountComposable(eventId)
+    const { wrapper } = mountComposable(eventId)
     await flushPromises()
     expect(MockWebSocket.instances).toHaveLength(1)
     expect(eventLiveStreamUrl).toHaveBeenLastCalledWith('evt-1')

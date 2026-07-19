@@ -235,7 +235,6 @@ import {
   compareGenderKeys,
   expandSteppedLapPoints,
   getCurrentElapsedMinutes,
-  getFlowChartTitle,
   getFlowYAxisLabel,
   getParticipantAgeGroupLabel,
   getParticipantGenderLabel,
@@ -910,9 +909,8 @@ function renderChart(): void {
     showCurrentTime,
   )
 
-  const tickSize = chartFontSize(20)
-  const axisTitleSize = chartFontSize(22)
-  const chartTitleSize = chartFontSize(20)
+  const tickSize = chartFontSize(10)
+  const axisTitleSize = chartFontSize(11)
   const axisInk = '#1a3f3d'
 
   chartInstance.value = new Chart(canvasRef.value, {
@@ -970,12 +968,7 @@ function renderChart(): void {
       plugins: {
         currentTimeLine: { xMinutes: currentElapsedMinutes.value },
         legend: { display: false },
-        title: {
-          display: true,
-          text: getFlowChartTitle(chartRaceType.value, showCurrentTime),
-          color: axisInk,
-          font: { size: chartTitleSize, weight: 'bold' },
-        },
+        title: { display: false },
       } as Record<string, unknown>,
     },
   })

@@ -969,6 +969,9 @@ describe('RaceFlowChart.vue', () => {
             title?: { font?: { size?: number }; color?: string }
           }
         }
+        plugins: {
+          title?: { display?: boolean }
+        }
       }
       data: {
         datasets: Array<{
@@ -992,8 +995,9 @@ describe('RaceFlowChart.vue', () => {
         expect(dataset.data[index].x).toBeGreaterThanOrEqual(dataset.data[index - 1].x)
       }
     }
-    expect(chartConfig.options.scales.x.ticks?.font?.size).toBeGreaterThanOrEqual(20)
-    expect(chartConfig.options.scales.y.ticks?.font?.size).toBeGreaterThanOrEqual(20)
+    expect(chartConfig.options.scales.x.ticks?.font?.size).toBe(10)
+    expect(chartConfig.options.scales.y.ticks?.font?.size).toBe(10)
+    expect(chartConfig.options.plugins.title?.display).toBe(false)
     expect(chartConfig.options.scales.x.ticks?.color).toBe('#1a3f3d')
     expect(chartConfig.options.scales.y.title?.color).toBe('#1a3f3d')
   })

@@ -338,10 +338,14 @@
             <p class="fs-meta">Fullscreen rotator · combined overall</p>
           </div>
         </div>
-        <div class="fs-grid">
+        <div
+          ref="fsGridRef"
+          class="fs-grid"
+          :style="{ '--fs-flow-width': fsFlowWidthPercent + '%' }"
+        >
           <div class="fs-panel" data-testid="rotator-flow">
             <h2>Race flow</h2>
-            <div class="chart-wrap dark">
+            <div class="chart-wrap">
               <RaceFlowChart
                 v-if="race12?.id"
                 ref="chartRotatorRef"
@@ -354,6 +358,14 @@
               />
             </div>
           </div>
+          <button
+            type="button"
+            class="fs-split"
+            data-testid="rotator-split-handle"
+            aria-label="Resize race flow and leaderboard"
+            aria-orientation="vertical"
+            @pointerdown="onFsSplitPointerDown"
+          />
           <div class="fs-panel" data-testid="rotator-leaderboard">
             <h2>Leaderboard — Combined overall</h2>
             <table>
@@ -433,6 +445,11 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const activeTab = ref<'12h' | '6h' | '90m' | 'overlap'>('12h')
 const rotatorOpen = ref(false)
+const FS_FLOW_WIDTH_KEY = 'event-live-fs-flow-width'
+const FS_FLOW_WIDTH_MIN = 25
+const FS_FLOW_WIDTH_MAX = 75
+const fsFlowWidthPercent = ref(52)
+const fsGridRef = ref<HTMLElement | null>(null)
 const online = ref(typeof navigator !== 'undefined' ? navigator.onLine : true)
 const pendingSync = ref(0)
 const highlightParticipantId = ref<string | undefined>()
@@ -672,6 +689,84 @@ function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape') rotatorOpen.value = false
 }
 
+function clampFsFlowWidth(percent: number): number {
+  return Math.min(FS_FLOW_WIDTH_MAX, Math.max(FS_FLOW_WIDTH_MIN, percent))
+}
+
+function readStoredFsFlowWidth(): number | null {
+  try {
+    const raw = sessionStorage.getItem(FS_FLOW_WIDTH_KEY)
+    if (raw == null) return null
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed)) return null
+    return clampFsFlowWidth(parsed)
+  } catch {
+    return null
+  }
+}
+
+function restoreFsFlowWidth() {
+  fsFlowWidthPercent.value = readStoredFsFlowWidth() ?? 52
+}
+
+function persistFsFlowWidth() {
+  try {
+    sessionStorage.setItem(FS_FLOW_WIDTH_KEY, String(fsFlowWidthPercent.value))
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function updateFsFlowWidthFromClientX(clientX: number) {
+  const grid = fsGridRef.value
+  if (!grid) return
+  const rect = grid.getBoundingClientRect()
+  if (rect.width <= 0) return
+  const percent = ((clientX - rect.left) / rect.width) * 100
+  fsFlowWidthPercent.value = clampFsFlowWidth(percent)
+}
+
+let fsSplitPointerId: number | null = null
+let fsSplitMoveHandler: ((e: PointerEvent) => void) | null = null
+let fsSplitUpHandler: ((e: PointerEvent) => void) | null = null
+
+function cleanupFsSplitDrag(handle?: HTMLElement | null) {
+  if (fsSplitMoveHandler && handle) {
+    handle.removeEventListener('pointermove', fsSplitMoveHandler)
+  }
+  if (fsSplitUpHandler && handle) {
+    handle.removeEventListener('pointerup', fsSplitUpHandler)
+    handle.removeEventListener('pointercancel', fsSplitUpHandler)
+  }
+  fsSplitMoveHandler = null
+  fsSplitUpHandler = null
+  fsSplitPointerId = null
+}
+
+function onFsSplitPointerDown(e: PointerEvent) {
+  if (e.button !== 0) return
+  e.preventDefault()
+  const handle = e.currentTarget as HTMLElement
+  fsSplitPointerId = e.pointerId
+  handle.setPointerCapture(e.pointerId)
+
+  fsSplitMoveHandler = (ev: PointerEvent) => {
+    if (ev.pointerId !== fsSplitPointerId) return
+    updateFsFlowWidthFromClientX(ev.clientX)
+  }
+  fsSplitUpHandler = (ev: PointerEvent) => {
+    if (ev.pointerId !== fsSplitPointerId) return
+    persistFsFlowWidth()
+    cleanupFsSplitDrag(handle)
+    handle.releasePointerCapture(ev.pointerId)
+  }
+
+  handle.addEventListener('pointermove', fsSplitMoveHandler)
+  handle.addEventListener('pointerup', fsSplitUpHandler)
+  handle.addEventListener('pointercancel', fsSplitUpHandler)
+  updateFsFlowWidthFromClientX(e.clientX)
+}
+
 function onBrowserOnline() {
   online.value = true
   void refreshPending()
@@ -713,6 +808,10 @@ watch(pageScrolledFromTop, (scrolled) => {
     window.clearTimeout(focusTimer)
     focusTimer = undefined
   }
+})
+
+watch(rotatorOpen, (open) => {
+  if (open) restoreFsFlowWidth()
 })
 
 watchEffect(() => {
@@ -785,6 +884,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearCelebrationTimers()
+  cleanupFsSplitDrag(fsGridRef.value?.querySelector('.fs-split') as HTMLElement | null)
   if (pollTimer) window.clearInterval(pollTimer)
   if (countdownTickTimer) window.clearInterval(countdownTickTimer)
   window.removeEventListener('keydown', onKey)
@@ -1035,8 +1135,8 @@ td {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: var(--ink-deep);
-  color: var(--mist);
+  background: var(--mist);
+  color: var(--ink);
   padding: 1.5rem 2rem;
   display: flex;
   flex-direction: column;
@@ -1050,7 +1150,7 @@ td {
 }
 
 .fs-root h1 {
-  color: var(--surface);
+  color: var(--ink);
   font-size: 1.75rem;
   margin: 0;
 }
@@ -1063,13 +1163,35 @@ td {
 .fs-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
+  grid-template-columns: minmax(0, var(--fs-flow-width, 52%)) 10px minmax(0, 1fr);
   gap: 1.25rem;
   min-height: 0;
 }
 
+.fs-split {
+  cursor: col-resize;
+  width: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  align-self: stretch;
+  position: relative;
+}
+
+.fs-split::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--line);
+}
+
 .fs-panel {
-  background: color-mix(in srgb, var(--ink) 35%, var(--ink-deep));
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 1rem 1.15rem;
   overflow: auto;
@@ -1078,7 +1200,7 @@ td {
 .fs-panel h2 {
   margin: 0 0 0.75rem;
   font-size: 1.2rem;
-  color: var(--surface);
+  color: var(--ink);
 }
 
 .fs-exit {
@@ -1101,6 +1223,10 @@ td {
 @media (max-width: 900px) {
   .fs-grid {
     grid-template-columns: 1fr;
+  }
+
+  .fs-split {
+    display: none;
   }
 
   .event-live {

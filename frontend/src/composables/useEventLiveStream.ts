@@ -23,7 +23,7 @@ export function useEventLiveStream(
   const connected = ref(false)
   let socket: WebSocket | null = null
   let intentionallyClosed = false
-  let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+  let reconnectTimer: number | undefined
 
   function onMessage(ev: MessageEvent) {
     try {
@@ -56,7 +56,7 @@ export function useEventLiveStream(
         reconnectTimer = window.setTimeout(() => {
           reconnectTimer = undefined
           if (!intentionallyClosed) start()
-        }, 2000)
+        }, 2000) as number
       }
     }
   }

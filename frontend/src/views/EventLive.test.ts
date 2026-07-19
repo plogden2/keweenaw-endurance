@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import EventLive from '@/views/EventLive.vue'
 import { setupPinia, createTestRouter } from '@/test/helpers'
@@ -378,6 +378,13 @@ describe('EventLive.vue', () => {
     )
   })
 
+  it('uses a light page background for the fullscreen rotator', () => {
+    const src = readFileSync(join(process.cwd(), 'src/views/EventLive.vue'), 'utf8')
+    const style = src.split('<style scoped>')[1]?.split('</style>')[0] ?? ''
+    expect(style).toMatch(/\.fs-root\s*\{[^}]*background:\s*var\(--mist\)/s)
+    expect(style).not.toMatch(/\.fs-root\s*\{[^}]*background:\s*var\(--ink-deep\)/s)
+  })
+
   describe('lap celebration', () => {
     it('shows overlay when lap recorded for visible race', async () => {
       const wrapper = await mountLive()
@@ -429,6 +436,129 @@ describe('EventLive.vue', () => {
       await nextTick()
 
       expect(wrapper.find('[data-testid="lap-celebration"]').exists()).toBe(false)
+    })
+  })
+
+  describe('fullscreen rotator split handle', () => {
+    const FS_FLOW_WIDTH_KEY = 'event-live-fs-flow-width'
+
+    beforeEach(() => {
+      sessionStorage.clear()
+    })
+
+    async function openFullscreenRotator(wrapper: VueWrapper) {
+      await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+      await nextTick()
+    }
+
+    function mockFsGridRect(wrapper: VueWrapper, width = 1000) {
+      const grid = wrapper.find('.fs-grid')
+      vi.spyOn(grid.element, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width,
+        height: 600,
+        right: width,
+        bottom: 600,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect)
+      return grid
+    }
+
+    async function dragSplitHandle(wrapper: VueWrapper, clientXSequence: number[]) {
+      const grid = mockFsGridRect(wrapper)
+      const handle = wrapper.find('[data-testid="rotator-split-handle"]')
+      const el = handle.element as HTMLElement
+      el.setPointerCapture = vi.fn()
+      el.releasePointerCapture = vi.fn()
+
+      const dispatch = (type: string, clientX: number) => {
+        el.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            clientX,
+            pointerId: 1,
+            buttons: type === 'pointerup' ? 0 : 1,
+          }),
+        )
+      }
+
+      dispatch('pointerdown', clientXSequence[0])
+      await nextTick()
+      for (const clientX of clientXSequence.slice(1, -1)) {
+        dispatch('pointermove', clientX)
+        await nextTick()
+      }
+      dispatch('pointerup', clientXSequence[clientXSequence.length - 1])
+      await nextTick()
+      return grid
+    }
+
+    it('renders rotator-split-handle between rotator-flow and rotator-leaderboard', async () => {
+      const wrapper = await mountLive()
+      await openFullscreenRotator(wrapper)
+
+      const handle = wrapper.find('[data-testid="rotator-split-handle"]')
+      expect(handle.exists()).toBe(true)
+
+      const gridHtml = wrapper.find('.fs-grid').html()
+      const flowPos = gridHtml.indexOf('data-testid="rotator-flow"')
+      const handlePos = gridHtml.indexOf('data-testid="rotator-split-handle"')
+      const leaderboardPos = gridHtml.indexOf('data-testid="rotator-leaderboard"')
+      expect(flowPos).toBeGreaterThanOrEqual(0)
+      expect(handlePos).toBeGreaterThan(flowPos)
+      expect(leaderboardPos).toBeGreaterThan(handlePos)
+    })
+
+    it('fs-grid source uses --fs-flow-width for column sizing', () => {
+      const src = readFileSync(join(process.cwd(), 'src/views/EventLive.vue'), 'utf8')
+      expect(src).toMatch(/--fs-flow-width/)
+      const style = src.split('<style scoped>')[1]?.split('</style>')[0] ?? ''
+      expect(style).toMatch(/\.fs-grid[\s\S]*grid-template-columns:[^;]*var\(--fs-flow-width/)
+      expect(src).toMatch(/'--fs-flow-width'|--fs-flow-width':/)
+    })
+
+    it('updates --fs-flow-width when dragging the split handle', async () => {
+      const wrapper = await mountLive()
+      await openFullscreenRotator(wrapper)
+
+      const grid = await dragSplitHandle(wrapper, [520, 700, 700])
+      expect((grid.element as HTMLElement).style.getPropertyValue('--fs-flow-width')).toBe('70%')
+    })
+
+    it('clamps --fs-flow-width between 25% and 75% when dragging', async () => {
+      const wrapper = await mountLive()
+      await openFullscreenRotator(wrapper)
+
+      const gridLow = await dragSplitHandle(wrapper, [10, 10, 10])
+      expect((gridLow.element as HTMLElement).style.getPropertyValue('--fs-flow-width')).toBe('25%')
+
+      const gridHigh = await dragSplitHandle(wrapper, [990, 990, 990])
+      expect((gridHigh.element as HTMLElement).style.getPropertyValue('--fs-flow-width')).toBe('75%')
+    })
+
+    it('restores flow width from sessionStorage when opening rotator', async () => {
+      sessionStorage.setItem(FS_FLOW_WIDTH_KEY, '60')
+      const wrapper = await mountLive()
+      await openFullscreenRotator(wrapper)
+
+      const grid = wrapper.find('.fs-grid')
+      expect((grid.element as HTMLElement).style.getPropertyValue('--fs-flow-width')).toBe('60%')
+    })
+
+    it('persists flow width to sessionStorage after drag ends', async () => {
+      const wrapper = await mountLive()
+      await openFullscreenRotator(wrapper)
+
+      await dragSplitHandle(wrapper, [520, 650, 650])
+      expect(sessionStorage.getItem(FS_FLOW_WIDTH_KEY)).toBe('65')
+    })
+
+    it('source contract: uses event-live-fs-flow-width sessionStorage key', () => {
+      const src = readFileSync(join(process.cwd(), 'src/views/EventLive.vue'), 'utf8')
+      expect(src).toMatch(/event-live-fs-flow-width/)
     })
   })
 })
