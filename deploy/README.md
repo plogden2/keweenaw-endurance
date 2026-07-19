@@ -22,7 +22,65 @@ Spectators ───────────────────────
 
 ---
 
+## CI/CD + greenfield bootstrap
+
+**Recommended operator sequence** for a new GCP project. Bash scripts live in `deploy/`; rendered Cloud Run YAML lands in `deploy/.generated/` (gitignored).
+
+1. **Create GCP project** and enable billing.
+2. **`gcloud auth login`** and set context:
+
+   ```bash
+   export PROJECT_ID=your-gcp-project
+   export REGION=us-central1
+   ```
+
+3. **`bash deploy/bootstrap.sh`** — provisions APIs, Artifact Registry, Cloud SQL, secrets, GCS bucket, and service accounts. **Save the printed `BRIDGE_TOKEN` and CI key file path** (for the reader laptop and GitHub secrets).
+4. **Initial images + Cloud Run** — build and push backend + frontend to Artifact Registry (see §2 for an optional Cloud Build path), then:
+
+   ```bash
+   export IMAGE_TAG=bootstrap   # or git SHA
+   bash deploy/deploy-cloud-run.sh
+   ```
+
+   `deploy-cloud-run.sh` calls `render-cloud-run.sh` (envsubst on the templates) and applies `deploy/.generated/cloud-run-*.yaml`.
+5. **Database migrations:**
+
+   ```bash
+   DB_PASSWORD='...' bash deploy/migrate-cloud-sql.sh
+   ```
+
+   Uses Cloud SQL Auth Proxy; applies `database/init` and `database/migrations`. Seed production data separately (see §9).
+6. **HTTPS load balancer + DNS:**
+
+   ```bash
+   bash deploy/bootstrap-lb.sh
+   ```
+
+   Create **DNS A records** for apex and `www` to the printed static IP. Wait until the managed certificate is `ACTIVE`:
+
+   ```bash
+   gcloud compute ssl-certificates describe keweenaw-cert --global --format='value(managed.status)'
+   ```
+
+7. **GitHub repo secrets** (Settings → Secrets and variables → Actions):
+
+   | Secret | Value |
+   |---|---|
+   | `GCP_SA_KEY` | Full JSON contents of the CI key file from bootstrap |
+   | `GCP_PROJECT_ID` | Your GCP project ID |
+   | `GCP_REGION` | e.g. `us-central1` |
+
+8. **Ongoing deploys:** push to `main` with **`[deploy]` in the commit message**. GitHub Actions builds/pushes images and runs `deploy/deploy-cloud-run.sh`. Pushes without `[deploy]` run CI only.
+
+**Windows:** run bash scripts via **Git Bash** or **WSL**. Install `gcloud` CLI and **Docker Desktop** for local image builds.
+
+**HTTP → HTTPS redirect:** not yet automated in `bootstrap-lb.sh` (Task 5 deferred). Operators can add a classic HTTP redirect URL map later if apex HTTP should redirect to HTTPS.
+
+---
+
 ## 1. Enable APIs
+
+`deploy/bootstrap.sh` enables the required APIs. To enable manually:
 
 ```bash
 export PROJECT_ID=your-gcp-project
@@ -38,12 +96,15 @@ gcloud services enable \
   secretmanager.googleapis.com \
   storage.googleapis.com \
   iam.googleapis.com \
-  compute.googleapis.com
+  compute.googleapis.com \
+  certificatemanager.googleapis.com
 ```
 
 ---
 
-## 2. Artifact Registry
+## 2. Artifact Registry *(optional — Cloud Build image builds)*
+
+Use this path for **manual or one-off** image builds. Ongoing deploys normally use **GitHub Actions** on `[deploy]` pushes (see CI/CD section above).
 
 ```bash
 gcloud artifacts repositories create keweenaw \
@@ -69,6 +130,8 @@ Images land at:
 ---
 
 ## 3. Cloud SQL (primary hosted DR)
+
+`deploy/bootstrap.sh` creates the instance, database, and `timing_user`. Manual reference:
 
 Create a PostgreSQL 14 instance with **automated backups** and **point-in-time recovery (PITR)** enabled. PITR is the **primary disaster-recovery path** for hosted data.
 
@@ -117,7 +180,7 @@ On Cloud Run, prefer `GCS_LIVE_CSV_BUCKET` over `LIVE_CSV_MIRROR_DIR` (no persis
 
 ## 5. Secrets (Secret Manager)
 
-Create secrets and grant `roles/secretmanager.secretAccessor` to `keweenaw-backend@...`:
+`deploy/bootstrap.sh` creates secrets and grants accessor to the backend SA. Manual reference:
 
 | Secret name | Purpose |
 |---|---|
@@ -139,6 +202,8 @@ Copy the bridge token to the reader laptop env (`BRIDGE_TOKEN`). Never commit se
 
 ## 6. Service accounts
 
+`deploy/bootstrap.sh` creates `keweenaw-backend`, `keweenaw-frontend`, and `keweenaw-ci`. Manual reference:
+
 ```bash
 gcloud iam service-accounts create keweenaw-backend \
   --display-name="Keweenaw Cloud Run backend"
@@ -157,21 +222,22 @@ Optional: Memorystore Redis for leaderboard cache (`REDIS_HOST` in backend YAML)
 
 ## 7. Deploy Cloud Run services
 
-Edit placeholders in `deploy/cloud-run-backend.yaml` and `deploy/cloud-run-frontend.yaml` (`$PROJECT_ID`, `$PROJECT_NUMBER`, `$REGION`, `$CLOUD_SQL_INSTANCE`, image tags), then:
+Templates `deploy/cloud-run-backend.yaml` and `deploy/cloud-run-frontend.yaml` hold `$PROJECT_ID`, `$PROJECT_NUMBER`, `$REGION`, `$CLOUD_SQL_INSTANCE`, and `$IMAGE_TAG` placeholders. **Do not hand-edit and apply the templates directly.**
+
+Render and deploy:
 
 ```bash
-export PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+export PROJECT_ID=your-gcp-project
+export REGION=us-central1
+export CLOUD_SQL_INSTANCE=keweenaw-prod
+export IMAGE_TAG=your-git-sha-or-tag
+
+bash deploy/deploy-cloud-run.sh
 ```
 
-`$PROJECT_NUMBER` is used in the backend's `run.googleapis.com/secrets` annotation to bind `secretKeyRef` aliases to Secret Manager paths.
+This runs `render-cloud-run.sh` → `deploy/.generated/cloud-run-*.yaml`, then `gcloud run services replace` on the rendered files.
 
-```bash
-gcloud run services replace deploy/cloud-run-backend.yaml \
-  --region=$REGION --project=$PROJECT_ID
-
-gcloud run services replace deploy/cloud-run-frontend.yaml \
-  --region=$REGION --project=$PROJECT_ID
-```
+`$PROJECT_NUMBER` is resolved automatically if unset (used in the backend's `run.googleapis.com/secrets` annotation to bind `secretKeyRef` aliases to Secret Manager paths).
 
 Backend highlights (see YAML):
 
@@ -194,11 +260,17 @@ Two common patterns:
 
 ### A. Single origin via Cloud Load Balancer (recommended)
 
+Run **`bash deploy/bootstrap-lb.sh`** for the HTTPS LB, managed cert, path routing (`/api/*` → backend, `/*` → frontend), and static IP. Point DNS A records at the printed IP.
+
+Manual reference:
+
 - HTTPS load balancer with managed certificate for `keweenawendurance.com` and `www.keweenawendurance.com`
 - URL map:
   - `/api/*` → serverless NEG → `keweenaw-backend`
   - `/*` → serverless NEG → `keweenaw-frontend`
 - WebSocket upgrade headers for `/api/rfid/bridge` (backend timeout 3600s in YAML)
+
+**HTTP → HTTPS redirect** is not created by `bootstrap-lb.sh` yet; add a classic HTTP redirect URL map separately if needed.
 
 ### B. Separate Cloud Run domain mappings
 
@@ -223,7 +295,9 @@ Update backend `CORS_ORIGINS=https://keweenawendurance.com`.
 
 ## 9. Migrate and seed database
 
-Run from a machine with Cloud SQL Auth Proxy (or Cloud Shell):
+**Preferred:** `DB_PASSWORD=... bash deploy/migrate-cloud-sql.sh` (Cloud SQL Auth Proxy + `database/init` + migrations).
+
+Manual reference from a machine with Cloud SQL Auth Proxy (or Cloud Shell):
 
 ```bash
 cloud-sql-proxy ${PROJECT_ID}:${REGION}:${CLOUD_SQL_INSTANCE} &
@@ -314,15 +388,20 @@ Normal outages rely on **automatic bridge sync** only.
 
 ## 12. Pre-cutover checklist
 
+- [ ] `bash deploy/bootstrap.sh` complete; `BRIDGE_TOKEN` saved
+- [ ] GitHub secrets: `GCP_SA_KEY`, `GCP_PROJECT_ID`, `GCP_REGION`
+- [ ] Initial images pushed; `deploy/deploy-cloud-run.sh` applied
+- [ ] `deploy/migrate-cloud-sql.sh` run; production seed loaded if needed
+- [ ] `deploy/bootstrap-lb.sh` run; DNS A records set; managed cert `ACTIVE`
 - [ ] Cloud SQL backups + PITR verified
-- [ ] Secrets rotated from dev defaults
+- [ ] Secrets rotated from dev defaults (especially `ORGANIZER_PIN`)
 - [ ] `RFID_HARDWARE=false` on backend
 - [ ] Bridge token on laptop matches Secret Manager
 - [ ] GCS bucket IAM for backend SA
 - [ ] Domain + TLS live on `keweenawendurance.com`
-- [ ] Migrations applied; production seed loaded
 - [ ] Bridge offline → online dress rehearsal against staging or prod-like Compose
 - [ ] Rollback revision/image tag documented
+- [ ] Smoke: `[deploy]` push on `main` updates Cloud Run revisions
 
 ---
 
@@ -330,7 +409,13 @@ Normal outages rely on **automatic bridge sync** only.
 
 | File | Purpose |
 |---|---|
-| `cloudbuild.yaml` | Build/push frontend + backend to Artifact Registry |
-| `cloud-run-backend.yaml` | Backend service (Cloud SQL, secrets, bridge WS) |
-| `cloud-run-frontend.yaml` | Frontend static nginx on port 8080 |
+| `bootstrap.sh` | One-time greenfield: APIs, AR, SQL, secrets, GCS, service accounts, CI key |
+| `bootstrap-lb.sh` | HTTPS LB, managed cert, path routing, static IP + DNS instructions |
+| `deploy-cloud-run.sh` | Render templates and `gcloud run services replace` |
+| `render-cloud-run.sh` | envsubst templates → `deploy/.generated/` |
+| `migrate-cloud-sql.sh` | Auth Proxy + `database/init` + migrations |
+| `.generated/` | Rendered Cloud Run YAML (gitignored; created by render script) |
+| `cloudbuild.yaml` | Optional: build/push frontend + backend to Artifact Registry |
+| `cloud-run-backend.yaml` | Backend service template (Cloud SQL, secrets, bridge WS) |
+| `cloud-run-frontend.yaml` | Frontend service template (static nginx on port 8080) |
 | `README.md` | This guide |

@@ -1,10 +1,13 @@
 # Cloud Run service manifest for the static Vue frontend (nginx on port 8080).
 #
-# Replace placeholders: $PROJECT_ID, $REGION, image tag.
+# Template — render via deploy/render-cloud-run.sh (do not apply raw templates).
 #
-# Apply:
-#   gcloud run services replace deploy/cloud-run-frontend.yaml \
-#     --region=$REGION --project=$PROJECT_ID
+# Required env vars for envsubst:
+#   PROJECT_ID PROJECT_NUMBER REGION CLOUD_SQL_INSTANCE IMAGE_TAG
+#
+# Apply rendered manifest:
+#   gcloud run services replace deploy/.generated/cloud-run-frontend.yaml \
+#     --region=${REGION} --project=${PROJECT_ID}
 #
 # Domain mapping (see deploy/README.md):
 #   Map keweenawendurance.com and www.keweenawendurance.com to this service,
@@ -30,29 +33,27 @@ spec:
         autoscaling.knative.dev/maxScale: "10"
         run.googleapis.com/execution-environment: gen2
     spec:
-      serviceAccountName: keweenaw-frontend@$PROJECT_ID.iam.gserviceaccount.com
+      serviceAccountName: keweenaw-frontend@${PROJECT_ID}.iam.gserviceaccount.com
       containerConcurrency: 250
       timeoutSeconds: 300
       containers:
         - name: frontend
-          image: $REGION-docker.pkg.dev/$PROJECT_ID/keweenaw/frontend:latest
+          image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/keweenaw/frontend:${IMAGE_TAG}
           ports:
             - name: http1
               containerPort: 8080
           resources:
             limits:
               cpu: "1"
-              memory: 256Mi
+              memory: 512Mi
           startupProbe:
             httpGet:
               path: /health
-              port: 8080
             initialDelaySeconds: 0
             periodSeconds: 5
             failureThreshold: 12
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
             periodSeconds: 30
             failureThreshold: 3
