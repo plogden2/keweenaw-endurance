@@ -54,8 +54,6 @@ spec:
           env:
             - name: GO_ENV
               value: production
-            - name: PORT
-              value: "8080"
             - name: LOG_LEVEL
               value: info
             # Ephemeral container filesystem — not DR; Cloud SQL + GCS CSV are authoritative
@@ -116,13 +114,11 @@ spec:
           startupProbe:
             httpGet:
               path: /health
-              port: 8080
             initialDelaySeconds: 0
             periodSeconds: 5
             failureThreshold: 12
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
             periodSeconds: 30
             failureThreshold: 3

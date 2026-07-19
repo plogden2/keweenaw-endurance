@@ -45,17 +45,15 @@ spec:
           resources:
             limits:
               cpu: "1"
-              memory: 256Mi
+              memory: 512Mi
           startupProbe:
             httpGet:
               path: /health
-              port: 8080
             initialDelaySeconds: 0
             periodSeconds: 5
             failureThreshold: 12
           livenessProbe:
             httpGet:
               path: /health
-              port: 8080
             periodSeconds: 30
             failureThreshold: 3
