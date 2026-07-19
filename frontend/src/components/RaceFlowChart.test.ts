@@ -13,12 +13,17 @@ import type { TimingRecord } from '@/types/models'
 
 vi.mock('chart.js', () => ({
   Chart: Object.assign(
-    vi.fn((_canvas, config) => ({
-      destroy: vi.fn(),
-      update: vi.fn(),
-      data: config?.data ?? { datasets: [] },
-      options: config?.options ?? {},
-    })),
+    vi.fn((_canvas, config) => {
+      const instance = {
+        destroy: vi.fn(),
+        update: vi.fn(),
+        data: config?.data ?? { datasets: [] },
+        options: config?.options ?? {},
+        canvas: { style: { cursor: 'default' } as { cursor: string } },
+        getElementsAtEventForMode: vi.fn().mockReturnValue([]),
+      }
+      return instance
+    }),
     { register: vi.fn() },
   ),
   LineController: vi.fn(),
@@ -1275,6 +1280,153 @@ describe('RaceFlowChart.vue', () => {
     )
     expect(highlightedDataset?.borderWidth).toBe(4)
     expect(dimmedDataset?.borderWidth).toBe(1)
+  })
+
+  describe('sticky highlight selection', () => {
+    async function mountWithData(props: Record<string, unknown> = {}) {
+      ;(timingApi.getLive as Mock).mockResolvedValue({
+        data: { race_id: 'race-1', records: sampleRecords },
+      })
+      const wrapper = mount(RaceFlowChart, {
+        props: { raceId: 'race-1', ...props },
+      })
+      await flushPromises()
+      return wrapper
+    }
+
+    function lastChartInstance() {
+      return (Chart as unknown as Mock).mock.results.at(-1)?.value as {
+        update: Mock
+        data: { datasets: Array<{ participantId?: string; borderWidth: number }> }
+        options: { onClick?: Function; onHover?: Function }
+        canvas: { style: { cursor: string } }
+        getElementsAtEventForMode: Mock
+      }
+    }
+
+    it('emits sticky select on plot click and keeps highlight after hover clears', async () => {
+      const wrapper = await mountWithData()
+      const chart = lastChartInstance()
+      chart.getElementsAtEventForMode.mockReturnValue([{ datasetIndex: 0 }])
+
+      chart.options.onClick?.(
+        { native: new MouseEvent('click') },
+        [{ datasetIndex: 0 }],
+        chart,
+      )
+      await flushPromises()
+
+      expect(wrapper.emitted('update:highlightParticipantId')?.at(-1)).toEqual(['p1'])
+
+      await wrapper.setProps({ highlightParticipantId: 'p1' })
+      await flushPromises()
+
+      chart.options.onHover?.(
+        { native: new MouseEvent('mousemove') },
+        [],
+        chart,
+      )
+      await flushPromises()
+
+      const highlighted = chart.data.datasets.find((d) => d.participantId === 'p1')
+      expect(highlighted?.borderWidth).toBe(4)
+    })
+
+    it('does not let hover change styling while sticky is active', async () => {
+      const wrapper = await mountWithData({ highlightParticipantId: 'p1' })
+      await flushPromises()
+      const chart = lastChartInstance()
+
+      chart.options.onHover?.(
+        { native: new MouseEvent('mousemove') },
+        [{ datasetIndex: 1 }],
+        chart,
+      )
+      await flushPromises()
+
+      expect(wrapper.vm.hoveredParticipantId).toBeNull()
+      const p1 = chart.data.datasets.find((d) => d.participantId === 'p1')
+      const p2 = chart.data.datasets.find((d) => d.participantId === 'p2')
+      expect(p1?.borderWidth).toBe(4)
+      expect(p2?.borderWidth).toBe(1)
+    })
+
+    it('emits clear when clicking empty plot area', async () => {
+      const wrapper = await mountWithData({ highlightParticipantId: 'p1' })
+      const chart = lastChartInstance()
+      chart.getElementsAtEventForMode.mockReturnValue([])
+
+      chart.options.onClick?.(
+        { native: new MouseEvent('click') },
+        [],
+        chart,
+      )
+      await flushPromises()
+
+      expect(wrapper.emitted('update:highlightParticipantId')?.at(-1)).toEqual([undefined])
+    })
+
+    it('emits clear when re-clicking the selected line', async () => {
+      const wrapper = await mountWithData({ highlightParticipantId: 'p1' })
+      const chart = lastChartInstance()
+      chart.getElementsAtEventForMode.mockReturnValue([{ datasetIndex: 0 }])
+
+      chart.options.onClick?.(
+        { native: new MouseEvent('click') },
+        [{ datasetIndex: 0 }],
+        chart,
+      )
+      await flushPromises()
+
+      expect(wrapper.emitted('update:highlightParticipantId')?.at(-1)).toEqual([undefined])
+    })
+
+    it('emits clear on document click outside all race-flow charts', async () => {
+      const wrapper = await mountWithData({ highlightParticipantId: 'p1' })
+      document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await flushPromises()
+
+      expect(wrapper.emitted('update:highlightParticipantId')?.at(-1)).toEqual([undefined])
+      wrapper.unmount()
+    })
+
+    it('sets pointer cursor when hovering a line with no sticky selection', async () => {
+      await mountWithData()
+      const chart = lastChartInstance()
+
+      chart.options.onHover?.(
+        { native: new MouseEvent('mousemove') },
+        [{ datasetIndex: 0 }],
+        chart,
+      )
+      expect(chart.canvas.style.cursor).toBe('pointer')
+
+      chart.options.onHover?.(
+        { native: new MouseEvent('mousemove') },
+        [],
+        chart,
+      )
+      expect(chart.canvas.style.cursor).toBe('default')
+    })
+
+    it('legend name button sticky-selects; checkbox only toggles visibility', async () => {
+      const wrapper = await mountWithData()
+      const selectBtn = wrapper.find('[data-testid="race-flow-legend-select"]')
+      expect(selectBtn.exists()).toBe(true)
+
+      await selectBtn.trigger('click')
+      await flushPromises()
+      expect(wrapper.emitted('update:highlightParticipantId')?.at(-1)).toEqual(['p1'])
+
+      const checkbox = wrapper.find('.legend-item input[type="checkbox"]')
+      const before = wrapper.vm.visibleParticipantIds.has('p1')
+      await checkbox.setValue(false)
+      await flushPromises()
+      expect(wrapper.vm.visibleParticipantIds.has('p1')).toBe(!before)
+      // checkbox click must not emit a second select
+      const selectEmits = wrapper.emitted('update:highlightParticipantId') ?? []
+      expect(selectEmits.filter((e) => e[0] === 'p1').length).toBe(1)
+    })
   })
 
   describe('isLegendBusy', () => {
