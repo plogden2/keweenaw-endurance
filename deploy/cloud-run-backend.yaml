@@ -1,13 +1,13 @@
 # Cloud Run service manifest for the Go API (hosted authority).
 #
-# Replace placeholders before apply:
-#   $PROJECT_ID, $PROJECT_NUMBER, $REGION, $CLOUD_SQL_INSTANCE (e.g. keweenaw-prod)
-#   Image tag (SHORT_SHA or latest from Cloud Build)
-#   PROJECT_NUMBER: gcloud projects describe $PROJECT_ID --format='value(projectNumber)'
+# Template — render via deploy/render-cloud-run.sh (do not apply raw templates).
 #
-# Apply:
+# Required env vars for envsubst:
+#   PROJECT_ID PROJECT_NUMBER REGION CLOUD_SQL_INSTANCE IMAGE_TAG
+#
+# Apply rendered manifest:
 #   gcloud run services replace deploy/cloud-run-backend.yaml \
-#     --region=$REGION --project=$PROJECT_ID
+#     --region=${REGION} --project=${PROJECT_ID}
 #
 # Or export/edit an existing service and merge env/annotations from this file.
 
@@ -26,7 +26,7 @@ spec:
     metadata:
       annotations:
         # Cloud SQL Auth Proxy socket mount
-        run.googleapis.com/cloudsql-instances: $PROJECT_ID:$REGION:$CLOUD_SQL_INSTANCE
+        run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:${REGION}:${CLOUD_SQL_INSTANCE}
         # Keep one warm instance for bridge WebSocket + low cold-start latency
         autoscaling.knative.dev/minScale: "1"
         autoscaling.knative.dev/maxScale: "10"
@@ -36,14 +36,14 @@ spec:
         run.googleapis.com/session-affinity: "true"
         run.googleapis.com/execution-environment: gen2
         # Maps secretKeyRef names → Secret Manager paths (required for env var secrets)
-        run.googleapis.com/secrets: keweenaw-db-password:projects/$PROJECT_NUMBER/secrets/keweenaw-db-password,keweenaw-jwt-secret:projects/$PROJECT_NUMBER/secrets/keweenaw-jwt-secret,keweenaw-organizer-pin:projects/$PROJECT_NUMBER/secrets/keweenaw-organizer-pin,keweenaw-bridge-token:projects/$PROJECT_NUMBER/secrets/keweenaw-bridge-token
+        run.googleapis.com/secrets: keweenaw-db-password:projects/${PROJECT_NUMBER}/secrets/keweenaw-db-password,keweenaw-jwt-secret:projects/${PROJECT_NUMBER}/secrets/keweenaw-jwt-secret,keweenaw-organizer-pin:projects/${PROJECT_NUMBER}/secrets/keweenaw-organizer-pin,keweenaw-bridge-token:projects/${PROJECT_NUMBER}/secrets/keweenaw-bridge-token
     spec:
-      serviceAccountName: keweenaw-backend@$PROJECT_ID.iam.gserviceaccount.com
+      serviceAccountName: keweenaw-backend@${PROJECT_ID}.iam.gserviceaccount.com
       containerConcurrency: 80
       timeoutSeconds: 3600
       containers:
         - name: backend
-          image: $REGION-docker.pkg.dev/$PROJECT_ID/keweenaw/backend:latest
+          image: ${REGION}-docker.pkg.dev/${PROJECT_ID}/keweenaw/backend:${IMAGE_TAG}
           ports:
             - name: http1
               containerPort: 8080
@@ -72,14 +72,14 @@ spec:
             # Prefer GCS on Cloud Run (no persistent volume). Use LIVE_CSV_MIRROR_DIR only
             # if you mount a volume or sidecar; leave empty when GCS bucket is set.
             - name: GCS_LIVE_CSV_BUCKET
-              value: $PROJECT_ID-keweenaw-live-csv
+              value: ${PROJECT_ID}-keweenaw-live-csv
             - name: LIVE_CSV_MIRROR_DIR
               value: ""
             - name: CORS_ORIGINS
               value: https://keweenawendurance.com
             # Cloud SQL via Unix socket (requires cloudsql-instances annotation above)
             - name: DB_HOST
-              value: /cloudsql/$PROJECT_ID:$REGION:$CLOUD_SQL_INSTANCE
+              value: /cloudsql/${PROJECT_ID}:${REGION}:${CLOUD_SQL_INSTANCE}
             - name: DB_PORT
               value: "5432"
             - name: DB_NAME
