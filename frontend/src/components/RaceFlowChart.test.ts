@@ -6,7 +6,7 @@ import { Chart } from 'chart.js'
 import RaceFlowChart from './RaceFlowChart.vue'
 import { timingApi } from '@/services/api'
 import { resolveCategoryColor } from '@/themes/defaultLegend'
-import { buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
+import { buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, expandSteppedLapPoints, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
 import { convertDistanceFromKm, KM_TO_MILES } from '@/utils/units'
 import { setupPinia } from '@/test/helpers'
 import type { TimingRecord } from '@/types/models'
@@ -39,6 +39,9 @@ vi.mock('@/services/api', async () => {
       getLive: vi.fn(),
       getLeaderboard: vi.fn(),
       getResults: vi.fn(),
+    },
+    raceParticipantsApi: {
+      list: vi.fn().mockResolvedValue({ data: { data: [], total: 0 } }),
     },
   }
 })
@@ -113,6 +116,82 @@ describe('raceFlowData', () => {
 
     expect(flows[0].label).toBe('#7 Alex Runner')
     expect(flows[1].label).toBe('#12 Sam Trail')
+  })
+
+  it('keeps an explicit (0, 0) origin even when the first lap is inside the cooldown window', () => {
+    const earlyLap: TimingRecord[] = [
+      {
+        id: 'lap-1',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:00:30.000Z',
+        local_timestamp: '2024-06-01T10:00:30.000Z',
+        sync_status: 'synced',
+        record_type: 'rfid_lap',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+    ]
+
+    const flows = buildParticipantFlows(earlyLap, '2024-06-01T10:00:00.000Z', 'lap_based')
+    expect(flows[0].points[0]).toEqual({ elapsedMinutes: 0, value: 0 })
+    expect(flows[0].points[1]).toMatchObject({ elapsedMinutes: 0.5, value: 1, kind: 'rfid' })
+    expect(expandSteppedLapPoints([
+      { x: 0, y: 0 },
+      { x: 2.791, y: 1 },
+    ])).toEqual([
+      { x: 0, y: 0 },
+      { x: 2.791, y: 0 },
+      { x: 2.791, y: 1 },
+    ])
+  })
+
+  it('seeds registered racers at 0 laps at race start even without timing records', () => {
+    const registered = [
+      {
+        id: 'p-zero',
+        race_id: 'race-1',
+        bib_number: '99',
+        first_name: 'Zero',
+        last_name: 'Start',
+        status: 'registered' as const,
+      },
+      {
+        id: 'p1',
+        race_id: 'race-1',
+        bib_number: '7',
+        first_name: 'Alex',
+        last_name: 'Runner',
+        status: 'started' as const,
+      },
+    ]
+    const flows = buildParticipantFlows(
+      sampleRecords.filter((r) => r.participant?.id === 'p1'),
+      '2024-06-01T10:00:00.000Z',
+      'lap_based',
+      'imperial',
+      registered,
+    )
+
+    expect(flows).toHaveLength(2)
+    const zero = flows.find((f) => f.participantId === 'p-zero')
+    expect(zero?.points[0]).toEqual({ elapsedMinutes: 0, value: 0 })
+    const alex = flows.find((f) => f.participantId === 'p1')
+    expect(alex?.points[0]).toEqual({ elapsedMinutes: 0, value: 0 })
+    expect(alex?.points.length).toBeGreaterThan(1)
   })
 
   it('converts distance flows to miles by default', () => {
@@ -309,13 +388,14 @@ describe('raceFlowData', () => {
       },
     ]
 
-    const flows = buildParticipantFlows(lapRecords, undefined, 'lap_based')
+    const flows = buildParticipantFlows(lapRecords, '2024-06-01T10:00:00.000Z', 'lap_based')
     const pat = flows.find((flow) => flow.participantId === 'p1')
 
     expect(flows).toHaveLength(2)
-    expect(pat?.points).toHaveLength(2)
-    expect(pat?.points[0].value).toBe(1)
-    expect(pat?.points[1].value).toBe(2)
+    expect(pat?.points).toHaveLength(3)
+    expect(pat?.points[0]).toEqual({ elapsedMinutes: 0, value: 0 })
+    expect(pat?.points[1].value).toBe(1)
+    expect(pat?.points[2].value).toBe(2)
   })
 
   it('computes race statistics from timing records', () => {
@@ -422,6 +502,166 @@ describe('raceFlowData', () => {
     expect(extrapolation).toEqual({ elapsedMinutes: 45, value: 21.1 })
   })
 
+  it('does not project zero-lap racers forward in time', () => {
+    const flows = buildParticipantFlows(
+      [],
+      '2024-06-01T10:00:00.000Z',
+      'lap_based',
+      'imperial',
+      [
+        {
+          id: 'p-zero',
+          bib_number: '99',
+          first_name: 'Zero',
+          last_name: 'Start',
+          status: 'registered',
+        },
+      ],
+    )
+
+    expect(buildExtrapolationPoint(flows[0], 12)).toBeNull()
+  })
+
+  it('coalesces near-simultaneous finish taps into one lap step', () => {
+    const closeTaps: TimingRecord[] = [
+      {
+        id: 'lap-1',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:05:00.000Z',
+        local_timestamp: '2024-06-01T10:05:00.000Z',
+        sync_status: 'synced',
+        record_type: 'rfid_lap',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+      {
+        id: 'dup',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:05:30.000Z',
+        local_timestamp: '2024-06-01T10:05:30.000Z',
+        sync_status: 'synced',
+        record_type: 'rfid_lap',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+    ]
+
+    const flows = buildParticipantFlows(closeTaps, '2024-06-01T10:00:00.000Z', 'lap_based')
+    const alex = flows.find((flow) => flow.participantId === 'p1')
+    const afterStart = alex?.points.filter((point) => point.value > 0) ?? []
+
+    expect(afterStart).toHaveLength(1)
+    expect(afterStart[0].value).toBe(2)
+  })
+
+  it('plots karaoke bonus laps as distinct music-note points', () => {
+    const withKaraoke: TimingRecord[] = [
+      {
+        id: 'lap-1',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:05:00.000Z',
+        local_timestamp: '2024-06-01T10:05:00.000Z',
+        sync_status: 'synced',
+        record_type: 'rfid_lap',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+      {
+        id: 'bonus',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:05:20.000Z',
+        local_timestamp: '2024-06-01T10:05:20.000Z',
+        sync_status: 'synced',
+        record_type: 'karaoke_bonus',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+    ]
+
+    const flows = buildParticipantFlows(withKaraoke, '2024-06-01T10:00:00.000Z', 'lap_based')
+    const alex = flows.find((flow) => flow.participantId === 'p1')
+    const afterStart = alex?.points.filter((point) => point.value > 0) ?? []
+
+    expect(afterStart).toHaveLength(2)
+    expect(afterStart[0]).toMatchObject({ value: 1, kind: 'rfid' })
+    expect(afterStart[1]).toMatchObject({ value: 2, kind: 'karaoke' })
+  })
+
+  it('expands lap points into axis-aligned steps that never move backwards', () => {
+    const stepped = expandSteppedLapPoints([
+      { x: 0, y: 0 },
+      { x: 2.275, y: 1 },
+      { x: 4.5, y: 2 },
+    ])
+
+    expect(stepped).toEqual([
+      { x: 0, y: 0 },
+      { x: 2.275, y: 0 },
+      { x: 2.275, y: 1 },
+      { x: 4.5, y: 1 },
+      { x: 4.5, y: 2 },
+    ])
+    for (let index = 1; index < stepped.length; index += 1) {
+      expect(stepped[index].x).toBeGreaterThanOrEqual(stepped[index - 1].x)
+    }
+  })
+
   it('builds participant tooltip details from flow data', () => {
     const flows = buildParticipantFlows(sampleRecords, '2024-06-01T10:30:00.000Z', 'time_based', 'metric')
     const tooltip = buildParticipantFlowTooltip(flows[0], 'time_based', 'metric')
@@ -472,6 +712,82 @@ describe('raceFlowData', () => {
     expect(resolveRaceFlowXAxisMax(undefined, 100, 100, true)).toBe(105)
     expect(resolveRaceFlowXAxisMax(undefined, 100, 100, false)).toBeUndefined()
   })
+
+  it('excludes timing records before race start so elapsed never goes negative', () => {
+    const earlyAndOnTime: TimingRecord[] = [
+      {
+        id: 'early',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-05-31T12:00:00.000Z',
+        local_timestamp: '2024-05-31T12:00:00.000Z',
+        sync_status: 'synced',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+      {
+        id: 'on-time',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T11:00:00.000Z',
+        local_timestamp: '2024-06-01T11:00:00.000Z',
+        sync_status: 'synced',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+    ]
+
+    const flows = buildParticipantFlows(
+      earlyAndOnTime,
+      '2024-06-01T10:30:00.000Z',
+      'lap_based',
+    )
+
+    expect(flows).toHaveLength(1)
+    expect(flows[0].points).toHaveLength(2)
+    expect(flows[0].points[0]).toEqual({ elapsedMinutes: 0, value: 0 })
+    expect(flows[0].points[1].elapsedMinutes).toBe(30)
+    expect(flows[0].points[1].value).toBe(1)
+    expect(flows[0].points.every((point) => point.elapsedMinutes >= 0)).toBe(true)
+  })
+
+  it('keeps each participant flow monotonic in elapsed time', () => {
+    const flows = buildParticipantFlows(sampleRecords, '2024-06-01T10:30:00.000Z', 'lap_based')
+
+    for (const flow of flows) {
+      for (let index = 1; index < flow.points.length; index += 1) {
+        expect(flow.points[index].elapsedMinutes).toBeGreaterThanOrEqual(
+          flow.points[index - 1].elapsedMinutes,
+        )
+      }
+    }
+  })
 })
 
 describe('RaceFlowChart.vue', () => {
@@ -492,6 +808,22 @@ describe('RaceFlowChart.vue', () => {
     const src = readFileSync(join(process.cwd(), 'src/components/RaceFlowChart.vue'), 'utf8')
     const style = src.split('<style scoped>')[1]?.split('</style>')[0] ?? ''
     expect(style).toMatch(/\.legend-panel[\s\S]*--live-display-scale/)
+  })
+
+  it('hosts the canvas in a dedicated relatively positioned container', () => {
+    const src = readFileSync(join(process.cwd(), 'src/components/RaceFlowChart.vue'), 'utf8')
+    const style = src.split('<style scoped>')[1]?.split('</style>')[0] ?? ''
+
+    // Chart.js measures the parent for bitmap size; legend must not share that parent,
+    // and CSS must not force canvas width/height (causes squished axis/tooltip text).
+    expect(src).toMatch(
+      /class="chart-canvas-host"[\s\S]*data-testid="race-flow-canvas"[\s\S]*class="legend-panel"/,
+    )
+    expect(style).toMatch(
+      /\.chart-canvas-host\s*\{[^}]*position:\s*relative;[^}]*height:\s*320px/s,
+    )
+    expect(style).not.toMatch(/canvas\s*\{[^}]*width:\s*100%\s*!important/s)
+    expect(style).not.toMatch(/canvas\s*\{[^}]*height:\s*\d+px\s*!important/s)
   })
 
   it('loads live timing data and renders chart canvas', async () => {
@@ -606,6 +938,146 @@ describe('RaceFlowChart.vue', () => {
     expect(Math.max(...xs)).toBeLessThanOrEqual(720)
 
     vi.useRealTimers()
+  })
+
+  it('draws straight stepped lap lines from x=0 with readable axis type', async () => {
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: sampleRecords },
+    })
+
+    mount(RaceFlowChart, {
+      props: {
+        raceId: 'race-1',
+        raceStartTime: '2024-06-01T10:30:00.000Z',
+        raceType: 'lap_based',
+        durationMinutes: 720,
+      },
+    })
+    await flushPromises()
+
+    const chartConfig = (Chart as unknown as Mock).mock.calls.at(-1)?.[1] as {
+      options: {
+        scales: {
+          x: {
+            min?: number
+            max?: number
+            ticks?: { font?: { size?: number }; color?: string }
+            title?: { font?: { size?: number }; color?: string }
+          }
+          y: {
+            ticks?: { font?: { size?: number }; color?: string }
+            title?: { font?: { size?: number }; color?: string }
+          }
+        }
+      }
+      data: {
+        datasets: Array<{
+          tension: number
+          stepped?: boolean | string
+          data: Array<{ x: number; y: number }>
+        }>
+      }
+    }
+
+    expect(chartConfig.options.scales.x.min).toBe(0)
+    expect(chartConfig.data.datasets.every((dataset) => dataset.tension === 0)).toBe(true)
+    expect(chartConfig.data.datasets.every((dataset) => !dataset.stepped)).toBe(true)
+    expect(
+      chartConfig.data.datasets.every((dataset) =>
+        dataset.data.every((point) => point.x >= 0),
+      ),
+    ).toBe(true)
+    for (const dataset of chartConfig.data.datasets) {
+      for (let index = 1; index < dataset.data.length; index += 1) {
+        expect(dataset.data[index].x).toBeGreaterThanOrEqual(dataset.data[index - 1].x)
+      }
+    }
+    expect(chartConfig.options.scales.x.ticks?.font?.size).toBeGreaterThanOrEqual(20)
+    expect(chartConfig.options.scales.y.ticks?.font?.size).toBeGreaterThanOrEqual(20)
+    expect(chartConfig.options.scales.x.ticks?.color).toBe('#1a3f3d')
+    expect(chartConfig.options.scales.y.title?.color).toBe('#1a3f3d')
+  })
+
+  it('renders karaoke lap points with a music-note marker', async () => {
+    const karaokeRecords: TimingRecord[] = [
+      {
+        id: 'lap-1',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:35:00.000Z',
+        local_timestamp: '2024-06-01T10:35:00.000Z',
+        sync_status: 'synced',
+        record_type: 'rfid_lap',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+      {
+        id: 'bonus',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:35:20.000Z',
+        local_timestamp: '2024-06-01T10:35:20.000Z',
+        sync_status: 'synced',
+        record_type: 'karaoke_bonus',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+    ]
+
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: karaokeRecords },
+    })
+
+    mount(RaceFlowChart, {
+      props: {
+        raceId: 'race-1',
+        raceStartTime: '2024-06-01T10:30:00.000Z',
+        raceType: 'lap_based',
+        durationMinutes: 720,
+      },
+    })
+    await flushPromises()
+
+    const chartConfig = (Chart as unknown as Mock).mock.calls.at(-1)?.[1] as {
+      data: {
+        datasets: Array<{
+          pointStyle?: Array<string | HTMLCanvasElement | HTMLImageElement | false>
+          data: Array<{ x: number; y: number; kind?: string }>
+        }>
+      }
+    }
+
+    const styles = chartConfig.data.datasets[0].pointStyle ?? []
+    const karaokeStyles = styles.filter(
+      (style) => typeof style === 'object' && style !== null && 'src' in style,
+    )
+    expect(karaokeStyles.length).toBeGreaterThanOrEqual(1)
   })
 
   it('shows empty state when no finish records exist', async () => {
@@ -799,5 +1271,61 @@ describe('RaceFlowChart.vue', () => {
     )
     expect(highlightedDataset?.borderWidth).toBe(4)
     expect(dimmedDataset?.borderWidth).toBe(1)
+  })
+
+  describe('isLegendBusy', () => {
+    async function mountChartWithData() {
+      ;(timingApi.getLive as Mock).mockResolvedValue({
+        data: { race_id: 'race-1', records: sampleRecords },
+      })
+
+      const wrapper = mount(RaceFlowChart, {
+        props: { raceId: 'race-1' },
+      })
+      await flushPromises()
+      return wrapper
+    }
+
+    it('is true when search query is set', async () => {
+      const wrapper = await mountChartWithData()
+
+      expect(wrapper.vm.isLegendBusy).toBe(false)
+
+      await wrapper.find('[data-testid="race-flow-legend-search"]').setValue('Alex')
+
+      expect(wrapper.vm.isLegendBusy).toBe(true)
+    })
+
+    it('is true when a status filter is deselected', async () => {
+      const wrapper = await mountChartWithData()
+
+      await wrapper.find('[data-testid="race-flow-legend-search"]').setValue('')
+      expect(wrapper.vm.isLegendBusy).toBe(false)
+
+      const statusDropdown = wrapper.find('[data-testid="race-flow-status-filters"]')
+      await statusDropdown.find('.filter-dropdown-trigger').trigger('click')
+      const finishedOption = statusDropdown
+        .findAll('.filter-dropdown-option')
+        .find((option) => option.text().includes('FINISHED'))
+      await finishedOption?.trigger('click')
+      await flushPromises()
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.isLegendBusy).toBe(true)
+    })
+
+    it('is true when legend-items is scrolled', async () => {
+      const wrapper = await mountChartWithData()
+
+      await wrapper.find('[data-testid="race-flow-legend-search"]').setValue('')
+      expect(wrapper.vm.isLegendBusy).toBe(false)
+
+      const legendItems = wrapper.find('.legend-items')
+      ;(legendItems.element as HTMLElement).scrollTop = 10
+      await legendItems.trigger('scroll')
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.vm.isLegendBusy).toBe(true)
+    })
   })
 })

@@ -106,6 +106,25 @@ Public. Includes races, countdowns, **overall** leaderboards (default) with cate
 }
 ```
 
+### GET `/api/events/{eventId}/live/stream` (WebSocket, public)
+
+Server → client on scored lap / karaoke bonus lap bump:
+
+```json
+{
+  "type": "lap_recorded",
+  "event_id": "<uuid>",
+  "race_id": "<uuid>",
+  "participant_id": "<uuid>",
+  "participant_name": "Alex Rivera",
+  "bib_number": "42",
+  "lap_count": 7,
+  "recorded_at": "2026-07-18T16:00:00Z"
+}
+```
+
+Not sent for cooldown, unknown_tag, test_read, or checkpoint-only results.
+
 ## Participants (Racers)
 
 `/api/races/{raceId}/participants`:

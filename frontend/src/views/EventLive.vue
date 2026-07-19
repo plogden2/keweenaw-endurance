@@ -1,5 +1,6 @@
 <template>
   <div class="event-live" data-testid="live-view">
+    <LapCelebrationOverlay :visible="celebrationVisible" :name="celebrationName" />
     <p
       v-if="isReaderSession"
       class="meta-bar sync-bar"
@@ -112,7 +113,7 @@
       <div v-show="activeTab === '12h'" data-testid="race-panel-12h">
         <section class="panel">
           <h2>{{ race12?.name || '12 Hour' }}</h2>
-          <template v-if="(race12?.countdown_seconds ?? 0) > 0">
+          <template v-if="displayCountdown(race12) > 0">
             <p id="countdown-label-12h" class="countdown-label">Countdown</p>
             <p
               class="countdown"
@@ -121,18 +122,20 @@
               aria-live="polite"
               aria-labelledby="countdown-label-12h"
             >
-              {{ formatCountdown(race12?.countdown_seconds ?? 0) }}
+              {{ formatCountdown(displayCountdown(race12)) }}
             </p>
           </template>
         </section>
         <div class="chart-wrap" aria-label="Lap progress chart">
           <RaceFlowChart
             v-if="race12?.id"
+            ref="chart12hRef"
             :race-id="race12.id"
             :race-status="asRaceStatus(race12.status)"
             :race-start-time="race12.start_time"
             :race-type="race12.race_type"
             :duration-minutes="race12.duration_minutes"
+            :highlight-participant-id="highlightParticipantId"
           />
         </div>
         <section class="panel">
@@ -151,6 +154,8 @@
                 v-for="e in race12?.leaderboard_overall || []"
                 :key="e.participant_id"
                 data-testid="leaderboard-row"
+                :data-participant-id="e.participant_id"
+                :class="{ 'leaderboard-row--focus': focusParticipantId === e.participant_id }"
               >
                 <td class="place">{{ e.place }}</td>
                 <td>{{ e.bib_number }}</td>
@@ -174,7 +179,7 @@
       <div v-show="activeTab === '6h'" data-testid="race-panel-6h">
         <section class="panel">
           <h2>{{ race6?.name || '6 Hour' }}</h2>
-          <template v-if="(race6?.countdown_seconds ?? 0) > 0">
+          <template v-if="displayCountdown(race6) > 0">
             <p id="countdown-label-6h" class="countdown-label">Countdown</p>
             <p
               class="countdown"
@@ -182,18 +187,20 @@
               aria-live="polite"
               aria-labelledby="countdown-label-6h"
             >
-              {{ formatCountdown(race6?.countdown_seconds ?? 0) }}
+              {{ formatCountdown(displayCountdown(race6)) }}
             </p>
           </template>
         </section>
         <div class="chart-wrap">
           <RaceFlowChart
             v-if="race6?.id"
+            ref="chart6hRef"
             :race-id="race6.id"
             :race-status="asRaceStatus(race6.status)"
             :race-start-time="race6.start_time"
             :race-type="race6.race_type"
             :duration-minutes="race6.duration_minutes"
+            :highlight-participant-id="highlightParticipantId"
           />
         </div>
         <section class="panel">
@@ -208,7 +215,13 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="e in race6?.leaderboard_overall || []" :key="e.participant_id">
+              <tr
+                v-for="e in race6?.leaderboard_overall || []"
+                :key="e.participant_id"
+                data-testid="leaderboard-row"
+                :data-participant-id="e.participant_id"
+                :class="{ 'leaderboard-row--focus': focusParticipantId === e.participant_id }"
+              >
                 <td class="place">{{ e.place }}</td>
                 <td>{{ e.bib_number }}</td>
                 <td>{{ e.name }}</td>
@@ -225,7 +238,7 @@
       <div v-show="activeTab === '90m'" data-testid="race-panel-90m">
         <section class="panel">
           <h2>{{ race90?.name || '90 Minute' }}</h2>
-          <template v-if="(race90?.countdown_seconds ?? 0) > 0">
+          <template v-if="displayCountdown(race90) > 0">
             <p id="countdown-label-90m" class="countdown-label">Countdown</p>
             <p
               class="countdown"
@@ -233,18 +246,20 @@
               aria-live="polite"
               aria-labelledby="countdown-label-90m"
             >
-              {{ formatCountdown(race90?.countdown_seconds ?? 0) }}
+              {{ formatCountdown(displayCountdown(race90)) }}
             </p>
           </template>
         </section>
         <div class="chart-wrap">
           <RaceFlowChart
             v-if="race90?.id"
+            ref="chart90mRef"
             :race-id="race90.id"
             :race-status="asRaceStatus(race90.status)"
             :race-start-time="race90.start_time"
             :race-type="race90.race_type"
             :duration-minutes="race90.duration_minutes"
+            :highlight-participant-id="highlightParticipantId"
           />
         </div>
         <section class="panel">
@@ -259,7 +274,13 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="e in race90?.leaderboard_overall || []" :key="e.participant_id">
+              <tr
+                v-for="e in race90?.leaderboard_overall || []"
+                :key="e.participant_id"
+                data-testid="leaderboard-row"
+                :data-participant-id="e.participant_id"
+                :class="{ 'leaderboard-row--focus': focusParticipantId === e.participant_id }"
+              >
                 <td class="place">{{ e.place }}</td>
                 <td>{{ e.bib_number }}</td>
                 <td>{{ e.name }}</td>
@@ -281,19 +302,23 @@
         <div class="chart-wrap overlap-charts" aria-label="Overlap race flow">
           <RaceFlowChart
             v-if="race12?.id"
+            ref="chartOverlap12Ref"
             :race-id="race12.id"
             :race-status="asRaceStatus(race12.status)"
             :race-start-time="race12.start_time"
             :race-type="race12.race_type"
             :duration-minutes="race12.duration_minutes"
+            :highlight-participant-id="highlightParticipantId"
           />
           <RaceFlowChart
             v-if="race6?.id"
+            ref="chartOverlap6Ref"
             :race-id="race6.id"
             :race-status="asRaceStatus(race6.status)"
             :race-start-time="race6.start_time"
             :race-type="race6.race_type"
             :duration-minutes="race6.duration_minutes"
+            :highlight-participant-id="highlightParticipantId"
           />
         </div>
       </div>
@@ -319,11 +344,13 @@
             <div class="chart-wrap dark">
               <RaceFlowChart
                 v-if="race12?.id"
+                ref="chartRotatorRef"
                 :race-id="race12.id"
                 :race-status="asRaceStatus(race12.status)"
                 :race-start-time="race12.start_time"
                 :race-type="race12.race_type"
                 :duration-minutes="race12.duration_minutes"
+                :highlight-participant-id="highlightParticipantId"
               />
             </div>
           </div>
@@ -342,6 +369,9 @@
                 <tr
                   v-for="e in race12?.leaderboard_overall || []"
                   :key="'fs-' + e.participant_id"
+                  data-testid="leaderboard-row"
+                  :data-participant-id="e.participant_id"
+                  :class="{ 'leaderboard-row--focus': focusParticipantId === e.participant_id }"
                 >
                   <td>{{ e.place }}</td>
                   <td>{{ e.bib_number }}</td>
@@ -358,14 +388,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
+import LapCelebrationOverlay from '@/components/LapCelebrationOverlay.vue'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import {
   eventsLiveApi,
   rfidApi,
   type EventLiveRace,
   type EventLiveResponse,
+  type LapRecordedEvent,
 } from '@/services/api'
 import {
   getLocalPendingCount,
@@ -374,13 +406,17 @@ import {
 } from '@/services/offlineQueue'
 import { setDisplayCache } from '@/services/timingStorage'
 import { useBridgeSyncStatus } from '@/composables/useBridgeSyncStatus'
+import { useEventLiveStream } from '@/composables/useEventLiveStream'
 import { useReaderStation } from '@/composables/useReaderStation'
+import { useSpectatorIdle } from '@/composables/useSpectatorIdle'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useEventsStore } from '@/stores/events'
 import { useStationStore } from '@/stores/station'
 import { getErrorMessage } from '@/utils/error'
 import type { RaceStatus } from '@/types/models'
 import { resolveCategoryColor } from '@/themes/defaultLegend'
+
+type ChartRef = InstanceType<typeof RaceFlowChart> | null
 
 const route = useRoute()
 const eventId = computed(() => String(route.params.eventId))
@@ -390,6 +426,7 @@ const pinAuth = usePinAuthStore()
 const { lastScan } = useReaderStation()
 const isReaderSession = computed(() => pinAuth.isAuthenticated)
 const { chipState, chipLabel } = useBridgeSyncStatus()
+const { lastLap } = useEventLiveStream(eventId)
 
 const live = ref<EventLiveResponse | null>(null)
 const loading = ref(false)
@@ -398,9 +435,32 @@ const activeTab = ref<'12h' | '6h' | '90m' | 'overlap'>('12h')
 const rotatorOpen = ref(false)
 const online = ref(typeof navigator !== 'undefined' ? navigator.onLine : true)
 const pendingSync = ref(0)
+const highlightParticipantId = ref<string | undefined>()
+const focusParticipantId = ref<string | undefined>()
+const celebrationVisible = ref(false)
+const celebrationName = ref('')
+const celebrationRaceId = ref<string | undefined>()
+const legendBusy = ref(false)
+const pageScrolledFromTop = ref(false)
+const { isBusy } = useSpectatorIdle({ legendBusy, pageScrolledFromTop })
+
+const chart12hRef = ref<ChartRef>(null)
+const chart6hRef = ref<ChartRef>(null)
+const chart90mRef = ref<ChartRef>(null)
+const chartOverlap12Ref = ref<ChartRef>(null)
+const chartOverlap6Ref = ref<ChartRef>(null)
+const chartRotatorRef = ref<ChartRef>(null)
+
+let celebrationTimer: number | undefined
+let focusTimer: number | undefined
+/** Wall clock for local countdown ticks between 2s live polls. */
+const nowMs = ref(Date.now())
 let pollTimer: number | undefined
+let countdownTickTimer: number | undefined
+let countdownAnchoredAt = 0
 let removeOnlineListener: (() => void) | undefined
 let removePendingListener: (() => void) | undefined
+let removeScrollListener: (() => void) | undefined
 
 function formatCountdown(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds))
@@ -408,6 +468,15 @@ function formatCountdown(seconds: number): string {
   const m = Math.floor((s % 3600) / 60)
   const r = s % 60
   return [h, m, r].map((n) => String(n).padStart(2, '0')).join(':')
+}
+
+/** Smooth 1s countdown from the last polled server value. */
+function displayCountdown(race: EventLiveRace | undefined): number {
+  if (!race) return 0
+  const base = race.countdown_seconds ?? 0
+  if (base <= 0 || countdownAnchoredAt <= 0) return Math.max(0, base)
+  const elapsed = Math.floor((nowMs.value - countdownAnchoredAt) / 1000)
+  return Math.max(0, base - elapsed)
 }
 
 function asRaceStatus(status: string): RaceStatus | undefined {
@@ -442,6 +511,104 @@ const race90 = computed(
     matchRace((n) => n.includes('90') || n.includes('kids')) ??
     matchRace((n) => /\b5\b/.test(n) && n.includes('minute')),
 )
+
+const visibleRaceIds = computed(() => {
+  if (rotatorOpen.value) {
+    return race12.value?.id ? [race12.value.id] : []
+  }
+  if (activeTab.value === 'overlap') {
+    return [race12.value?.id, race6.value?.id].filter(Boolean) as string[]
+  }
+  if (activeTab.value === '12h') return race12.value?.id ? [race12.value.id] : []
+  if (activeTab.value === '6h') return race6.value?.id ? [race6.value.id] : []
+  return race90.value?.id ? [race90.value.id] : []
+})
+
+function chartBindings(): Array<{ raceId?: string; chart: typeof chart12hRef }> {
+  return [
+    { raceId: race12.value?.id, chart: chart12hRef },
+    { raceId: race6.value?.id, chart: chart6hRef },
+    { raceId: race90.value?.id, chart: chart90mRef },
+    { raceId: race12.value?.id, chart: chartOverlap12Ref },
+    { raceId: race6.value?.id, chart: chartOverlap6Ref },
+    { raceId: race12.value?.id, chart: chartRotatorRef },
+  ]
+}
+
+function refreshFlowForRace(raceId: string) {
+  for (const { raceId: id, chart } of chartBindings()) {
+    if (id === raceId) {
+      void chart.value?.loadRecords?.()
+    }
+  }
+}
+
+function clearCelebrationTimers() {
+  if (celebrationTimer) {
+    window.clearTimeout(celebrationTimer)
+    celebrationTimer = undefined
+  }
+  if (focusTimer) {
+    window.clearTimeout(focusTimer)
+    focusTimer = undefined
+  }
+}
+
+function clearFocusState() {
+  highlightParticipantId.value = undefined
+  focusParticipantId.value = undefined
+}
+
+function startCelebration(ev: LapRecordedEvent) {
+  clearCelebrationTimers()
+
+  celebrationRaceId.value = ev.race_id
+  celebrationName.value = ev.participant_name
+  celebrationVisible.value = true
+  celebrationTimer = window.setTimeout(() => {
+    celebrationVisible.value = false
+    celebrationTimer = undefined
+  }, 2500)
+
+  void refreshFlowForRace(ev.race_id)
+
+  if (isBusy.value) {
+    clearFocusState()
+    return
+  }
+
+  highlightParticipantId.value = ev.participant_id
+  focusParticipantId.value = ev.participant_id
+  void nextTick(() => {
+    const row = document.querySelector(
+      `[data-testid="leaderboard-row"][data-participant-id="${ev.participant_id}"]`,
+    )
+    row?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  })
+
+  focusTimer = window.setTimeout(() => {
+    clearFocusState()
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    for (const panel of document.querySelectorAll<HTMLElement>('.event-live .fs-panel')) {
+      panel.scrollTop = 0
+    }
+    focusTimer = undefined
+  }, 3000)
+}
+
+function updatePageScrolledFromTop() {
+  if (window.scrollY > 0) {
+    pageScrolledFromTop.value = true
+    return
+  }
+  for (const panel of document.querySelectorAll<HTMLElement>('.event-live .fs-panel')) {
+    if (panel.scrollTop > 0) {
+      pageScrolledFromTop.value = true
+      return
+    }
+  }
+  pageScrolledFromTop.value = false
+}
 
 function colorFor(key: string): string {
   const apiColor = live.value?.category_legend.find((l) => l.key === key)?.color
@@ -478,6 +645,8 @@ async function cacheLiveLabels(data: EventLiveResponse) {
 
 async function applyLiveData(data: EventLiveResponse) {
   live.value = data
+  countdownAnchoredAt = Date.now()
+  nowMs.value = countdownAnchoredAt
   eventsStore.setCurrentEventSummary(data.event)
   void cacheLiveLabels(data)
 }
@@ -526,6 +695,33 @@ watch(
   },
 )
 
+watch(lastLap, (ev) => {
+  if (!ev || ev.type !== 'lap_recorded') return
+  if (!visibleRaceIds.value.includes(ev.race_id)) return
+  startCelebration(ev)
+})
+
+watch(visibleRaceIds, (ids) => {
+  if (celebrationRaceId.value && !ids.includes(celebrationRaceId.value)) {
+    clearCelebrationTimers()
+    clearFocusState()
+  }
+})
+
+watch(pageScrolledFromTop, (scrolled) => {
+  if (scrolled && focusTimer) {
+    window.clearTimeout(focusTimer)
+    focusTimer = undefined
+  }
+})
+
+watchEffect(() => {
+  const visible = new Set(visibleRaceIds.value)
+  legendBusy.value = chartBindings().some(
+    ({ raceId, chart }) => Boolean(raceId && visible.has(raceId) && chart.value?.isLegendBusy),
+  )
+})
+
 onMounted(() => {
   if (isReaderSession.value) {
     void station.fetchCurrent().catch(() => {
@@ -543,6 +739,10 @@ onMounted(() => {
       void refreshPending()
     }
   }
+
+  countdownTickTimer = window.setInterval(() => {
+    nowMs.value = Date.now()
+  }, 1000)
 
   pollTimer = window.setInterval(() => {
     syncOnlineState()
@@ -575,20 +775,30 @@ onMounted(() => {
     }
     void refreshPending()
   })
+
+  const onScrollCheck = () => updatePageScrolledFromTop()
+  window.addEventListener('scroll', onScrollCheck, { passive: true })
+  removeScrollListener = () => {
+    window.removeEventListener('scroll', onScrollCheck)
+  }
 })
 
 onUnmounted(() => {
+  clearCelebrationTimers()
   if (pollTimer) window.clearInterval(pollTimer)
+  if (countdownTickTimer) window.clearInterval(countdownTickTimer)
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('online', onBrowserOnline)
   window.removeEventListener('offline', onBrowserOffline)
   removeOnlineListener?.()
   removePendingListener?.()
+  removeScrollListener?.()
 })
 </script>
 
 <style scoped>
 .event-live {
+  position: relative;
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 2rem;
@@ -813,6 +1023,12 @@ td {
   border-radius: 50%;
   margin-right: 0.35rem;
   vertical-align: middle;
+}
+
+.leaderboard-row--focus {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .fs-root {

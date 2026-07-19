@@ -5,7 +5,31 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import EventLive from '@/views/EventLive.vue'
 import { setupPinia, createTestRouter } from '@/test/helpers'
-import { eventsLiveApi, rfidApi } from '@/services/api'
+import { eventsLiveApi, rfidApi, type LapRecordedEvent } from '@/services/api'
+
+const { lastLap, isBusyMock } = vi.hoisted(() => {
+  const { ref } = require('vue') as typeof import('vue')
+  return {
+    lastLap: ref<LapRecordedEvent | null>(null),
+    isBusyMock: ref(false),
+  }
+})
+
+vi.mock('@/composables/useEventLiveStream', () => ({
+  useEventLiveStream: () => ({
+    lastLap,
+    connected: require('vue').ref(false),
+    start: vi.fn(),
+    stop: vi.fn(),
+  }),
+}))
+
+vi.mock('@/composables/useSpectatorIdle', () => ({
+  useSpectatorIdle: () => ({
+    isBusy: isBusyMock,
+    noteInteraction: vi.fn(),
+  }),
+}))
 
 vi.mock('@/services/api', async () => {
   const actual = await vi.importActual<typeof import('@/services/api')>('@/services/api')
@@ -91,10 +115,25 @@ const livePayload = {
   ],
 }
 
+function lapEvent(
+  overrides: Partial<LapRecordedEvent> & Pick<LapRecordedEvent, 'race_id' | 'participant_name'>,
+): LapRecordedEvent {
+  return {
+    type: 'lap_recorded',
+    event_id: 'evt-1',
+    participant_id: 'p1',
+    lap_count: 15,
+    recorded_at: '2026-08-01T11:05:00-04:00',
+    ...overrides,
+  }
+}
+
 describe('EventLive.vue', () => {
   beforeEach(() => {
     setupPinia()
     vi.clearAllMocks()
+    lastLap.value = null
+    isBusyMock.value = false
     ;(eventsLiveApi.getLive as Mock).mockResolvedValue({ data: livePayload })
   })
 
@@ -116,8 +155,21 @@ describe('EventLive.vue', () => {
           ScanPopup: true,
           RaceFlowChart: {
             name: 'RaceFlowChart',
-            props: ['raceId', 'raceStatus', 'raceStartTime', 'raceType', 'durationMinutes'],
+            props: [
+              'raceId',
+              'raceStatus',
+              'raceStartTime',
+              'raceType',
+              'durationMinutes',
+              'highlightParticipantId',
+            ],
             template: '<div data-testid="race-flow-chart-stub" />',
+            setup() {
+              return {
+                loadRecords: vi.fn().mockResolvedValue(undefined),
+                isLegendBusy: false,
+              }
+            },
           },
         },
       },
@@ -192,6 +244,25 @@ describe('EventLive.vue', () => {
 
     expect(wrapper.find('[data-testid="live-countdown"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('Countdown')
+  })
+
+  it('ticks countdown every second between live polls', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = await mountLive()
+      const countdown = wrapper.find('[data-testid="live-countdown"]')
+      expect(countdown.text()).toBe('01:00:00')
+
+      await vi.advanceTimersByTimeAsync(1000)
+      await nextTick()
+      expect(countdown.text()).toBe('00:59:59')
+
+      await vi.advanceTimersByTimeAsync(1000)
+      await nextTick()
+      expect(countdown.text()).toBe('00:59:58')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('passes race type and start time into race flow charts', async () => {
@@ -305,5 +376,59 @@ describe('EventLive.vue', () => {
     expect(src).toMatch(
       /fullscreen-rotator[\s\S]*--live-display-scale:\s*1\.35|--live-display-scale:\s*1\.25/,
     )
+  })
+
+  describe('lap celebration', () => {
+    it('shows overlay when lap recorded for visible race', async () => {
+      const wrapper = await mountLive()
+
+      lastLap.value = lapEvent({ race_id: 'r-12', participant_name: 'Alex Rivera' })
+      await nextTick()
+
+      const celebration = wrapper.find('[data-testid="lap-celebration"]')
+      expect(celebration.exists()).toBe(true)
+      expect(celebration.text()).toContain('Alex Rivera')
+      expect(celebration.text()).toContain('+1')
+    })
+
+    it('shows overlay but skips highlight when spectator is busy', async () => {
+      isBusyMock.value = true
+      const wrapper = await mountLive()
+
+      lastLap.value = lapEvent({ race_id: 'r-12', participant_name: 'Alex Rivera' })
+      await nextTick()
+
+      expect(wrapper.find('[data-testid="lap-celebration"]').exists()).toBe(true)
+      const chart = wrapper.findComponent({ name: 'RaceFlowChart' })
+      expect(chart.props('highlightParticipantId')).toBeUndefined()
+      const row = wrapper.find('[data-testid="leaderboard-row"]')
+      expect(row.classes()).not.toContain('leaderboard-row--focus')
+    })
+
+    it('updates overlay name on rapid laps (latest-wins)', async () => {
+      const wrapper = await mountLive()
+
+      lastLap.value = lapEvent({ race_id: 'r-12', participant_name: 'Alex Rivera' })
+      await nextTick()
+      lastLap.value = lapEvent({
+        race_id: 'r-12',
+        participant_id: 'p2',
+        participant_name: 'Jordan Lee',
+      })
+      await nextTick()
+
+      const celebration = wrapper.find('[data-testid="lap-celebration"]')
+      expect(celebration.text()).toContain('Jordan Lee')
+      expect(celebration.text()).not.toContain('Alex Rivera')
+    })
+
+    it('ignores lap for non-visible race', async () => {
+      const wrapper = await mountLive()
+
+      lastLap.value = lapEvent({ race_id: 'r-90', participant_name: 'Kid Runner' })
+      await nextTick()
+
+      expect(wrapper.find('[data-testid="lap-celebration"]').exists()).toBe(false)
+    })
   })
 })

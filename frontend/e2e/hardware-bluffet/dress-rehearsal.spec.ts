@@ -558,7 +558,6 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
           outageStarted = true
           state.chaos.apiOutage = true
           writeStatusNow()
-          outagePreServerLaps = await totalScoredLaps().catch(() => 0)
           try {
             outagePreBridgePending = (await fetchLocalBridgeStatus()).pending_count
           } catch (err) {
@@ -572,6 +571,9 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
             laptop: await snapshotVisibleLaps(laptopPage).catch(() => 0),
             iphone: await snapshotVisibleLaps(iphonePage).catch(() => 0),
           }
+          // Partition BEFORE snapshotting hosted laps. In-flight bridge→hosted
+          // reads from the previous tick can land after OUTAGE_START; capturing
+          // pre= too early falsely flags those as partition leaks.
           await partitionFromHosted([laptopCtx!, iphoneCtx!])
           try {
             await waitForReaderChip(reader!.page, 'offline', 45_000)
@@ -583,6 +585,17 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
               { screenshot: await screenshotFor('outage-offline-chip', reader!.page) },
             )
           }
+          await sleep(2_000)
+          // Hold until hosted lap total is stable so late WS reads from the
+          // pre-partition window don't look like partition leaks.
+          let stable = await totalScoredLaps().catch(() => 0)
+          for (let i = 0; i < 5; i++) {
+            await sleep(1_000)
+            const again = await totalScoredLaps().catch(() => stable)
+            if (again === stable) break
+            stable = again
+          }
+          outagePreServerLaps = stable
         }
         if (outageStarted && !outageEnded) {
           if (now >= tZero.getTime() + OUTAGE_START_OFFSET_MS + OUTAGE_DURATION_MS) {
@@ -613,12 +626,18 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
               )
             }
 
-            const postHealLaps = await totalScoredLaps().catch(() => outagePreServerLaps)
-            if (postHealLaps < outagePreServerLaps + outageLapsScored) {
+            const postHealTarget = outagePreServerLaps + outageLapsScored
+            let postHealLaps = await totalScoredLaps().catch(() => outagePreServerLaps)
+            const catchUpDeadline = Date.now() + 60_000
+            while (postHealLaps < postHealTarget && Date.now() < catchUpDeadline) {
+              await sleep(2_000)
+              postHealLaps = await totalScoredLaps().catch(() => postHealLaps)
+            }
+            if (postHealLaps < postHealTarget) {
               await issue(
                 'critical',
                 'Hosted lap total did not catch up after automatic bridge sync',
-                `expected ≥ ${outagePreServerLaps + outageLapsScored} (pre=${outagePreServerLaps} ` +
+                `expected ≥ ${postHealTarget} (pre=${outagePreServerLaps} ` +
                   `+ outage=${outageLapsScored}), got ${postHealLaps}`,
               )
             }

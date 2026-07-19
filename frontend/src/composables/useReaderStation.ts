@@ -92,6 +92,15 @@ function createReaderStation(): UseReaderStation {
   function onMessage(ev: MessageEvent) {
     try {
       const raw = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
+      if (raw?.type === 'scan_result' && raw.scan) {
+        lastScan.value = raw.scan as ScanResult
+        const tagUid = String(raw.tag_uid || '')
+        if (tagUid && raw.scan.result === 'lap') {
+          void rememberScan(tagUid, raw.scan as ScanResult)
+        }
+        error.value = null
+        return
+      }
       if (raw?.type === 'tag_read' && raw.tag_uid) {
         void handleTagRead(String(raw.tag_uid), raw.read_at)
       }

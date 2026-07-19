@@ -9,6 +9,8 @@ import {
 export interface FlowPoint {
   elapsedMinutes: number
   value: number
+  /** Present on real scored taps; omitted on gun-start origin. */
+  kind?: 'rfid' | 'karaoke'
 }
 
 export interface ParticipantFlow {
@@ -307,7 +309,11 @@ export function buildExtrapolationPoint(
   currentElapsedMinutes: number,
 ): FlowPoint | null {
   const lastPoint = flow.points.at(-1)
-  if (!lastPoint || currentElapsedMinutes <= lastPoint.elapsedMinutes) {
+  if (
+    !lastPoint ||
+    lastPoint.value <= 0 ||
+    currentElapsedMinutes <= lastPoint.elapsedMinutes
+  ) {
     return null
   }
 
@@ -317,15 +323,120 @@ export function buildExtrapolationPoint(
   }
 }
 
-function buildLapFlows(records: TimingRecord[], raceStartMs: number): ParticipantFlow[] {
+/** Collapse duplicate RFID taps inside the cooldown window (not karaoke). */
+const LAP_POINT_MERGE_MINUTES = 1
+
+export type LapPointKind = 'rfid' | 'karaoke'
+
+function isScoredLapRecord(record: TimingRecord): boolean {
+  const recordType = record.record_type ?? 'rfid_lap'
+  return recordType === 'rfid_lap' || recordType === 'karaoke_bonus'
+}
+
+function lapKindForRecord(record: TimingRecord): LapPointKind {
+  return record.record_type === 'karaoke_bonus' ? 'karaoke' : 'rfid'
+}
+
+function pushLapPoint(
+  flow: ParticipantFlow,
+  elapsedMinutes: number,
+  laps: number,
+  kind: LapPointKind,
+): void {
+  if (flow.points.length === 0) {
+    flow.points.push({ elapsedMinutes: 0, value: 0 })
+  }
+
+  const last = flow.points.at(-1)!
+  const x = Math.max(0, last.elapsedMinutes, elapsedMinutes)
+
+  // Never merge into the gun-start origin — every series must keep (0, 0).
+  if (last.elapsedMinutes === 0 && last.value === 0) {
+    flow.points.push({ elapsedMinutes: x, value: laps, kind })
+    return
+  }
+
+  // Karaoke bonuses are always their own plotted point (music note).
+  if (kind === 'karaoke' || last.kind === 'karaoke') {
+    flow.points.push({ elapsedMinutes: x, value: laps, kind })
+    return
+  }
+
+  if (x - last.elapsedMinutes <= LAP_POINT_MERGE_MINUTES) {
+    last.elapsedMinutes = x
+    last.value = Math.max(last.value, laps)
+    last.kind = 'rfid'
+    return
+  }
+
+  flow.points.push({ elapsedMinutes: x, value: laps, kind })
+}
+
+/** Build axis-aligned step vertices so Chart.js cannot bezier between taps. */
+export function expandSteppedLapPoints(
+  points: Array<{ x: number; y: number; kind?: LapPointKind }>,
+): Array<{ x: number; y: number; kind?: LapPointKind }> {
+  if (points.length === 0) {
+    return []
+  }
+
+  const out: Array<{ x: number; y: number; kind?: LapPointKind }> = [
+    { x: points[0].x, y: points[0].y, kind: points[0].kind },
+  ]
+  for (let index = 1; index < points.length; index += 1) {
+    const prev = points[index - 1]
+    const curr = points[index]
+    if (curr.x !== prev.x) {
+      out.push({ x: curr.x, y: prev.y })
+    }
+    const last = out.at(-1)!
+    if (last.x !== curr.x || last.y !== curr.y) {
+      out.push({ x: curr.x, y: curr.y, kind: curr.kind })
+    } else if (curr.kind) {
+      last.kind = curr.kind
+    }
+  }
+  return out
+}
+
+function buildLapFlows(
+  records: TimingRecord[],
+  raceStartMs: number,
+  registeredParticipants?: Array<{
+    id: string
+    bib_number: string
+    first_name: string
+    last_name: string
+    gender?: string
+    age?: number
+    status: ParticipantStatus
+  }>,
+): ParticipantFlow[] {
   const finishRecords = records
     .filter((record) => record.checkpoint?.checkpoint_type === 'finish' && record.participant)
+    .filter((record) => isScoredLapRecord(record))
+    .filter((record) => new Date(record.timestamp).getTime() >= raceStartMs)
     .sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     )
 
   const lapCounts = new Map<string, number>()
   const flows = new Map<string, ParticipantFlow>()
+
+  for (const participant of registeredParticipants ?? []) {
+    const flow = createParticipantFlow({
+      id: participant.id,
+      race_id: '',
+      bib_number: participant.bib_number,
+      first_name: participant.first_name,
+      last_name: participant.last_name,
+      gender: participant.gender,
+      age: participant.age,
+      status: participant.status,
+    })
+    flow.points.push({ elapsedMinutes: 0, value: 0 })
+    flows.set(participant.id, flow)
+  }
 
   for (const record of finishRecords) {
     const participant = record.participant!
@@ -335,13 +446,16 @@ function buildLapFlows(records: TimingRecord[], raceStartMs: number): Participan
       (new Date(record.timestamp).getTime() - raceStartMs) / 60000
 
     const existingFlow = flows.get(participant.id) ?? createParticipantFlow(participant)
+    if (!flows.has(participant.id)) {
+      existingFlow.points.push({ elapsedMinutes: 0, value: 0 })
+    }
     existingFlow.status = participant.status
     existingFlow.gender = participant.gender
     existingFlow.genderKey = getParticipantGenderKey(participant.gender)
     existingFlow.age = participant.age
     existingFlow.ageGroup = getParticipantAgeGroupKey(participant.age)
     existingFlow.lastName = participant.last_name
-    existingFlow.points.push({ elapsedMinutes, value: laps })
+    pushLapPoint(existingFlow, elapsedMinutes, laps, lapKindForRecord(record))
     flows.set(participant.id, existingFlow)
   }
 
@@ -360,6 +474,7 @@ function buildDistanceFlows(
         record.checkpoint &&
         DISTANCE_CHECKPOINT_TYPES.has(record.checkpoint.checkpoint_type),
     )
+    .filter((record) => new Date(record.timestamp).getTime() >= raceStartMs)
     .sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     )
@@ -392,6 +507,15 @@ export function buildParticipantFlows(
   raceStartTime?: string,
   raceType: RaceType = 'time_based',
   unitSystem: UnitSystem = 'imperial',
+  registeredParticipants?: Array<{
+    id: string
+    bib_number: string
+    first_name: string
+    last_name: string
+    gender?: string
+    age?: number
+    status: ParticipantStatus
+  }>,
 ): ParticipantFlow[] {
   const raceStartMs = resolveRaceStartMs(records, raceStartTime)
   if (raceStartMs === null) {
@@ -399,7 +523,7 @@ export function buildParticipantFlows(
   }
 
   if (raceType === 'lap_based') {
-    return buildLapFlows(records, raceStartMs)
+    return buildLapFlows(records, raceStartMs, registeredParticipants)
   }
 
   return buildDistanceFlows(records, raceStartMs, unitSystem)

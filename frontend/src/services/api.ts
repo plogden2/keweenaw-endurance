@@ -323,6 +323,38 @@ export interface EventLiveResponse {
   races: EventLiveRace[]
 }
 
+export interface LapRecordedEvent {
+  type: 'lap_recorded'
+  event_id: string
+  race_id: string
+  participant_id: string
+  participant_name: string
+  bib_number?: string
+  lap_count: number
+  recorded_at: string
+}
+
+/** Convert HTTP(S) API base to WebSocket URL for the event live lap stream. */
+export function eventLiveStreamUrl(eventId: string, apiBase: string = baseURL): string {
+  const path = `/api/events/${eventId}/live/stream`
+  const trimmed = (apiBase || '').replace(/\/$/, '')
+  if (!trimmed) {
+    const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = typeof window !== 'undefined' ? window.location.host : 'localhost:8080'
+    return `${proto}//${host}${path}`
+  }
+  if (trimmed.startsWith('https://')) {
+    return `wss://${trimmed.slice('https://'.length)}${path}`
+  }
+  if (trimmed.startsWith('http://')) {
+    return `ws://${trimmed.slice('http://'.length)}${path}`
+  }
+  if (trimmed.startsWith('wss://') || trimmed.startsWith('ws://')) {
+    return `${trimmed}${path}`
+  }
+  return `ws://${trimmed}${path}`
+}
+
 /** Convert HTTP(S) API base to WebSocket URL for the RFID tag stream. */
 export function rfidStreamUrl(apiBase: string = baseURL): string {
   const trimmed = (apiBase || '').replace(/\/$/, '')

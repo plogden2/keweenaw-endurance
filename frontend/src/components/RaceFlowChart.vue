@@ -6,7 +6,9 @@
       Not enough timing data to render race flow yet.
     </p>
     <div v-else class="chart-panel">
-      <canvas ref="canvasRef" data-testid="race-flow-canvas" />
+      <div class="chart-canvas-host">
+        <canvas ref="canvasRef" data-testid="race-flow-canvas" />
+      </div>
       <div class="legend-panel" data-testid="race-flow-legend" aria-label="Participant legend">
         <div class="legend-controls">
           <div class="legend-controls-row">
@@ -156,7 +158,12 @@
         <p v-if="filteredLegendItems.length === 0" class="legend-empty">
           No participants match the current search or filters.
         </p>
-        <div v-else class="legend-items">
+        <div
+          v-else
+          ref="legendItemsRef"
+          class="legend-items"
+          @scroll="handleLegendScroll"
+        >
           <label
             v-for="item in filteredLegendItems"
             :key="item.participantId"
@@ -215,9 +222,9 @@ import {
   type Plugin,
 } from 'chart.js'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
-import { timingApi } from '@/services/api'
+import { timingApi, raceParticipantsApi } from '@/services/api'
 import { useUnitsStore } from '@/stores/units'
-import type { ParticipantStatus, RaceStatus, RaceType, TimingRecord } from '@/types/models'
+import type { Participant, ParticipantStatus, RaceStatus, RaceType, TimingRecord } from '@/types/models'
 import { resolveCategoryColor } from '@/themes/defaultLegend'
 import {
   buildExtrapolationPoint,
@@ -226,6 +233,7 @@ import {
   clampElapsedToDuration,
   compareAgeGroupKeys,
   compareGenderKeys,
+  expandSteppedLapPoints,
   getCurrentElapsedMinutes,
   getFlowChartTitle,
   getFlowYAxisLabel,
@@ -252,19 +260,37 @@ type FilterDropdownKey = 'status' | 'gender' | 'ageGroup'
 
 interface FlowLineDataset {
   label: string
-  data: Array<{ x: number; y: number }>
+  data: Array<{ x: number; y: number; kind?: 'rfid' | 'karaoke' }>
   borderColor: string
   backgroundColor: string
   pointBackgroundColor: string
   pointBorderColor: string
   borderWidth: number
   tension: number
+  stepped?: false | 'after'
   hasExtrapolation: boolean
   segment?: {
     borderDash: (ctx: { p1DataIndex: number }) => number[] | undefined
   }
   pointRadius?: number | number[]
+  pointStyle?: Array<'circle' | HTMLCanvasElement | HTMLImageElement | false>
   participantId?: string
+}
+
+const musicNoteStyleCache = new Map<string, HTMLImageElement>()
+
+function createMusicNotePointStyle(color: string): HTMLImageElement {
+  const cached = musicNoteStyleCache.get(color)
+  if (cached) {
+    return cached
+  }
+
+  const safeColor = color.replace(/[<>"']/g, '')
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><text x="10" y="14" text-anchor="middle" font-size="14" font-family="Georgia, serif" fill="${safeColor}">♪</text></svg>`
+  const img = new Image(20, 20)
+  img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+  musicNoteStyleCache.set(color, img)
+  return img
 }
 
 interface LegendItem {
@@ -334,9 +360,12 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const records = ref<TimingRecord[]>([])
+const registeredParticipants = ref<Participant[]>([])
 const chartInstance = ref<Chart | null>(null)
 const nowMs = ref(Date.now())
 const searchQuery = ref('')
+const legendItemsRef = ref<HTMLElement | null>(null)
+const legendScrollTop = ref(0)
 const selectedStatuses = ref<ParticipantStatus[]>([])
 const selectedGenders = ref<string[]>([])
 const selectedAgeGroups = ref<string[]>([])
@@ -354,6 +383,7 @@ const flows = computed(() =>
     props.raceStartTime,
     chartRaceType.value,
     unitsStore.unitSystem,
+    registeredParticipants.value,
   ),
 )
 const hasData = computed(() => flows.value.length > 0)
@@ -459,6 +489,46 @@ const allFilteredSelected = computed(() =>
     visibleParticipantIds.value.has(item.participantId),
   ),
 )
+
+const isLegendBusy = computed(() => {
+  if (searchQuery.value.trim() !== '') {
+    return true
+  }
+
+  if (legendScrollTop.value > 0) {
+    return true
+  }
+
+  if (
+    availableStatuses.value.length > 0 &&
+    selectedStatuses.value.length < availableStatuses.value.length
+  ) {
+    return true
+  }
+
+  if (
+    availableGenders.value.length > 0 &&
+    selectedGenders.value.length < availableGenders.value.length
+  ) {
+    return true
+  }
+
+  if (
+    availableAgeGroups.value.length > 0 &&
+    selectedAgeGroups.value.length < availableAgeGroups.value.length
+  ) {
+    return true
+  }
+
+  return false
+})
+
+function handleLegendScroll(event: Event): void {
+  const target = event.target
+  if (target instanceof HTMLElement) {
+    legendScrollTop.value = target.scrollTop
+  }
+}
 
 function syncFilterSelections(): void {
   selectedStatuses.value = mergeFilterSelections(
@@ -637,8 +707,12 @@ async function loadRecords(): Promise<void> {
   loading.value = true
   error.value = null
   try {
-    const { data } = await timingApi.getLive(props.raceId)
-    records.value = data.records ?? []
+    const [live, participantsRes] = await Promise.all([
+      timingApi.getLive(props.raceId),
+      raceParticipantsApi.list(props.raceId, { limit: 500 }),
+    ])
+    records.value = live.data.records ?? []
+    registeredParticipants.value = participantsRes.data.data ?? []
     nowMs.value = Date.now()
   } catch (err) {
     error.value = getErrorMessage(err, 'Failed to load race flow data')
@@ -728,37 +802,65 @@ function buildDataset(flow: (typeof flows.value)[number]): FlowLineDataset {
   const extrapolation = showCurrentTime
     ? buildExtrapolationPoint(flow, currentElapsedMinutes.value!)
     : null
-  const chartPoints = [
+  const rawPoints = [
     ...flow.points.map((point) => ({
       x: point.elapsedMinutes,
       y: point.value,
+      kind: point.kind,
     })),
   ]
 
   if (extrapolation) {
-    chartPoints.push({
+    rawPoints.push({
       x: extrapolation.elapsedMinutes,
       y: extrapolation.value,
+      kind: undefined,
     })
   }
+
+  const isLapChart = chartRaceType.value === 'lap_based'
+  const chartPoints = isLapChart ? expandSteppedLapPoints(rawPoints) : rawPoints
+  const lineStyle = getLineStyle(flow)
 
   const dataset: FlowLineDataset = {
     label: flow.label,
     data: chartPoints,
-    ...getLineStyle(flow),
-    tension: 0.2,
+    ...lineStyle,
+    tension: 0,
+    stepped: false,
     hasExtrapolation: extrapolation != null,
     participantId: flow.participantId,
   }
+
+  const isExtrapolationIndex = (pointIndex: number) =>
+    extrapolation != null && pointIndex === chartPoints.length - 1
+
+  dataset.pointRadius = chartPoints.map((point, pointIndex) => {
+    if (isExtrapolationIndex(pointIndex)) {
+      return 0
+    }
+    if (point.kind === 'karaoke') {
+      return 8
+    }
+    // Only show markers on real tap vertices, not the synthetic step corners.
+    return rawPoints.some((raw) => raw.x === point.x && raw.y === point.y && raw.kind) ? 4 : 0
+  })
+
+  dataset.pointStyle = chartPoints.map((point, pointIndex) => {
+    if (isExtrapolationIndex(pointIndex) || !point.kind) {
+      return false
+    }
+    if (point.kind === 'karaoke') {
+      return createMusicNotePointStyle(lineStyle.borderColor)
+    }
+    return 'circle'
+  })
 
   if (extrapolation) {
     dataset.segment = {
       borderDash: (ctx: { p1DataIndex: number }) =>
         ctx.p1DataIndex === chartPoints.length - 1 ? [6, 6] : undefined,
     }
-    dataset.pointRadius = chartPoints.map((_point, pointIndex) =>
-      pointIndex === chartPoints.length - 1 ? 0 : 4,
-    )
   }
 
   return dataset
@@ -808,9 +910,10 @@ function renderChart(): void {
     showCurrentTime,
   )
 
-  const tickSize = chartFontSize(12)
-  const axisTitleSize = chartFontSize(13)
-  const chartTitleSize = chartFontSize(14)
+  const tickSize = chartFontSize(20)
+  const axisTitleSize = chartFontSize(22)
+  const chartTitleSize = chartFontSize(20)
+  const axisInk = '#1a3f3d'
 
   chartInstance.value = new Chart(canvasRef.value, {
     type: 'line',
@@ -836,12 +939,17 @@ function renderChart(): void {
       scales: {
         x: {
           type: 'linear',
+          min: 0,
           title: {
             display: true,
             text: 'Elapsed time (minutes)',
-            font: { size: axisTitleSize },
+            color: axisInk,
+            font: { size: axisTitleSize, weight: 'bold' },
           },
-          ticks: { font: { size: tickSize } },
+          ticks: {
+            color: axisInk,
+            font: { size: tickSize },
+          },
           max: xAxisMax,
         },
         y: {
@@ -849,9 +957,11 @@ function renderChart(): void {
           title: {
             display: true,
             text: getFlowYAxisLabel(chartRaceType.value, unitsStore.unitSystem),
-            font: { size: axisTitleSize },
+            color: axisInk,
+            font: { size: axisTitleSize, weight: 'bold' },
           },
           ticks: {
+            color: axisInk,
             ...(chartRaceType.value === 'lap_based' ? { stepSize: 1 } : {}),
             font: { size: tickSize },
           },
@@ -863,7 +973,8 @@ function renderChart(): void {
         title: {
           display: true,
           text: getFlowChartTitle(chartRaceType.value, showCurrentTime),
-          font: { size: chartTitleSize },
+          color: axisInk,
+          font: { size: chartTitleSize, weight: 'bold' },
         },
       } as Record<string, unknown>,
     },
@@ -948,6 +1059,7 @@ defineExpose({
   visibleParticipantIds,
   filteredLegendItems,
   hoveredParticipantId,
+  isLegendBusy,
 })
 </script>
 
@@ -962,9 +1074,10 @@ defineExpose({
   gap: 1rem;
 }
 
-canvas {
-  width: 100% !important;
-  height: 320px !important;
+.chart-canvas-host {
+  position: relative;
+  width: 100%;
+  height: 320px;
 }
 
 .legend-panel {

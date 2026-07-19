@@ -6,7 +6,9 @@
       Not enough timing data to render race flow yet.
     </p>
     <div v-else class="chart-panel">
-      <canvas ref="canvasRef" data-testid="participant-flow-canvas" />
+      <div class="chart-canvas-host">
+        <canvas ref="canvasRef" data-testid="participant-flow-canvas" />
+      </div>
     </div>
   </section>
 </template>
@@ -30,6 +32,7 @@ import {
   buildExtrapolationPoint,
   buildParticipantFlows,
   clampElapsedToDuration,
+  expandSteppedLapPoints,
   getCurrentElapsedMinutes,
   getFlowChartTitle,
   getFlowLineColor,
@@ -152,17 +155,20 @@ function renderChart(): void {
   const extrapolation = showCurrentTime
     ? buildExtrapolationPoint(flow, currentElapsedMinutes.value!)
     : null
-  const chartPoints = flow.points.map((point) => ({
+  const rawPoints = flow.points.map((point) => ({
     x: point.elapsedMinutes,
     y: point.value,
   }))
 
   if (extrapolation) {
-    chartPoints.push({
+    rawPoints.push({
       x: extrapolation.elapsedMinutes,
       y: extrapolation.value,
     })
   }
+
+  const isLapChart = chartRaceType.value === 'lap_based'
+  const chartPoints = isLapChart ? expandSteppedLapPoints(rawPoints) : rawPoints
 
   const recordedMaxMinutes = flow.points.reduce(
     (max, point) => Math.max(max, point.elapsedMinutes),
@@ -187,16 +193,20 @@ function renderChart(): void {
           pointBackgroundColor: color,
           pointBorderColor: color,
           borderWidth: 3,
-          tension: 0.2,
+          tension: 0,
+          stepped: false,
           ...(extrapolation
             ? {
                 segment: {
                   borderDash: (ctx: { p1DataIndex: number }) =>
                     ctx.p1DataIndex === chartPoints.length - 1 ? [6, 6] : undefined,
                 },
-                pointRadius: chartPoints.map((_point, pointIndex) =>
-                  pointIndex === chartPoints.length - 1 ? 0 : 4,
-                ),
+                pointRadius: chartPoints.map((point, pointIndex) => {
+                  if (pointIndex === chartPoints.length - 1) {
+                    return 0
+                  }
+                  return rawPoints.some((raw) => raw.x === point.x && raw.y === point.y) ? 4 : 0
+                }),
               }
             : {}),
         },
@@ -208,7 +218,14 @@ function renderChart(): void {
       scales: {
         x: {
           type: 'linear',
-          title: { display: true, text: 'Elapsed time (minutes)' },
+          min: 0,
+          title: {
+            display: true,
+            text: 'Elapsed time (minutes)',
+            color: '#1a3f3d',
+            font: { size: 18, weight: 'bold' },
+          },
+          ticks: { color: '#1a3f3d', font: { size: 16 } },
           max: xAxisMax,
         },
         y: {
@@ -216,8 +233,14 @@ function renderChart(): void {
           title: {
             display: true,
             text: getFlowYAxisLabel(chartRaceType.value, unitsStore.unitSystem),
+            color: '#1a3f3d',
+            font: { size: 18, weight: 'bold' },
           },
-          ticks: chartRaceType.value === 'lap_based' ? { stepSize: 1 } : undefined,
+          ticks: {
+            color: '#1a3f3d',
+            font: { size: 16 },
+            ...(chartRaceType.value === 'lap_based' ? { stepSize: 1 } : {}),
+          },
         },
       },
       plugins: {
@@ -225,6 +248,8 @@ function renderChart(): void {
         title: {
           display: true,
           text: getFlowChartTitle(chartRaceType.value, showCurrentTime),
+          color: '#1a3f3d',
+          font: { size: 18, weight: 'bold' },
         },
       },
     },
@@ -279,9 +304,10 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
 }
 
-canvas {
-  width: 100% !important;
-  height: 280px !important;
+.chart-canvas-host {
+  position: relative;
+  width: 100%;
+  height: 280px;
 }
 
 .status,

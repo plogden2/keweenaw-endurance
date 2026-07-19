@@ -146,6 +146,40 @@ describe('useReaderStation', () => {
     stop()
   })
 
+  it('applies scan_result from bridge without posting a second scan', async () => {
+    unlockReaderPin()
+    const station = useStationStore()
+    station.eventId = 'evt-1'
+    station.deviceId = 'laptop-finish-1'
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop, lastScan } = useReaderStation()
+    start()
+
+    MockWebSocket.instances[0].emit({
+      type: 'scan_result',
+      tag_uid: '9fe78eeb-a21c-594a-acc2-7e1efe378201',
+      read_at: '2026-08-01T12:00:01-04:00',
+      scan: {
+        result: 'lap',
+        participant_name: 'Alex Rivera',
+        lap_count: 1,
+        bib_number: '1',
+        timing_record_id: 'tr-bridge-1',
+        karaoke_available: true,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(lastScan.value?.result).toBe('lap')
+    })
+    expect(scansApi.postScan).not.toHaveBeenCalled()
+    expect(lastScan.value?.lap_count).toBe(1)
+    expect(lastScan.value?.timing_record_id).toBe('tr-bridge-1')
+
+    stop()
+  })
+
   it('skips posting when browser is not PIN-unlocked (spectator)', async () => {
     const station = useStationStore()
     station.eventId = 'evt-1'

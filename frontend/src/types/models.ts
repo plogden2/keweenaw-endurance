@@ -139,6 +139,7 @@ export interface TimingRecord {
   local_timestamp: string
   device_id?: string
   sync_status: SyncStatus
+  record_type?: 'rfid_lap' | 'karaoke_bonus' | 'checkpoint_pass' | string
   participant?: Participant
   checkpoint?: Checkpoint
 }
