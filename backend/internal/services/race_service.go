@@ -179,6 +179,35 @@ func (s *RaceService) AutoStartDueRaces(now time.Time) (int, error) {
 	return int(result.RowsAffected), nil
 }
 
+// AutoFinishDueRaces promotes active races to finished when
+// start_time + duration_minutes <= now. Returns how many races were finished.
+//
+// Races with duration_minutes <= 0 are left active (manual finish only).
+func (s *RaceService) AutoFinishDueRaces(now time.Time) (int, error) {
+	var races []models.Race
+	if err := s.db.Where("status = ? AND duration_minutes > 0", "active").Find(&races).Error; err != nil {
+		return 0, err
+	}
+
+	nowUTC := now.UTC()
+	finished := 0
+	for i := range races {
+		race := &races[i]
+		if race.StartTime.IsZero() {
+			continue
+		}
+		end := race.StartTime.UTC().Add(time.Duration(race.DurationMinutes) * time.Minute)
+		if end.After(nowUTC) {
+			continue
+		}
+		if err := s.db.Model(race).Update("status", "finished").Error; err != nil {
+			return finished, err
+		}
+		finished++
+	}
+	return finished, nil
+}
+
 // StartRace manually transitions a scheduled race to active (PIN/admin).
 func (s *RaceService) StartRace(id uuid.UUID) (*models.Race, error) {
 	race, err := s.GetRace(id)

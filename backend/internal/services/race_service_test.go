@@ -166,6 +166,51 @@ func TestRaceService_AutoStartDueRaces(t *testing.T) {
 	assert.Equal(t, 0, n)
 }
 
+func TestRaceService_AutoFinishDueRaces(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	svc := NewRaceService(db)
+
+	expiredStart := time.Now().UTC().Add(-45 * time.Minute)
+	stillRunningStart := time.Now().UTC().Add(-10 * time.Minute)
+
+	expired, err := svc.CreateRace(&models.Race{
+		EventID:         event.ID,
+		Name:            "Expired Race",
+		RaceType:        "lap_based",
+		DurationMinutes: 30,
+		StartTime:       expiredStart,
+		Status:          "active",
+	})
+	require.NoError(t, err)
+
+	running, err := svc.CreateRace(&models.Race{
+		EventID:         event.ID,
+		Name:            "Still Running",
+		RaceType:        "lap_based",
+		DurationMinutes: 60,
+		StartTime:       stillRunningStart,
+		Status:          "active",
+	})
+	require.NoError(t, err)
+
+	n, err := svc.AutoFinishDueRaces(time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+
+	done, err := svc.GetRace(expired.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, "finished", done.Status)
+
+	stillActive, err := svc.GetRace(running.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, "active", stillActive.Status)
+
+	n, err = svc.AutoFinishDueRaces(time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+}
+
 func TestRaceService_StartAndFinishRace(t *testing.T) {
 	db := setupServiceTestDB(t)
 	event := createTestEvent(t, db)

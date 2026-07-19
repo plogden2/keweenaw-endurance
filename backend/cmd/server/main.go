@@ -173,21 +173,26 @@ func main() {
 		}
 	}
 
-	// Background ticker: auto-start scheduled races when start_time is reached
-	autoStartCtx, autoStartCancel := context.WithCancel(context.Background())
-	defer autoStartCancel()
+	// Background ticker: auto-start due races and auto-finish expired ones
+	autoRaceCtx, autoRaceCancel := context.WithCancel(context.Background())
+	defer autoRaceCancel()
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-autoStartCtx.Done():
+			case <-autoRaceCtx.Done():
 				return
 			case now := <-ticker.C:
 				if n, err := svc.Races.AutoStartDueRaces(now); err != nil {
 					log.Printf("auto-start races: %v", err)
 				} else if n > 0 {
 					log.Printf("auto-started %d race(s)", n)
+				}
+				if n, err := svc.Races.AutoFinishDueRaces(now); err != nil {
+					log.Printf("auto-finish races: %v", err)
+				} else if n > 0 {
+					log.Printf("auto-finished %d race(s)", n)
 				}
 			}
 		}
@@ -227,7 +232,7 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
-	autoStartCancel()
+	autoRaceCancel()
 	pollCancel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -1,11 +1,23 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeEach, describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import Home from './Home.vue'
 import { useEventsStore } from '@/stores/events'
+import { racesApi } from '@/services/api'
+
+vi.mock('@/services/api', async () => {
+  const actual = await vi.importActual<typeof import('@/services/api')>('@/services/api')
+  return {
+    ...actual,
+    racesApi: {
+      ...actual.racesApi,
+      list: vi.fn(),
+    },
+  }
+})
 
 const bluffetCss = readFileSync(
   join(process.cwd(), 'src/themes/bluffet.css'),
@@ -33,22 +45,25 @@ describe('Home.vue', () => {
     setActivePinia(createPinia())
     const eventsStore = useEventsStore()
     vi.spyOn(eventsStore, 'fetchEvents').mockResolvedValue()
+    vi.mocked(racesApi.list).mockReset()
+    vi.mocked(racesApi.list).mockResolvedValue({ data: { data: [] } } as never)
   })
 
-  it('renders hero and link to timing section', async () => {
+  it('shows only the featured event (hero and upcoming races commented out)', async () => {
     const router = createHomeRouter()
     await router.push('/')
     await router.isReady()
 
     const wrapper = mount(Home, { global: { plugins: [router] } })
 
-    expect(wrapper.text()).toContain('Keweenaw Endurance Syndicate Race Timing')
-    const cta = wrapper.find('[data-testid="timing-cta"]')
-    // No Bluffet id yet → events list
-    expect(cta.attributes('href')).toBe('/timing')
+    expect(wrapper.find('[data-testid="timing-cta"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Keweenaw Endurance Syndicate Race Timing')
+    expect(wrapper.text()).not.toContain('Upcoming Races')
+    expect(wrapper.findAll('[data-testid="race-card"]')).toHaveLength(0)
+    expect(wrapper.find('#featured-event').exists()).toBe(true)
   })
 
-  it('shows featured Bluffet links', async () => {
+  it('shows featured Bluffet links with Live race flow before races finish', async () => {
     const eventsStore = useEventsStore()
     eventsStore.events = [
       {
@@ -58,12 +73,15 @@ describe('Home.vue', () => {
         status: 'upcoming',
       },
     ]
+    vi.mocked(racesApi.list).mockResolvedValue({
+      data: { data: [{ id: 'r1', status: 'scheduled' }] },
+    } as never)
 
     const router = createHomeRouter()
     await router.push('/')
     await router.isReady()
     const wrapper = mount(Home, { global: { plugins: [router] } })
-    await wrapper.vm.$nextTick()
+    await flushPromises()
 
     const registerLink = wrapper.find('[data-testid="bluffet-link"]')
     expect(registerLink.attributes('href')).toBe('https://www.copperharbortrails.org/bluffet')
@@ -71,9 +89,7 @@ describe('Home.vue', () => {
 
     const timingLink = wrapper.find('[data-testid="bluffet-timing-link"]')
     expect(timingLink.attributes('href')).toBe('/events/a1b2c3/live')
-    expect(wrapper.find('[data-testid="timing-cta"]').attributes('href')).toBe(
-      '/events/a1b2c3/live',
-    )
+    expect(timingLink.text()).toBe('Live race flow')
     const poster = wrapper.find('[data-testid="bluffet-poster"]')
     expect(poster.exists()).toBe(true)
     expect(poster.find('source[type="image/avif"]').attributes('srcset')).toBe(
@@ -85,6 +101,64 @@ describe('Home.vue', () => {
     expect(wrapper.find('.featured-logo').attributes('alt')).toBe('All You Can East Bluffet')
     expect(wrapper.find('.featured-event').classes()).toContain('bluffet-theme')
     expect(wrapper.text()).toContain('August 1, 2026')
+  })
+
+  it('labels the featured timing link Results after races are finished', async () => {
+    const eventsStore = useEventsStore()
+    eventsStore.events = [
+      {
+        id: 'a1b2c3',
+        name: 'All You Can East Bluffet',
+        event_date: '2026-08-01',
+        status: 'upcoming',
+      },
+    ]
+    vi.mocked(racesApi.list).mockResolvedValue({
+      data: {
+        data: [
+          { id: 'r1', status: 'finished' },
+          { id: 'r2', status: 'finished' },
+        ],
+      },
+    } as never)
+
+    const router = createHomeRouter()
+    await router.push('/')
+    await router.isReady()
+    const wrapper = mount(Home, { global: { plugins: [router] } })
+    await flushPromises()
+
+    const timingLink = wrapper.find('[data-testid="bluffet-timing-link"]')
+    expect(timingLink.text()).toBe('Results')
+    expect(timingLink.attributes('href')).toBe('/events/a1b2c3/live')
+  })
+
+  it('keeps Live race flow while any race is still active', async () => {
+    const eventsStore = useEventsStore()
+    eventsStore.events = [
+      {
+        id: 'a1b2c3',
+        name: 'All You Can East Bluffet',
+        event_date: '2026-08-01',
+        status: 'active',
+      },
+    ]
+    vi.mocked(racesApi.list).mockResolvedValue({
+      data: {
+        data: [
+          { id: 'r1', status: 'finished' },
+          { id: 'r2', status: 'active' },
+        ],
+      },
+    } as never)
+
+    const router = createHomeRouter()
+    await router.push('/')
+    await router.isReady()
+    const wrapper = mount(Home, { global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="bluffet-timing-link"]').text()).toBe('Live race flow')
   })
 
   it('keeps the local Bluffet featured register link readable on tan paper', () => {
@@ -109,24 +183,5 @@ describe('Home.vue', () => {
     expect(bluffetCss).not.toMatch(
       /#app\.theme-bluffet\s+\.legend-item\s*\{[^}]*background:\s*var\(--bluffet-red\)/s,
     )
-  })
-
-  it('renders teaser race cards with external links only', () => {
-    const router = createHomeRouter()
-    const wrapper = mount(Home, { global: { plugins: [router] } })
-
-    const cards = wrapper.findAll('[data-testid="race-card"]')
-    expect(cards).toHaveLength(3)
-
-    const externalLinks = wrapper.findAll('[data-testid="race-external-link"]')
-    expect(externalLinks).toHaveLength(3)
-    for (const link of externalLinks) {
-      expect(link.attributes('href')).toMatch(/^https:\/\//)
-      expect(link.attributes('rel')).toContain('nofollow')
-      expect(link.attributes('target')).toBe('_blank')
-    }
-
-    expect(wrapper.text()).toContain('Summer Trail Challenge')
-    expect(wrapper.text()).not.toContain('event_date')
   })
 })

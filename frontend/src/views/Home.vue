@@ -1,5 +1,6 @@
 <template>
   <div class="home">
+    <!--
     <section class="hero">
       <div class="hero-content">
         <h1 class="hero-title">Keweenaw Endurance Syndicate Race Timing</h1>
@@ -13,6 +14,7 @@
         </router-link>
       </div>
     </section>
+    -->
 
     <section class="featured-event bluffet-theme" aria-labelledby="featured-event">
       <h2 id="featured-event">Featured Event</h2>
@@ -33,7 +35,7 @@
             class="featured-timing-link"
             data-testid="bluffet-timing-link"
           >
-            Live race flow
+            {{ featuredTimingLabel }}
           </router-link>
           <a
             href="https://www.copperharbortrails.org/bluffet"
@@ -52,6 +54,7 @@
       </div>
     </section>
 
+    <!--
     <section class="upcoming-races" aria-labelledby="upcoming-races">
       <h2 id="upcoming-races">Upcoming Races</h2>
       <div class="race-grid">
@@ -64,13 +67,15 @@
         />
       </div>
     </section>
+    -->
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import RaceCard from '@/components/RaceCard.vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { racesApi } from '@/services/api'
 import { useEventsStore } from '@/stores/events'
+import type { RaceStatus } from '@/types/models'
 import {
   BLUFFET_EVENT_NAME,
   BLUFFET_POSTER_AVIF,
@@ -81,24 +86,61 @@ const eventsStore = useEventsStore()
 const posterAvif = BLUFFET_POSTER_AVIF
 const posterPng = BLUFFET_POSTER_PNG
 
-const bluffetEventId = computed(() => {
-  const event =
+const bluffetEvent = computed(() => {
+  return (
     eventsStore.events.find((e) => e.name === BLUFFET_EVENT_NAME) ??
     (eventsStore.currentEvent?.name === BLUFFET_EVENT_NAME
       ? eventsStore.currentEvent
       : undefined)
-  return event?.id
+  )
 })
 
-/** Hero CTA links to Bluffet live when known; otherwise the events list. Home never auto-redirects. */
-const liveTimingTarget = computed(() =>
-  bluffetEventId.value ? `/events/${bluffetEventId.value}/live` : '/timing',
+const bluffetEventId = computed(() => bluffetEvent.value?.id)
+
+const bluffetRaceStatuses = ref<RaceStatus[]>([])
+
+/** True when Bluffet has races and none remain active/scheduled (all finished or cancelled). */
+const eventIsOver = computed(() => {
+  if (bluffetEvent.value?.status === 'completed') return true
+  const statuses = bluffetRaceStatuses.value
+  if (statuses.length === 0) return false
+  const stillOpen = statuses.some((s) => {
+    const status = (s || '').toLowerCase()
+    return status === 'active' || status === 'scheduled' || status === 'in_progress' || status === 'started' || status === 'running'
+  })
+  return !stillOpen
+})
+
+const featuredTimingLabel = computed(() =>
+  eventIsOver.value ? 'Results' : 'Live race flow',
+)
+
+async function loadBluffetRaceStatuses(eventId: string | undefined) {
+  if (!eventId) {
+    bluffetRaceStatuses.value = []
+    return
+  }
+  try {
+    const { data } = await racesApi.list({ event_id: eventId, limit: 50 })
+    bluffetRaceStatuses.value = (data.data ?? []).map((r) => r.status)
+  } catch {
+    bluffetRaceStatuses.value = []
+  }
+}
+
+watch(
+  bluffetEventId,
+  (id) => {
+    void loadBluffetRaceStatuses(id)
+  },
+  { immediate: true },
 )
 
 onMounted(() => {
   void eventsStore.fetchEvents({ limit: 100 })
 })
 
+/*
 interface TeaserRace {
   name: string
   externalUrl: string
@@ -122,6 +164,7 @@ const teaserRaces: TeaserRace[] = [
     imageSrc: '/images/race-placeholder.webp',
   },
 ]
+*/
 </script>
 
 <style scoped>
