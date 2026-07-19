@@ -164,13 +164,15 @@
           class="legend-items"
           @scroll="handleLegendScroll"
         >
-          <label
+          <div
             v-for="item in filteredLegendItems"
             :key="item.participantId"
             class="legend-item"
             :class="{
               'legend-item-hidden': !isParticipantVisible(item.participantId),
-              'legend-item-hovered': hoveredParticipantId === item.participantId,
+              'legend-item-hovered':
+                (hoveredParticipantId === item.participantId && !highlightParticipantId) ||
+                highlightParticipantId === item.participantId,
             }"
             @mouseenter="highlightParticipant(item, $event)"
             @mousemove="moveTooltip($event)"
@@ -178,16 +180,26 @@
           >
             <input
               type="checkbox"
+              :aria-label="`Toggle visibility for ${item.label}`"
               :checked="isParticipantVisible(item.participantId)"
               @change="toggleParticipantVisibility(item.participantId)"
+              @click.stop
             />
-            <span
-              class="color-swatch"
-              :style="{ backgroundColor: item.color }"
-              aria-hidden="true"
-            />
-            <span class="legend-label">{{ item.label }}</span>
-          </label>
+            <button
+              type="button"
+              class="legend-select"
+              data-testid="race-flow-legend-select"
+              :aria-pressed="highlightParticipantId === item.participantId"
+              @click="selectParticipant(item.participantId)"
+            >
+              <span
+                class="color-swatch"
+                :style="{ backgroundColor: item.color }"
+                aria-hidden="true"
+              />
+              <span class="legend-label">{{ item.label }}</span>
+            </button>
+          </div>
         </div>
       </div>
       <div
@@ -351,6 +363,24 @@ const props = defineProps<{
   durationMinutes?: number
   highlightParticipantId?: string
 }>()
+
+const emit = defineEmits<{
+  'update:highlightParticipantId': [value: string | undefined]
+}>()
+
+function selectParticipant(participantId: string | undefined): void {
+  const next =
+    participantId != null && participantId === props.highlightParticipantId
+      ? undefined
+      : participantId
+  emit('update:highlightParticipantId', next)
+}
+
+function clearStickyHighlight(): void {
+  if (props.highlightParticipantId != null) {
+    emit('update:highlightParticipantId', undefined)
+  }
+}
 
 const unitsStore = useUnitsStore()
 const chartRaceType = computed(() => props.raceType ?? 'time_based')
@@ -607,8 +637,14 @@ function formatFilterSummary<T extends string>(
 
 function handleDocumentClick(event: MouseEvent): void {
   const target = event.target
-  if (!(target instanceof Element) || !target.closest('.filter-dropdown')) {
+  if (!(target instanceof Element)) {
+    return
+  }
+  if (!target.closest('.filter-dropdown')) {
     openFilter.value = null
+  }
+  if (!target.closest('.race-flow-chart')) {
+    clearStickyHighlight()
   }
 }
 
@@ -659,7 +695,9 @@ function toggleSelectAllFiltered(): void {
 }
 
 function highlightParticipant(item: LegendItem, event: MouseEvent): void {
-  hoveredParticipantId.value = item.participantId
+  if (!props.highlightParticipantId) {
+    hoveredParticipantId.value = item.participantId
+  }
   showTooltip(item, event)
 }
 
@@ -761,11 +799,14 @@ function withAlpha(color: string, alpha: number): string {
 }
 
 function getEffectiveHighlightId(): string | undefined {
-  return hoveredParticipantId.value ?? props.highlightParticipantId ?? undefined
+  return props.highlightParticipantId ?? hoveredParticipantId.value ?? undefined
 }
 
 function getOrderedVisibleFlows(): (typeof flows.value)[number][] {
-  const highlightId = getEffectiveHighlightId()
+  // Only reorder for a transient hover preview so it draws on top; the sticky
+  // (prop-driven) selection keeps a stable dataset order so click hit-testing
+  // (by datasetIndex) stays valid while selected.
+  const highlightId = hoveredParticipantId.value
 
   if (!highlightId) {
     return visibleFlows.value
@@ -927,12 +968,30 @@ function renderChart(): void {
         axis: 'x',
       },
       onHover: (_event, elements, chart) => {
+        chart.canvas.style.cursor = elements.length > 0 ? 'pointer' : 'default'
+        if (props.highlightParticipantId) {
+          return
+        }
         if (elements.length > 0) {
           const dataset = chart.data.datasets[elements[0].datasetIndex] as FlowLineDataset
           hoveredParticipantId.value = dataset.participantId ?? null
         } else {
           hoveredParticipantId.value = null
         }
+      },
+      onClick: (event, _elements, chart) => {
+        const hits = chart.getElementsAtEventForMode(
+          event as unknown as Event,
+          'nearest',
+          { intersect: true },
+          true,
+        )
+        if (hits.length === 0) {
+          clearStickyHighlight()
+          return
+        }
+        const dataset = chart.data.datasets[hits[0].datasetIndex] as FlowLineDataset
+        selectParticipant(dataset.participantId)
       },
       scales: {
         x: {
@@ -1008,7 +1067,6 @@ watch(
     chartRaceType,
     () => props.durationMinutes,
     () => unitsStore.unitSystem,
-    () => props.highlightParticipantId,
   ],
   async () => {
     if (!loading.value) {
@@ -1026,8 +1084,17 @@ watch(hoveredParticipantId, () => {
 
 watch(
   () => props.highlightParticipantId,
+  () => {
+    if (!loading.value && chartInstance.value) {
+      updateLineHighlight()
+    }
+  },
+)
+
+watch(
+  () => props.highlightParticipantId,
   (participantId) => {
-    if (!participantId) {
+    if (!participantId || visibleParticipantIds.value.has(participantId)) {
       return
     }
 
@@ -1238,6 +1305,20 @@ defineExpose({
   gap: 0.4rem;
   font-size: calc(0.85rem * var(--live-display-scale, 1));
   color: var(--ink);
+}
+
+.legend-select {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
