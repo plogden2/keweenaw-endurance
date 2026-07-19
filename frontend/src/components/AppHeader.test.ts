@@ -16,6 +16,8 @@ async function mountHeader(path = '/') {
       { path: '/', component: { template: '<div />' } },
       { path: '/timing', component: { template: '<div />' } },
       { path: '/timing/:eventId', component: { template: '<div />' } },
+      { path: '/station', component: { template: '<div />' } },
+      { path: '/pin', component: { template: '<div />' } },
     ],
   })
 
@@ -52,5 +54,12 @@ describe('AppHeader', () => {
 
   it('uses evergreen ink token for header chrome', () => {
     expect(headerVue).toMatch(/background(-color)?:\s*var\(--ink\)/)
+  })
+
+  it('exposes Station and PIN nav links on every page', async () => {
+    const wrapper = await mountHeader('/')
+    expect(wrapper.get('[data-testid="nav-station"]').attributes('href')).toBe('/station')
+    expect(wrapper.get('[data-testid="nav-pin"]').text()).toBe('PIN')
+    expect(wrapper.get('[data-testid="nav-pin"]').attributes('href')).toBe('/pin')
   })
 })

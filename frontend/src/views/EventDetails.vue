@@ -47,6 +47,22 @@
                 {{ race.status }}
               </span>
             </router-link>
+            <div class="race-ops">
+              <router-link
+                class="ops-link"
+                :to="`/races/${race.id}/racers`"
+                data-testid="event-race-racers"
+              >
+                Racers
+              </router-link>
+              <router-link
+                class="ops-link"
+                :to="`/timing/live/${race.id}`"
+                data-testid="event-race-manual"
+              >
+                Manual entry
+              </router-link>
+            </div>
           </li>
         </ul>
         <p v-if="!racesStore.loading && racesStore.races.length === 0" class="empty">
@@ -150,6 +166,37 @@ watch(eventId, loadEvent)
   list-style: none;
   padding: 0;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.race-list > li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.race-ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-left: 0.25rem;
+}
+
+.ops-link {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  background: var(--mist);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.ops-link:hover {
+  background: var(--sage);
 }
 
 .race-link {

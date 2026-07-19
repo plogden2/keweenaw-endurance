@@ -6,7 +6,7 @@ import { Chart } from 'chart.js'
 import RaceFlowChart from './RaceFlowChart.vue'
 import { timingApi } from '@/services/api'
 import { resolveCategoryColor } from '@/themes/defaultLegend'
-import { buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, expandSteppedLapPoints, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
+import { buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, expandSteppedLapPoints, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, pickPlotClickDatasetIndex, PLOT_CLICK_HIT_PX, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
 import { convertDistanceFromKm, KM_TO_MILES } from '@/utils/units'
 import { setupPinia } from '@/test/helpers'
 import type { TimingRecord } from '@/types/models'
@@ -21,6 +21,7 @@ vi.mock('chart.js', () => ({
         options: config?.options ?? {},
         canvas: { style: { cursor: 'default' } as { cursor: string } },
         getElementsAtEventForMode: vi.fn().mockReturnValue([]),
+        getDatasetMeta: vi.fn().mockReturnValue({ data: [] }),
       }
       return instance
     }),
@@ -718,6 +719,20 @@ describe('raceFlowData', () => {
     expect(resolveRaceFlowXAxisMax(undefined, 100, 100, false)).toBeUndefined()
   })
 
+  it('picks intersect hits first, then near xy hits within threshold, else none', () => {
+    expect(
+      pickPlotClickDatasetIndex([{ datasetIndex: 2 }], [{ datasetIndex: 0 }], 3),
+    ).toBe(2)
+    expect(
+      pickPlotClickDatasetIndex([], [{ datasetIndex: 1 }], PLOT_CLICK_HIT_PX),
+    ).toBe(1)
+    expect(
+      pickPlotClickDatasetIndex([], [{ datasetIndex: 1 }], PLOT_CLICK_HIT_PX + 1),
+    ).toBeUndefined()
+    expect(pickPlotClickDatasetIndex([], [], null)).toBeUndefined()
+    expect(pickPlotClickDatasetIndex([], [{ datasetIndex: 0 }], null)).toBeUndefined()
+  })
+
   it('excludes timing records before race start so elapsed never goes negative', () => {
     const earlyAndOnTime: TimingRecord[] = [
       {
@@ -1301,8 +1316,34 @@ describe('RaceFlowChart.vue', () => {
         options: { onClick?: Function; onHover?: Function }
         canvas: { style: { cursor: string } }
         getElementsAtEventForMode: Mock
+        getDatasetMeta: Mock
       }
     }
+
+    it('emits sticky select on near-miss plot click when intersect is empty', async () => {
+      const wrapper = await mountWithData()
+      const chart = lastChartInstance()
+      chart.getDatasetMeta = vi.fn().mockReturnValue({
+        data: [{ x: 100, y: 80 }],
+      })
+      chart.getElementsAtEventForMode.mockImplementation(
+        (_event: unknown, _mode: string, opts: { intersect?: boolean }) => {
+          if (opts.intersect) {
+            return []
+          }
+          return [{ datasetIndex: 1, index: 0 }]
+        },
+      )
+
+      chart.options.onClick?.(
+        { native: new MouseEvent('click'), x: 108, y: 86 },
+        [],
+        chart,
+      )
+      await flushPromises()
+
+      expect(wrapper.emitted('update:highlightParticipantId')?.at(-1)).toEqual(['p2'])
+    })
 
     it('emits sticky select on plot click and keeps highlight after hover clears', async () => {
       const wrapper = await mountWithData()
@@ -1369,11 +1410,15 @@ describe('RaceFlowChart.vue', () => {
     it('emits clear when re-clicking the selected line', async () => {
       const wrapper = await mountWithData({ highlightParticipantId: 'p1' })
       const chart = lastChartInstance()
-      chart.getElementsAtEventForMode.mockReturnValue([{ datasetIndex: 0 }])
+      const selectedIndex = chart.data.datasets.findIndex(
+        (dataset) => dataset.participantId === 'p1',
+      )
+      expect(selectedIndex).toBeGreaterThanOrEqual(0)
+      chart.getElementsAtEventForMode.mockReturnValue([{ datasetIndex: selectedIndex }])
 
       chart.options.onClick?.(
         { native: new MouseEvent('click') },
-        [{ datasetIndex: 0 }],
+        [{ datasetIndex: selectedIndex }],
         chart,
       )
       await flushPromises()

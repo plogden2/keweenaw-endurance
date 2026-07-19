@@ -16,6 +16,22 @@
           {{ racesStore.currentRace.status }}
         </span>
       </p>
+      <p class="ops-bar" data-testid="race-ops-bar">
+        <router-link
+          class="ops-link"
+          :to="`/races/${raceId}/racers`"
+          data-testid="race-details-racers"
+        >
+          Racers
+        </router-link>
+        <router-link
+          class="ops-link"
+          :to="`/timing/live/${raceId}`"
+          data-testid="race-details-manual"
+        >
+          Manual entry
+        </router-link>
+      </p>
 
       <div class="tabs">
         <button
@@ -435,8 +451,30 @@ watch(activeTab, async (tab) => {
 
 .meta {
   color: var(--muted);
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
   text-transform: capitalize;
+}
+
+.ops-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0 0 1.5rem;
+}
+
+.ops-link {
+  display: inline-block;
+  padding: 0.4rem 0.85rem;
+  border-radius: 4px;
+  background: var(--mist);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.ops-link:hover {
+  background: var(--sage);
 }
 
 .tabs {

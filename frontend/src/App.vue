@@ -1,6 +1,6 @@
 <template>
   <div id="app" :class="{ [themeClass]: bluffetActive }">
-    <AppHeader v-if="showTimingHeader" />
+    <AppHeader />
 
     <main class="main">
       <router-view />
@@ -15,7 +15,22 @@
 
     <footer class="footer">
       <div class="footer-content">
-        <UnitToggle />
+        <div class="footer-actions">
+          <UnitToggle />
+          <router-link class="footer-link" to="/pin" data-testid="footer-pin">
+            {{ pinAuth.isAuthenticated ? 'PIN · Unlocked' : 'PIN' }}
+          </router-link>
+          <router-link class="footer-link" to="/station" data-testid="footer-station">
+            Station
+          </router-link>
+          <router-link
+            class="footer-link"
+            :to="csvPath"
+            data-testid="footer-csv"
+          >
+            CSV recovery
+          </router-link>
+        </div>
         <p>&copy; 2026 Keweenaw Endurance Syndicate. All rights reserved.</p>
       </div>
     </footer>
@@ -24,7 +39,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
 import AppHeader from '@/components/AppHeader.vue'
 import UnitToggle from '@/components/UnitToggle.vue'
 import ScanPopup from '@/components/ScanPopup.vue'
@@ -34,14 +48,14 @@ import { timingRecordsApi } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
 
-const route = useRoute()
 const station = useStationStore()
 const pinAuth = usePinAuthStore()
 const { lastScan, clearLastScan, start, stop } = useReaderStation()
 const { active: bluffetActive, themeClass } = useBluffetTheme()
 
-// Show Inferior Timing branding only on timing routes.
-const showTimingHeader = computed(() => route.path.startsWith('/timing'))
+const csvPath = computed(() =>
+  station.eventId ? `/csv?eventId=${station.eventId}` : '/csv',
+)
 
 async function onKaraoke() {
   const scan = lastScan.value
@@ -107,5 +121,29 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 1rem;
+}
+
+.footer-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.footer-link {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.footer-link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.6);
 }
 </style>

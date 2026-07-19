@@ -284,6 +284,35 @@ export function resolveRaceFlowAxisMaxMinutes(
   return Math.max(recordedMaxMinutes, currentElapsedMinutes ?? 0)
 }
 
+/** Pixel radius for treating a near-miss click as a line/point hit. */
+export const PLOT_CLICK_HIT_PX = 16
+
+/**
+ * Chart.js `intersect: true` only accepts hits within ~borderWidth/2 px of a
+ * stroke (~1px for normal lines). Prefer a true intersect hit when present;
+ * otherwise accept the nearest xy element if it is within `thresholdPx`.
+ */
+export function pickPlotClickDatasetIndex(
+  intersectHits: ReadonlyArray<{ datasetIndex: number }>,
+  nearestXyHits: ReadonlyArray<{ datasetIndex: number }>,
+  nearestDistancePx: number | null,
+  thresholdPx: number = PLOT_CLICK_HIT_PX,
+): number | undefined {
+  if (intersectHits.length > 0) {
+    return intersectHits[0].datasetIndex
+  }
+
+  if (
+    nearestXyHits.length > 0 &&
+    nearestDistancePx != null &&
+    nearestDistancePx <= thresholdPx
+  ) {
+    return nearestXyHits[0].datasetIndex
+  }
+
+  return undefined
+}
+
 export function resolveRaceFlowXAxisMax(
   durationMinutes: number | null | undefined,
   recordedMaxMinutes: number,

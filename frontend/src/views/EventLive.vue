@@ -95,6 +95,26 @@
         >
           Fullscreen rotate
         </button>
+        <div
+          v-if="isReaderSession && activeRaceId"
+          class="ops-links"
+          data-testid="live-ops-links"
+        >
+          <router-link
+            class="ops-link"
+            :to="`/races/${activeRaceId}/racers`"
+            data-testid="live-open-racers"
+          >
+            Racers
+          </router-link>
+          <router-link
+            class="ops-link"
+            :to="`/timing/live/${activeRaceId}`"
+            data-testid="live-open-manual"
+          >
+            Manual entry
+          </router-link>
+        </div>
       </div>
 
       <div class="legend" data-testid="category-legend" role="list" aria-label="Category legend">
@@ -541,6 +561,14 @@ const visibleRaceIds = computed(() => {
   return race90.value?.id ? [race90.value.id] : []
 })
 
+/** Race selected by the live tab — used for Racers / Manual entry shortcuts. */
+const activeRaceId = computed(() => {
+  if (activeTab.value === '12h') return race12.value?.id
+  if (activeTab.value === '6h') return race6.value?.id
+  if (activeTab.value === '90m') return race90.value?.id
+  return race12.value?.id ?? race6.value?.id ?? race90.value?.id
+})
+
 function chartBindings(): Array<{ raceId?: string; chart: typeof chart12hRef }> {
   return [
     { raceId: race12.value?.id, chart: chart12hRef },
@@ -984,6 +1012,28 @@ onUnmounted(() => {
   gap: 0.5rem;
   align-items: center;
   margin-bottom: 1rem;
+}
+
+.ops-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.ops-link {
+  display: inline-block;
+  padding: 0.4rem 0.85rem;
+  border-radius: 4px;
+  background: var(--mist);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.ops-link:hover {
+  background: var(--sage);
 }
 
 .race-tabs {

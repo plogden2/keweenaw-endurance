@@ -253,6 +253,7 @@ import {
   getParticipantStatusLabel,
   resolveRaceFlowXAxisMax,
   resolveRaceStartMs,
+  pickPlotClickDatasetIndex,
   type ParticipantFlowTooltip,
 } from '@/utils/raceFlowData'
 import { getErrorMessage } from '@/utils/error'
@@ -284,6 +285,7 @@ interface FlowLineDataset {
     borderDash: (ctx: { p1DataIndex: number }) => number[] | undefined
   }
   pointRadius?: number | number[]
+  pointHitRadius?: number
   pointStyle?: Array<'circle' | HTMLCanvasElement | HTMLImageElement | false>
   participantId?: string
 }
@@ -803,10 +805,7 @@ function getEffectiveHighlightId(): string | undefined {
 }
 
 function getOrderedVisibleFlows(): (typeof flows.value)[number][] {
-  // Only reorder for a transient hover preview so it draws on top; the sticky
-  // (prop-driven) selection keeps a stable dataset order so click hit-testing
-  // (by datasetIndex) stays valid while selected.
-  const highlightId = hoveredParticipantId.value
+  const highlightId = getEffectiveHighlightId()
 
   if (!highlightId) {
     return visibleFlows.value
@@ -870,6 +869,7 @@ function buildDataset(flow: (typeof flows.value)[number]): FlowLineDataset {
     stepped: false,
     hasExtrapolation: extrapolation != null,
     participantId: flow.participantId,
+    pointHitRadius: 12,
   }
 
   const isExtrapolationIndex = (pointIndex: number) =>
@@ -922,6 +922,17 @@ function updateLineHighlight(): void {
     }
 
     Object.assign(flowDataset, getLineStyle(flow))
+  }
+
+  // Draw the effective highlight on top so hover/sticky is visible in dense plots.
+  const highlightId = getEffectiveHighlightId()
+  if (highlightId) {
+    const datasets = chart.data.datasets as FlowLineDataset[]
+    const index = datasets.findIndex((dataset) => dataset.participantId === highlightId)
+    if (index >= 0 && index !== datasets.length - 1) {
+      const [highlighted] = datasets.splice(index, 1)
+      datasets.push(highlighted)
+    }
   }
 
   chart.update('none')
@@ -980,17 +991,39 @@ function renderChart(): void {
         }
       },
       onClick: (event, _elements, chart) => {
-        const hits = chart.getElementsAtEventForMode(
+        const chartEvent = event as { x?: number; y?: number }
+        const intersectHits = chart.getElementsAtEventForMode(
           event as unknown as Event,
           'nearest',
           { intersect: true },
           true,
         )
-        if (hits.length === 0) {
+        const nearestHits = chart.getElementsAtEventForMode(
+          event as unknown as Event,
+          'nearest',
+          { intersect: false, axis: 'xy' },
+          true,
+        )
+
+        let nearestDistancePx: number | null = null
+        if (nearestHits.length > 0 && typeof chartEvent.x === 'number' && typeof chartEvent.y === 'number') {
+          const hit = nearestHits[0]
+          const point = chart.getDatasetMeta(hit.datasetIndex).data[hit.index]
+          if (point) {
+            nearestDistancePx = Math.hypot(point.x - chartEvent.x, point.y - chartEvent.y)
+          }
+        }
+
+        const datasetIndex = pickPlotClickDatasetIndex(
+          intersectHits,
+          nearestHits,
+          nearestDistancePx,
+        )
+        if (datasetIndex == null) {
           clearStickyHighlight()
           return
         }
-        const dataset = chart.data.datasets[hits[0].datasetIndex] as FlowLineDataset
+        const dataset = chart.data.datasets[datasetIndex] as FlowLineDataset
         selectParticipant(dataset.participantId)
       },
       scales: {

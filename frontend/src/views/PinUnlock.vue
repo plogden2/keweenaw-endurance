@@ -90,6 +90,22 @@
               <div class="race-meta">
                 {{ formatRaceMeta(race) }}
               </div>
+              <div class="race-ops">
+                <router-link
+                  class="btn secondary"
+                  :to="`/races/${race.id}/racers`"
+                  data-testid="race-open-racers"
+                >
+                  Racers
+                </router-link>
+                <router-link
+                  class="btn secondary"
+                  :to="`/timing/live/${race.id}`"
+                  data-testid="race-open-manual"
+                >
+                  Manual entry
+                </router-link>
+              </div>
             </div>
             <button
               type="button"
@@ -609,6 +625,13 @@ label {
 .race-meta {
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.race-ops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
 .confirm-overlay {

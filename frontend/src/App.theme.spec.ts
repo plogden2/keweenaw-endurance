@@ -22,7 +22,12 @@ async function mountApp(eventId = BLUFFET_EVENT_ID) {
 
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/', component: { template: '<div />' } }],
+    routes: [
+      { path: '/', component: { template: '<div />' } },
+      { path: '/pin', component: { template: '<div />' } },
+      { path: '/station', component: { template: '<div />' } },
+      { path: '/csv', component: { template: '<div />' } },
+    ],
   })
   await router.push('/')
   await router.isReady()
@@ -64,5 +69,18 @@ describe('App theme class', () => {
     const wrapper = await mountApp('unrelated-event-id')
 
     expect(wrapper.get('#app').classes()).not.toContain(BLUFFET_THEME_CLASS)
+  })
+
+  it('exposes a PIN link in the footer', async () => {
+    const wrapper = await mountApp()
+    const pin = wrapper.get('[data-testid="footer-pin"]')
+    expect(pin.text()).toBe('PIN')
+    expect(pin.attributes('href')).toBe('/pin')
+  })
+
+  it('exposes Station and CSV recovery in the footer', async () => {
+    const wrapper = await mountApp()
+    expect(wrapper.get('[data-testid="footer-station"]').attributes('href')).toBe('/station')
+    expect(wrapper.get('[data-testid="footer-csv"]').attributes('href')).toBe('/csv')
   })
 })
