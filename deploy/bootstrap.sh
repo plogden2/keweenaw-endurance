@@ -67,19 +67,31 @@ gcloud sql databases describe keweenaw_timing --instance="${CLOUD_SQL_INSTANCE}"
   || gcloud sql databases create keweenaw_timing --instance="${CLOUD_SQL_INSTANCE}"
 
 echo "==> Secrets"
+DB_PASSWORD_SECRET_NEW=0
+DB_PASSWORD_PROVIDED=0
+if [[ -n "${DB_PASSWORD+x}" ]]; then
+  DB_PASSWORD_PROVIDED=1
+else
+  DB_PASSWORD="$(openssl rand -base64 32)"
+fi
+
 ensure_secret() {
   local name="$1" value="$2"
+  local newly_created=0
   if gcloud secrets describe "${name}" >/dev/null 2>&1; then
     echo "Secret ${name} already exists — skipping create"
   else
     printf '%s' "${value}" | gcloud secrets create "${name}" --data-file=-
+    newly_created=1
+  fi
+  if [[ "${name}" == "keweenaw-db-password" ]]; then
+    DB_PASSWORD_SECRET_NEW=${newly_created}
   fi
   gcloud secrets add-iam-policy-binding "${name}" \
     --member="serviceAccount:keweenaw-backend@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role="roles/secretmanager.secretAccessor" || true
 }
 
-DB_PASSWORD="${DB_PASSWORD:-$(openssl rand -base64 32)}"
 JWT_SECRET="${JWT_SECRET:-$(openssl rand -hex 32)}"
 ORGANIZER_PIN="${ORGANIZER_PIN:-1738}"
 BRIDGE_TOKEN="${BRIDGE_TOKEN:-$(openssl rand -hex 32)}"
@@ -89,10 +101,14 @@ ensure_secret keweenaw-jwt-secret "${JWT_SECRET}"
 ensure_secret keweenaw-organizer-pin "${ORGANIZER_PIN}"
 ensure_secret keweenaw-bridge-token "${BRIDGE_TOKEN}"
 
-gcloud sql users create timing_user --instance="${CLOUD_SQL_INSTANCE}" \
-  --password="${DB_PASSWORD}" 2>/dev/null \
-  || gcloud sql users set-password timing_user --instance="${CLOUD_SQL_INSTANCE}" \
-       --password="${DB_PASSWORD}"
+if [[ ${DB_PASSWORD_SECRET_NEW} -eq 1 || ${DB_PASSWORD_PROVIDED} -eq 1 ]]; then
+  gcloud sql users create timing_user --instance="${CLOUD_SQL_INSTANCE}" \
+    --password="${DB_PASSWORD}" 2>/dev/null \
+    || gcloud sql users set-password timing_user --instance="${CLOUD_SQL_INSTANCE}" \
+         --password="${DB_PASSWORD}"
+else
+  echo "NOTE: keweenaw-db-password secret already existed and DB_PASSWORD was not set — keeping existing DB password unchanged."
+fi
 
 echo "==> GCS live CSV bucket"
 BUCKET="${PROJECT_ID}-keweenaw-live-csv"
