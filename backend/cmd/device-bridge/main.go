@@ -308,7 +308,13 @@ func (a *app) pollOnce() {
 
 	a.mu.Lock()
 	a.chipMemory = logicalUUID
-	if logicalUUID == a.lastRead && time.Since(a.lastReadAt) < 2*time.Second {
+	// Match hosted finish cooldown so offline pending doesn't multiply one
+	// physical presence into dozens of flush reads.
+	debounce := 2 * time.Second
+	if a.partitioned() || !a.online {
+		debounce = 60 * time.Second
+	}
+	if logicalUUID == a.lastRead && time.Since(a.lastReadAt) < debounce {
 		a.mu.Unlock()
 		return
 	}
@@ -318,34 +324,36 @@ func (a *app) pollOnce() {
 	conn := a.conn
 	a.mu.Unlock()
 
-	if online && conn != nil {
-		msg := services.BridgeMessage{
-			Type:        "read",
+	// Partition signal must win over a stale online flag / half-closed WS —
+	// otherwise in-flight polls keep scoring on hosted during dress-rehearsal outages.
+	if a.partitioned() || !online || conn == nil {
+		lap := bridge.PendingLap{
 			LogicalUUID: logicalUUID,
-			TS:          time.Now().UTC().Format(time.RFC3339),
+			TS:          time.Now().UTC(),
+			DeviceID:    a.cfg.DeviceID,
 		}
-		a.writeMu.Lock()
-		err := conn.WriteJSON(msg)
-		a.writeMu.Unlock()
-		if err != nil {
-			log.Printf("poll read send failed: %v", err)
-			a.handleDisconnect()
+		if err := a.store.EnqueueLap(lap); err != nil {
+			log.Printf("offline enqueue failed: %v", err)
+			return
 		}
+		a.setMode(bridge.ModeOffline)
+		a.publishStatus()
+		log.Printf("offline lap queued logical_uuid=%s pending=%d", logicalUUID, a.store.PendingCount())
 		return
 	}
 
-	lap := bridge.PendingLap{
+	msg := services.BridgeMessage{
+		Type:        "read",
 		LogicalUUID: logicalUUID,
-		TS:          time.Now().UTC(),
-		DeviceID:    a.cfg.DeviceID,
+		TS:          time.Now().UTC().Format(time.RFC3339),
 	}
-	if err := a.store.EnqueueLap(lap); err != nil {
-		log.Printf("offline enqueue failed: %v", err)
-		return
+	a.writeMu.Lock()
+	err = conn.WriteJSON(msg)
+	a.writeMu.Unlock()
+	if err != nil {
+		log.Printf("poll read send failed: %v", err)
+		a.handleDisconnect()
 	}
-	a.setMode(bridge.ModeOffline)
-	a.publishStatus()
-	log.Printf("offline lap queued logical_uuid=%s pending=%d", logicalUUID, a.store.PendingCount())
 }
 
 func (a *app) runBridgeLoop(ctx context.Context) {

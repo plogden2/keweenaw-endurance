@@ -76,6 +76,7 @@ func main() {
 			events.PUT("/:id", append(adminOnly, handlers.UpdateEvent)...)
 			events.DELETE("/:id", append(adminOnly, handlers.DeleteEvent)...)
 			events.GET("/:id/live", handlers.GetEventLive)
+			events.GET("/:id/live/stream", handlers.StreamEventLive)
 			events.POST("/:id/scans", handlers.ProcessEventScan)
 			events.GET("/:id/live-csv", append(adminOnly, handlers.GetLiveCSV)...)
 			events.GET("/:id/live-csv/status", append(adminOnly, handlers.GetLiveCSVStatus)...)

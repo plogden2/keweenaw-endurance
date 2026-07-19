@@ -3,10 +3,13 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
+	"github.com/keweenaw-endurance/backend/internal/services"
 	"github.com/keweenaw-endurance/backend/internal/services/scan"
 	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 )
@@ -33,6 +36,23 @@ func (h *Handlers) CreateKaraokeBonus(c *gin.Context) {
 			respondServiceError(c, err)
 		}
 		return
+	}
+
+	if h.services.LiveStream != nil && result != nil && result.Record != nil {
+		var participant models.Participant
+		if err := h.services.DB.Preload("Race").First(&participant, "id = ?", result.Record.ParticipantID).Error; err == nil {
+			eventID := participant.Race.EventID.UUID()
+			h.services.LiveStream.Publish(eventID, services.LapRecordedEvent{
+				Type:            "lap_recorded",
+				EventID:         eventID.String(),
+				RaceID:          participant.RaceID.UUID().String(),
+				ParticipantID:   participant.ID.UUID().String(),
+				ParticipantName: strings.TrimSpace(participant.FirstName + " " + participant.LastName),
+				BibNumber:       participant.BibNumber,
+				LapCount:        result.LapCount,
+				RecordedAt:      time.Now().UTC(),
+			})
+		}
 	}
 
 	c.JSON(http.StatusCreated, result)

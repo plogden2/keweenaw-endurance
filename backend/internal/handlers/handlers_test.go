@@ -95,6 +95,7 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		api.PUT("/events/:id", append(adminOnly, h.UpdateEvent)...)
 		api.DELETE("/events/:id", append(adminOnly, h.DeleteEvent)...)
 		api.GET("/events/:id/live", h.GetEventLive)
+		api.GET("/events/:id/live/stream", h.StreamEventLive)
 		api.POST("/events/:id/scans", h.ProcessEventScan)
 		api.GET("/events/:id/live-csv", append(adminOnly, h.GetLiveCSV)...)
 		api.GET("/events/:id/live-csv/status", append(adminOnly, h.GetLiveCSVStatus)...)

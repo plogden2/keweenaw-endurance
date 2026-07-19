@@ -14,12 +14,14 @@ import (
 type LeaderboardCache interface {
 	Get(ctx context.Context, key string) ([]byte, bool)
 	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
+	Delete(ctx context.Context, key string) error
 }
 
 type noopCache struct{}
 
 func (noopCache) Get(context.Context, string) ([]byte, bool) { return nil, false }
 func (noopCache) Set(context.Context, string, []byte, time.Duration) error { return nil }
+func (noopCache) Delete(context.Context, string) error                     { return nil }
 
 // NewLeaderboardCache connects to Redis when available; otherwise returns a no-op cache.
 func NewLeaderboardCache(cfg config.RedisConfig) LeaderboardCache {
@@ -53,6 +55,10 @@ func (c *redisLeaderboardCache) Get(ctx context.Context, key string) ([]byte, bo
 
 func (c *redisLeaderboardCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	return c.client.Set(ctx, key, value, ttl).Err()
+}
+
+func (c *redisLeaderboardCache) Delete(ctx context.Context, key string) error {
+	return c.client.Del(ctx, key).Err()
 }
 
 // MarshalJSON is a helper for encoding cached leaderboard slices.

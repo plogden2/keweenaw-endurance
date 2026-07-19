@@ -1,6 +1,7 @@
 package services
 
 import (
+	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/cache"
 	"github.com/keweenaw-endurance/backend/internal/config"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
@@ -21,6 +22,7 @@ type Services struct {
 	Results      *ResultsService
 	RFID         *RFIDService
 	Bridge       *BridgeHub
+	LiveStream   *LiveStreamHub
 	Scan         *scan.ScanService
 	Stations     *StationService
 	Sync         *SyncService
@@ -42,8 +44,12 @@ func NewServicesWithReader(db *gorm.DB, cfg *config.Config, reader rfid.Reader) 
 		mirrorDir = cfg.LiveCSVMirrorDir
 	}
 	csvSvc := NewCSVExportService(db, dataDir, mirrorDir)
+	resultsSvc := NewResultsService(db, cache.NewLeaderboardCache(cfg.Redis))
 	scanSvc := scan.NewScanService(db, syncSvc)
-	scanSvc.SetOnEventChange(csvSvc.RefreshEvent)
+	scanSvc.SetOnEventChange(func(eventID uuid.UUID) {
+		csvSvc.RefreshEvent(eventID)
+		resultsSvc.InvalidateLeaderboardForEvent(eventID)
+	})
 
 	bridgeHub := NewBridgeHub()
 	rfidSvc := NewRFIDService(db, reader)
@@ -59,9 +65,10 @@ func NewServicesWithReader(db *gorm.DB, cfg *config.Config, reader rfid.Reader) 
 		Checkpoints:  NewCheckpointService(db),
 		Categories:   NewCategoryService(db),
 		Timing:       NewTimingService(db),
-		Results:      NewResultsService(db, cache.NewLeaderboardCache(cfg.Redis)),
+		Results:      resultsSvc,
 		RFID:         rfidSvc,
 		Bridge:       bridgeHub,
+		LiveStream:   NewLiveStreamHub(),
 		Scan:         scanSvc,
 		Stations:     NewStationService(db),
 		Sync:         syncSvc,

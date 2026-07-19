@@ -206,6 +206,8 @@ func (h *Handlers) ProcessEventScan(c *gin.Context) {
 		return
 	}
 
+	h.publishLapRecorded(eventID, result)
+
 	if result.Result == "unknown_tag" {
 		c.JSON(http.StatusNotFound, result)
 		return
