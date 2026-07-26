@@ -80,7 +80,7 @@ func (s *ScanService) AddKaraokeBonus(sourceLapID uuid.UUID) (*KaraokeBonusResul
 	}
 
 	var participant models.Participant
-	if err := s.db.Preload("Category").Preload("Race").First(&participant, "id = ?", source.ParticipantID).Error; err != nil {
+	if err := s.db.Preload("Category").Preload("Team").Preload("Race").First(&participant, "id = ?", source.ParticipantID).Error; err != nil {
 		return nil, err
 	}
 

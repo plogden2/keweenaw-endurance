@@ -158,6 +158,15 @@ func (h *Handlers) handleBridgeRead(c *gin.Context, deviceID string, msg *servic
 	if result != nil && h.services.RFID != nil {
 		h.services.RFID.PublishScanResult(logicalUUID, result)
 	}
+	// Also push scored result to the originating device bridge (reader-gui).
+	if result != nil && h.services.Bridge != nil {
+		_ = h.services.Bridge.SendToDevice(deviceID, services.BridgeMessage{
+			Type:        "scan_result",
+			LogicalUUID: logicalUUID,
+			TS:          ts.Format(time.RFC3339),
+			Scan:        result,
+		})
+	}
 	h.publishLapRecorded(eventID, result)
 	if result != nil && result.Result != scan.ResultUnknownTag {
 		h.refreshLiveCSV(eventID)

@@ -67,6 +67,7 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 	require.NoError(t, db.AutoMigrate(
 		&models.Event{},
 		&models.Race{},
+		&models.Team{},
 		&models.Participant{},
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
@@ -110,6 +111,8 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		api.POST("/races/:id/checkpoints", append(adminOnly, h.CreateCheckpoint)...)
 		api.GET("/races/:id/categories", h.GetCategoriesByRace)
 		api.POST("/races/:id/categories", append(adminOnly, h.CreateCategory)...)
+		api.GET("/races/:id/teams", h.GetTeamsByRace)
+		api.POST("/races/:id/teams", append(adminOnly, h.CreateTeam)...)
 		api.GET("/races/:id/participants", h.GetRaceParticipants)
 		api.POST("/races/:id/participants", append(adminOnly, h.CreateRaceParticipant)...)
 		api.GET("/races/:id/participants/:participantId/tags", h.GetParticipantTags)
@@ -119,6 +122,11 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		api.GET("/races/:id", h.GetRace)
 		api.PUT("/races/:id", append(adminOnly, h.UpdateRace)...)
 		api.DELETE("/races/:id", append(adminOnly, h.DeleteRace)...)
+
+		api.GET("/teams/:id", h.GetTeam)
+		api.PUT("/teams/:id", append(adminOnly, h.UpdateTeam)...)
+		api.DELETE("/teams/:id", append(adminOnly, h.DeleteTeam)...)
+		api.PUT("/teams/:id/members", append(adminOnly, h.SetTeamMembers)...)
 
 		api.GET("/participants", h.GetParticipants)
 		api.POST("/participants", append(adminOnly, h.CreateParticipant)...)
@@ -139,6 +147,7 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		api.PUT("/timing/records/:id", append(timerWrite, h.UpdateTimingRecord)...)
 		api.GET("/timing/results/:raceId", h.GetRaceResults)
 		api.GET("/timing/leaderboard/:raceId", h.GetLeaderboard)
+		api.GET("/timing/team-leaderboard/:raceId", h.GetTeamLeaderboard)
 		api.POST("/timing-records/:id/karaoke-bonus", h.CreateKaraokeBonus)
 
 		api.POST("/rfid/write-tag", append(adminOnly, h.WriteRFIDTag)...)
@@ -869,6 +878,7 @@ func TestRFIDHandlers_ReadPayload(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(
 		&models.Event{},
 		&models.Race{},
+		&models.Team{},
 		&models.Participant{},
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
@@ -944,6 +954,7 @@ func TestRFIDHandlers_InjectDisabled(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(
 		&models.Event{},
 		&models.Race{},
+		&models.Team{},
 		&models.Participant{},
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},

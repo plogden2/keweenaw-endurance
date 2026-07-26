@@ -212,10 +212,14 @@ func (s *CSVExportService) BuildCSV(eventID uuid.UUID) ([]byte, error) {
 	}
 
 	var categories []models.Category
+	var teams []models.Team
 	var checkpoints []models.TimingCheckpoint
 	var participants []models.Participant
 	if len(raceIDs) > 0 {
 		if err := s.db.Where("race_id IN ?", raceIDs).Order("display_order ASC, created_at ASC").Find(&categories).Error; err != nil {
+			return nil, err
+		}
+		if err := s.db.Where("race_id IN ?", raceIDs).Order("display_order ASC, name ASC").Find(&teams).Error; err != nil {
 			return nil, err
 		}
 		if err := s.db.Where("race_id IN ?", raceIDs).Order("created_at ASC").Find(&checkpoints).Error; err != nil {
@@ -314,11 +318,31 @@ func (s *CSVExportService) BuildCSV(eventID uuid.UUID) ([]byte, error) {
 		return nil, err
 	}
 
+	teamRows := make([][]string, 0, len(teams))
+	for _, tm := range teams {
+		teamRows = append(teamRows, []string{
+			tm.ID.String(),
+			tm.RaceID.String(),
+			tm.Name,
+			strconv.Itoa(tm.DisplayOrder),
+		})
+	}
+	if err := writeSection("teams",
+		[]string{"id", "race_id", "name", "display_order"},
+		teamRows,
+	); err != nil {
+		return nil, err
+	}
+
 	partRows := make([][]string, 0, len(participants))
 	for _, p := range participants {
 		catID := ""
 		if p.CategoryID != nil {
 			catID = p.CategoryID.String()
+		}
+		teamID := ""
+		if p.TeamID != nil {
+			teamID = p.TeamID.String()
 		}
 		partRows = append(partRows, []string{
 			p.ID.String(),
@@ -329,10 +353,11 @@ func (s *CSVExportService) BuildCSV(eventID uuid.UUID) ([]byte, error) {
 			p.Gender,
 			p.Status,
 			catID,
+			teamID,
 		})
 	}
 	if err := writeSection("participants",
-		[]string{"id", "race_id", "bib_number", "first_name", "last_name", "gender", "status", "category_id"},
+		[]string{"id", "race_id", "bib_number", "first_name", "last_name", "gender", "status", "category_id", "team_id"},
 		partRows,
 	); err != nil {
 		return nil, err
@@ -443,6 +468,10 @@ func (s *CSVExportService) ImportCSV(eventID uuid.UUID, data []byte) (*CSVImport
 	if err != nil {
 		return nil, err
 	}
+	teams, err := parseTeamRows(sections["teams"])
+	if err != nil {
+		return nil, err
+	}
 	participants, err := parseParticipantRows(sections["participants"])
 	if err != nil {
 		return nil, err
@@ -490,6 +519,11 @@ func (s *CSVExportService) ImportCSV(eventID uuid.UUID, data []byte) (*CSVImport
 		}
 		if len(categories) > 0 {
 			if err := tx.Create(&categories).Error; err != nil {
+				return err
+			}
+		}
+		if len(teams) > 0 {
+			if err := tx.Create(&teams).Error; err != nil {
 				return err
 			}
 		}
@@ -588,6 +622,9 @@ func deleteEventScopedData(tx *gorm.DB, eventID uuid.UUID) error {
 		if err := tx.Where("id IN ?", partIDs).Delete(&models.Participant{}).Error; err != nil {
 			return err
 		}
+	}
+	if err := tx.Where("race_id IN ?", raceIDs).Delete(&models.Team{}).Error; err != nil {
+		return err
 	}
 	if err := tx.Where("race_id IN ?", raceIDs).Delete(&models.Category{}).Error; err != nil {
 		return err
@@ -752,6 +789,28 @@ func parseCategoryRows(rows []map[string]string) ([]models.Category, error) {
 	return out, nil
 }
 
+func parseTeamRows(rows []map[string]string) ([]models.Team, error) {
+	out := make([]models.Team, 0, len(rows))
+	for _, row := range rows {
+		id, err := parseUUID(row["id"])
+		if err != nil {
+			return nil, fmt.Errorf("%w: teams.id: %v", ErrInvalidCSV, err)
+		}
+		raceID, err := parseUUID(row["race_id"])
+		if err != nil {
+			return nil, fmt.Errorf("%w: teams.race_id: %v", ErrInvalidCSV, err)
+		}
+		order, _ := strconv.Atoi(strings.TrimSpace(row["display_order"]))
+		out = append(out, models.Team{
+			ID:           uuidutil.NewPublicUUID(id),
+			RaceID:       uuidutil.NewPublicUUID(raceID),
+			Name:         strings.TrimSpace(row["name"]),
+			DisplayOrder: order,
+		})
+	}
+	return out, nil
+}
+
 func parseParticipantRows(rows []map[string]string) ([]models.Participant, error) {
 	out := make([]models.Participant, 0, len(rows))
 	for _, row := range rows {
@@ -783,6 +842,14 @@ func parseParticipantRows(rows []map[string]string) ([]models.Participant, error
 			}
 			cid := uuidutil.NewPublicUUID(catID)
 			p.CategoryID = &cid
+		}
+		if team := strings.TrimSpace(row["team_id"]); team != "" {
+			teamID, err := parseUUID(team)
+			if err != nil {
+				return nil, fmt.Errorf("%w: participants.team_id: %v", ErrInvalidCSV, err)
+			}
+			tid := uuidutil.NewPublicUUID(teamID)
+			p.TeamID = &tid
 		}
 		out = append(out, p)
 	}

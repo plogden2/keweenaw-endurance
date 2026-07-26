@@ -1,0 +1,14 @@
+data/
+**/data/
+*.exe
+.git/
+tmp/
+bridge-data/
+**/node_modules/
+cmd/reader-gui/
+cmd/reader-setup/
+**/*.zip
+**/*.webm
+**/*.mp4
+coverage/
+**/testdata/

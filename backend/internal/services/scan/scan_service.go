@@ -35,6 +35,10 @@ type ScanResult struct {
 	LapCount          int                  `json:"lap_count,omitempty"`
 	Placement         int                  `json:"placement,omitempty"`
 	PlacementCategory int                  `json:"placement_category,omitempty"`
+	TeamID            *uuidutil.PublicUUID `json:"team_id,omitempty"`
+	TeamName          string               `json:"team_name,omitempty"`
+	TeamPlacement     int                  `json:"team_placement,omitempty"`
+	TeamAvgLaps       float64              `json:"team_avg_laps,omitempty"`
 	TimingRecordID    *uuidutil.PublicUUID `json:"timing_record_id,omitempty"`
 	KaraokeAvailable  bool                 `json:"karaoke_available,omitempty"`
 	RetryAfterSeconds int                  `json:"retry_after_seconds,omitempty"`
@@ -165,11 +169,12 @@ func (s *ScanService) ProcessScan(eventID uuid.UUID, tagUID, deviceID string, lo
 
 	lapCount, _ := s.scoredLapCount(participant.ID.UUID())
 	placement, placementCat, _ := s.placements(race.ID.UUID(), participant)
+	teamPlace, teamAvg, _ := s.teamPlacement(race.ID.UUID(), participant)
 
 	s.notifyChange(eventID)
 
 	recID := record.ID
-	return withScanDisplay(&ScanResult{
+	result := &ScanResult{
 		Result:            ResultLap,
 		Participant:       &part,
 		RaceID:            &raceID,
@@ -179,7 +184,14 @@ func (s *ScanService) ProcessScan(eventID uuid.UUID, tagUID, deviceID string, lo
 		PlacementCategory: placementCat,
 		TimingRecordID:    &recID,
 		KaraokeAvailable:  true,
-	}), nil
+	}
+	if participant.TeamID != nil && !participant.TeamID.IsZero() {
+		tid := *participant.TeamID
+		result.TeamID = &tid
+		result.TeamPlacement = teamPlace
+		result.TeamAvgLaps = teamAvg
+	}
+	return withScanDisplay(result), nil
 }
 
 func withScanDisplay(r *ScanResult) *ScanResult {
@@ -195,6 +207,13 @@ func withScanDisplay(r *ScanResult) *ScanResult {
 	if p.Category != nil {
 		r.CategoryLabel = p.Category.Name
 	}
+	if p.Team != nil {
+		r.TeamName = p.Team.Name
+		if r.TeamID == nil {
+			tid := p.Team.ID
+			r.TeamID = &tid
+		}
+	}
 	return r
 }
 
@@ -203,7 +222,7 @@ func (s *ScanService) resolveParticipant(eventID uuid.UUID, tagUID string) (*mod
 	err := s.db.Where("tag_uid = ? AND active = ?", tagUID, true).First(&assoc).Error
 	if err == nil {
 		var p models.Participant
-		if err := s.db.Preload("Category").Preload("Race").First(&p, "id = ?", assoc.ParticipantID).Error; err != nil {
+		if err := s.db.Preload("Category").Preload("Team").Preload("Race").First(&p, "id = ?", assoc.ParticipantID).Error; err != nil {
 			return nil, err
 		}
 		if !s.participantInEvent(&p, eventID) {
@@ -216,7 +235,7 @@ func (s *ScanService) resolveParticipant(eventID uuid.UUID, tagUID string) (*mod
 	}
 
 	var p models.Participant
-	if err := s.db.Preload("Category").Preload("Race").Where("rfid_tag_uid = ?", tagUID).First(&p).Error; err != nil {
+	if err := s.db.Preload("Category").Preload("Team").Preload("Race").Where("rfid_tag_uid = ?", tagUID).First(&p).Error; err != nil {
 		return nil, err
 	}
 	if !s.participantInEvent(&p, eventID) {
@@ -307,6 +326,85 @@ func (s *ScanService) placements(raceID uuid.UUID, participant *models.Participa
 		}
 	}
 	return overall, 0, nil
+}
+
+func (s *ScanService) teamPlacement(raceID uuid.UUID, participant *models.Participant) (place int, avg float64, err error) {
+	if participant == nil || participant.TeamID == nil || participant.TeamID.IsZero() {
+		return 0, 0, nil
+	}
+	var race models.Race
+	if err := s.db.First(&race, "id = ?", raceID).Error; err != nil {
+		return 0, 0, err
+	}
+	raceEnd := race.StartTime.Add(time.Duration(race.DurationMinutes) * time.Minute)
+
+	var teams []models.Team
+	if err := s.db.Where("race_id = ?", raceID).Find(&teams).Error; err != nil {
+		return 0, 0, err
+	}
+
+	type scored struct {
+		teamID   uuidutil.PublicUUID
+		avg      float64
+		meanLast time.Time
+		nameKey  string
+	}
+	var scoredResults []scored
+	for _, team := range teams {
+		var members []models.Participant
+		if err := s.db.Where("team_id = ?", team.ID).Find(&members).Error; err != nil {
+			return 0, 0, err
+		}
+		if len(members) < 2 {
+			continue
+		}
+		sumLaps := 0
+		var lastSumNs int64
+		for _, m := range members {
+			var records []models.TimingRecord
+			_ = s.db.Where(
+				"participant_id = ? AND record_type IN ?",
+				m.ID,
+				[]string{"rfid_lap", "karaoke_bonus"},
+			).Find(&records).Error
+			sumLaps += len(records)
+			memberLast := raceEnd
+			hasRFID := false
+			for _, r := range records {
+				if r.RecordType != "rfid_lap" {
+					continue
+				}
+				if !hasRFID || r.Timestamp.After(memberLast) {
+					memberLast = r.Timestamp
+					hasRFID = true
+				}
+			}
+			lastSumNs += memberLast.UnixNano()
+		}
+		n := len(members)
+		scoredResults = append(scoredResults, scored{
+			teamID:   team.ID,
+			avg:      float64(sumLaps) / float64(n),
+			meanLast: time.Unix(0, lastSumNs/int64(n)).UTC(),
+			nameKey:  strings.ToLower(team.Name),
+		})
+	}
+	sort.Slice(scoredResults, func(i, j int) bool {
+		if scoredResults[i].avg != scoredResults[j].avg {
+			return scoredResults[i].avg > scoredResults[j].avg
+		}
+		if !scoredResults[i].meanLast.Equal(scoredResults[j].meanLast) {
+			return scoredResults[i].meanLast.Before(scoredResults[j].meanLast)
+		}
+		return scoredResults[i].nameKey < scoredResults[j].nameKey
+	})
+	for i, item := range scoredResults {
+		if item.teamID == *participant.TeamID {
+			rounded := float64(int(item.avg*10+0.5)) / 10
+			return i + 1, rounded, nil
+		}
+	}
+	return 0, 0, nil
 }
 
 func (s *ScanService) scoreRace(raceID uuid.UUID) ([]scoredEntry, error) {

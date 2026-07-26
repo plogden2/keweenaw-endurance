@@ -88,6 +88,15 @@ const livePayload = {
           last_lap_at: '2026-08-01T11:02:41-04:00',
         },
       ],
+      leaderboard_teams: [
+        {
+          place: 1,
+          team_id: 'team-a',
+          name: 'East Bluff A',
+          avg_laps: 12.5,
+          member_count: 4,
+        },
+      ],
       flow_series: [],
     },
     {
@@ -99,6 +108,7 @@ const livePayload = {
       duration_minutes: 360,
       countdown_seconds: 3600,
       leaderboard_overall: [],
+      leaderboard_teams: [],
       flow_series: [],
     },
     {
@@ -110,6 +120,7 @@ const livePayload = {
       duration_minutes: 90,
       countdown_seconds: 25200,
       leaderboard_overall: [],
+      leaderboard_teams: [],
       flow_series: [],
     },
   ],
@@ -211,9 +222,33 @@ describe('EventLive.vue', () => {
     expect(wrapper.find('[data-testid="live-view"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="live-countdown"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="leaderboard-overall"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="leaderboard-mode-toggle"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="leaderboard-teams"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="category-legend"]').exists()).toBe(true)
     // Spectator / unlocked browsers do not show station sync chrome
     expect(wrapper.find('[data-testid="sync-status"]').exists()).toBe(false)
+  })
+
+  it('toggles leaderboard between individuals and teams', async () => {
+    const wrapper = await mountLive()
+
+    const toggle = wrapper.find('[data-testid="leaderboard-mode-toggle"]')
+    const teamsBtn = toggle.findAll('button').find((btn) => btn.text() === 'Teams')
+    expect(teamsBtn).toBeTruthy()
+    await teamsBtn!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="leaderboard-overall"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="leaderboard-teams"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('East Bluff A')
+    expect(wrapper.text()).toContain('12.5')
+
+    const individualsBtn = toggle.findAll('button').find((btn) => btn.text() === 'Individuals')
+    await individualsBtn!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="leaderboard-overall"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="leaderboard-teams"]').exists()).toBe(false)
   })
 
   it('retints category legend and leaderboard dots with brand colors', async () => {

@@ -30,6 +30,7 @@ import {
   type VideoContext,
 } from './lib/chaos'
 import {
+  assertTeamSurfaces,
   awaitCatchUp,
   churnOnce,
   pickFriends,
@@ -292,6 +293,17 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
           `${skipped.length} participants had no rfid_tag_uid/association and were excluded ` +
             `from the lap rotation (never programmed onto the chip): bibs ` +
             `${skipped.slice(0, 10).map((r) => r.bib).join(', ')}${skipped.length > 10 ? ', …' : ''}`,
+        )
+      }
+      const teamed12h = racers.filter(
+        (r) => r.raceId === BLUFFET.races.twelveHour.id && r.teamId,
+      )
+      if (teamed12h.length < 16) {
+        await issue(
+          'critical',
+          'Seed missing 12h race teams',
+          `Expected 16 teamed 12h racers (4×4 East Bluff A–D), found ${teamed12h.length}. ` +
+            'Reload database/seed/03-bluffet-2026-hardware.sql after migration 05-race-teams.',
         )
       }
 
@@ -866,6 +878,31 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
       state.phase = 'finalizing'
       writeStatusNow()
       await sleep(FINALIZE_SETTLE_MS)
+
+      try {
+        const teamCheck = await assertTeamSurfaces(laptopPage, request, {
+          eventId: event.id,
+          raceId: BLUFFET.races.twelveHour.id,
+        })
+        if (!teamCheck.uiOk) {
+          await issue(
+            'critical',
+            'Team live surfaces missing',
+            `teams=${teamCheck.teamCount}; expected Teams toggle + leaderboard-teams + race-flow-team-filters`,
+            { screenshot: await screenshotFor('teams-ui', laptopPage) },
+          )
+        } else {
+          await issue(
+            'idea',
+            'Team surfaces verified',
+            `Seeded/scored team board ok (count=${teamCheck.teamCount}); Individuals|Teams toggle + flow filter present.`,
+          )
+        }
+      } catch (err) {
+        await issue('critical', 'Team surface assertion failed', String(err), {
+          screenshot: await screenshotFor('teams-ui', laptopPage),
+        })
+      }
 
       stopAll = true
       await Promise.allSettled(background)

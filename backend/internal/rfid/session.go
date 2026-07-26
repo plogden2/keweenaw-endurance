@@ -8,7 +8,6 @@ import (
 	"io"
 	"os/exec"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 )
@@ -41,6 +40,9 @@ type processSession struct {
 }
 
 func openProcessSession(ctx context.Context, cliPath, port string) (PM3Session, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	exe := resolveProxmarkExecutable(cliPath)
 	args := []string{"-f", "--incognito"}
 	if port != "" {
@@ -76,7 +78,9 @@ func openProcessSession(ctx context.Context, cliPath, port string) (PM3Session, 
 		stdout: bufio.NewReader(stdoutPipe),
 	}
 
-	startupCtx, cancel := context.WithTimeout(ctx, proxmarkSessionStartupTimeout)
+	// Startup must not inherit short Poll deadlines (2s). Opening the CLI and
+	// waiting for the first prompt routinely needs several seconds on Windows.
+	startupCtx, cancel := context.WithTimeout(context.Background(), proxmarkSessionStartupTimeout)
 	defer cancel()
 	if _, err := s.readUntilPrompt(startupCtx); err != nil {
 		_ = s.Close()
@@ -99,32 +103,34 @@ func (s *processSession) Run(ctx context.Context, command string) (string, error
 
 func (s *processSession) readUntilPrompt(ctx context.Context) (string, error) {
 	var buf bytes.Buffer
+	tmp := make([]byte, 256)
 	for {
 		if err := ctx.Err(); err != nil {
 			return buf.String(), err
 		}
-		// Bound each ReadSlice wait via deadline on the underlying pipe is hard;
-		// poll with short SetReadDeadline when available, else use goroutine.
-		lineCh := make(chan string, 1)
-		errCh := make(chan error, 1)
+		// Interactive pm3 often prints "pm3 --> " without a trailing newline.
+		// Read chunks (not lines) so we can detect the prompt at buffer end.
+		type readResult struct {
+			n   int
+			err error
+		}
+		ch := make(chan readResult, 1)
 		go func() {
-			line, err := s.stdout.ReadString('\n')
-			if err != nil {
-				errCh <- err
-				return
-			}
-			lineCh <- line
+			n, err := s.stdout.Read(tmp)
+			ch <- readResult{n: n, err: err}
 		}()
 		select {
 		case <-ctx.Done():
 			return buf.String(), ctx.Err()
-		case err := <-errCh:
-			return buf.String(), err
-		case line := <-lineCh:
-			buf.WriteString(line)
-			if pm3PromptPattern.MatchString(strings.TrimRight(line, "\r\n")) ||
-				pm3PromptPattern.MatchString(buf.String()) {
-				return buf.String(), nil
+		case r := <-ch:
+			if r.n > 0 {
+				buf.Write(tmp[:r.n])
+				if pm3PromptPattern.MatchString(buf.String()) {
+					return buf.String(), nil
+				}
+			}
+			if r.err != nil {
+				return buf.String(), r.err
 			}
 		}
 	}

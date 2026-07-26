@@ -45,9 +45,8 @@ func SeedBluffetDetails() BluffetDetails {
 }
 
 // ApplyBluffetDefaults sets All You Can East Bluffet race-day fields.
-// For the current test window these are forced as defaults (12 Hour finish)
-// so a laptop opens ready without pasting IDs; race dropdown can still switch
-// distances after launch. Secrets (bridge token) are never overwritten.
+// Default is All races (empty RaceID/CheckpointID) so one finish reader scores
+// every distance. A saved single-race selection is preserved. Secrets are never overwritten.
 func ApplyBluffetDefaults(cfg *Config) {
 	if cfg == nil {
 		return
@@ -60,21 +59,19 @@ func ApplyBluffetDefaults(cfg *Config) {
 	}
 	cfg.DeviceID = "laptop-finish-1"
 	cfg.EventID = seed.EventID
-	if len(seed.Races) > 0 {
-		// Keep a previously chosen Bluffet distance; otherwise default to 12 Hour.
-		matched := false
+	if strings.TrimSpace(cfg.RaceID) != "" && len(seed.Races) > 0 {
+		// Preserve a previously chosen Bluffet distance; refresh finish checkpoint.
 		for _, r := range seed.Races {
 			if r.RaceID == cfg.RaceID || strings.HasSuffix(r.RaceID, cfg.RaceID) || strings.HasSuffix(cfg.RaceID, r.RaceID) {
 				cfg.RaceID = r.RaceID
 				cfg.CheckpointID = r.FinishCheckpointID
-				matched = true
 				break
 			}
 		}
-		if !matched {
-			cfg.RaceID = seed.Races[0].RaceID
-			cfg.CheckpointID = seed.Races[0].FinishCheckpointID
-		}
+	} else {
+		// All races (event finish) — intentional empty race/checkpoint.
+		cfg.RaceID = ""
+		cfg.CheckpointID = ""
 	}
 	if cfg.ProxmarkPort == "" {
 		cfg.ProxmarkPort = "COM3"
@@ -284,24 +281,20 @@ func AutofillConfig(cfg *Config, force bool) (BluffetDetails, error) {
 		if force || cfg.EventID == "" || cfg.EventID == BluffetEventIDFull || cfg.EventID == BluffetEventIDShort {
 			cfg.EventID = details.EventID
 		}
-		if force || cfg.RaceID == "" {
-			cfg.RaceID = details.Races[0].RaceID
-			cfg.CheckpointID = details.Races[0].FinishCheckpointID
-		} else {
-			// Keep race id; refresh checkpoint if empty or mismatched race.
+		if cfg.RaceID != "" {
+			// Keep race id; refresh checkpoint if empty.
 			for _, r := range details.Races {
 				if r.RaceID == cfg.RaceID {
-					if force || cfg.CheckpointID == "" {
+					if cfg.CheckpointID == "" {
 						cfg.CheckpointID = r.FinishCheckpointID
 					}
 					break
 				}
 			}
 		}
-	} else if force || cfg.RaceID == "" {
+		// Empty RaceID means All races — do not autofill a single distance.
+	} else if force && cfg.EventID == "" {
 		cfg.EventID = details.EventID
-		cfg.RaceID = details.Races[0].RaceID
-		cfg.CheckpointID = details.Races[0].FinishCheckpointID
 	}
 	normalizeConfig(cfg)
 	return details, err

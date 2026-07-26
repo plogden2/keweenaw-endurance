@@ -8,6 +8,7 @@ export type Racer = {
   firstName: string
   lastName: string
   logicalTagUuid: string // permanent racer RFID UUID (from seed/association)
+  teamId?: string | null
 }
 
 export type LoadSeededRacersResult = {
@@ -41,6 +42,7 @@ export async function loadSeededRacers(request: APIRequestContext): Promise<Load
         firstName: p.first_name ?? p.firstName,
         lastName: p.last_name ?? p.lastName,
         logicalTagUuid: p.rfid_tag_uid ?? p.rfidTagUid ?? (p.tag_uids?.[0] ?? ''),
+        teamId: p.team_id ?? p.teamId ?? null,
       }
       if (racer.logicalTagUuid) {
         racers.push(racer)

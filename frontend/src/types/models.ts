@@ -28,10 +28,20 @@ export interface Race {
   created_at?: string
 }
 
+export interface Team {
+  id: string
+  race_id: string
+  name: string
+  display_order?: number
+  created_at?: string
+  participants?: Participant[]
+}
+
 export interface Participant {
   id: string
   race_id: string
   category_id?: string
+  team_id?: string | null
   bib_number: string
   first_name: string
   last_name: string
@@ -43,6 +53,9 @@ export interface Participant {
   status: ParticipantStatus
   created_at?: string
   category?: Category
+  team?: Team
+  /** Optional flat name when nested `team` is not populated. */
+  team_name?: string
 }
 
 export interface Category {
@@ -112,11 +125,26 @@ export type CreateParticipantPayload = {
   rfid_tag_uid?: string
   status?: ParticipantStatus
   category_id?: string
+  team_id?: string | null
 }
 
 export type UpdateParticipantPayload = Partial<
   Omit<CreateParticipantPayload, 'race_id'>
 >
+
+export type CreateTeamPayload = {
+  name: string
+  display_order?: number
+}
+
+export type UpdateTeamPayload = {
+  name?: string
+  display_order?: number
+}
+
+export type SetTeamMembersPayload = {
+  participant_ids: string[]
+}
 
 export type CheckpointType = 'start' | 'finish' | 'intermediate'
 export type SyncStatus = 'synced' | 'pending_sync' | 'failed_sync'

@@ -153,6 +153,46 @@
                 </li>
               </ul>
             </div>
+            <div
+              v-if="availableTeams.length"
+              class="filter-dropdown"
+              data-testid="race-flow-team-filters"
+              @click.stop
+            >
+              <button
+                type="button"
+                class="filter-dropdown-trigger"
+                :aria-expanded="openFilter === 'team'"
+                @click="toggleFilterDropdown('team')"
+              >
+                <span class="filter-dropdown-label">Team</span>
+                <span class="filter-dropdown-value">
+                  {{ formatFilterSummary(selectedTeams, availableTeams, teamFilterLabel) }}
+                </span>
+              </button>
+              <ul
+                v-if="openFilter === 'team'"
+                class="filter-dropdown-menu"
+                role="listbox"
+                aria-multiselectable="true"
+              >
+                <li
+                  v-for="teamKey in availableTeams"
+                  :key="teamKey"
+                  role="option"
+                  :aria-selected="selectedTeams.includes(teamKey)"
+                >
+                  <button
+                    type="button"
+                    class="filter-dropdown-option"
+                    :class="{ selected: selectedTeams.includes(teamKey) }"
+                    @click="toggleTeamFilter(teamKey)"
+                  >
+                    {{ teamFilterLabel(teamKey) }}
+                  </button>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
         <p v-if="filteredLegendItems.length === 0" class="legend-empty">
@@ -215,6 +255,9 @@
         <span v-if="activeTooltip.gender">Gender: {{ getParticipantGenderLabel(activeTooltip.gender) }}</span>
         <span v-if="activeTooltip.ageGroup">Age group: {{ getParticipantAgeGroupLabel(activeTooltip.ageGroup) }}</span>
         <span v-else-if="activeTooltip.age != null">Age: {{ activeTooltip.age }}</span>
+        <span v-if="activeTooltip.teamKey">
+          Team: {{ getParticipantTeamLabel(activeTooltip.teamKey, activeTooltip.teamName) }}
+        </span>
         <span>{{ activeTooltip.progress }}</span>
       </div>
     </div>
@@ -245,12 +288,14 @@ import {
   clampElapsedToDuration,
   compareAgeGroupKeys,
   compareGenderKeys,
+  compareTeamKeys,
   expandSteppedLapPoints,
   getCurrentElapsedMinutes,
   getFlowYAxisLabel,
   getParticipantAgeGroupLabel,
   getParticipantGenderLabel,
   getParticipantStatusLabel,
+  getParticipantTeamLabel,
   resolveRaceFlowXAxisMax,
   resolveRaceStartMs,
   pickPlotClickDatasetIndex,
@@ -268,7 +313,7 @@ const STATUS_ORDER: ParticipantStatus[] = [
   'dns',
 ]
 
-type FilterDropdownKey = 'status' | 'gender' | 'ageGroup'
+type FilterDropdownKey = 'status' | 'gender' | 'ageGroup' | 'team'
 
 interface FlowLineDataset {
   label: string
@@ -313,6 +358,7 @@ interface LegendItem {
   status: ParticipantStatus
   genderKey: string
   ageGroup: string
+  teamKey: string
   bibNumber: string
   tooltip: ParticipantFlowTooltip
 }
@@ -400,6 +446,7 @@ const legendScrollTop = ref(0)
 const selectedStatuses = ref<ParticipantStatus[]>([])
 const selectedGenders = ref<string[]>([])
 const selectedAgeGroups = ref<string[]>([])
+const selectedTeams = ref<string[]>([])
 const openFilter = ref<FilterDropdownKey | null>(null)
 const visibleParticipantIds = ref<Set<string>>(new Set())
 const hoveredParticipantId = ref<string | null>(null)
@@ -448,6 +495,26 @@ const availableAgeGroups = computed(() =>
   [...new Set(flows.value.map((flow) => flow.ageGroup))].sort(compareAgeGroupKeys),
 )
 
+const teamNameByKey = computed(() => {
+  const names = new Map<string, string>()
+  for (const flow of flows.value) {
+    if (!names.has(flow.teamKey) && flow.teamName) {
+      names.set(flow.teamKey, flow.teamName)
+    }
+  }
+  return names
+})
+
+function teamFilterLabel(teamKey: string): string {
+  return getParticipantTeamLabel(teamKey, teamNameByKey.value.get(teamKey))
+}
+
+const availableTeams = computed(() =>
+  [...new Set(flows.value.map((flow) => flow.teamKey))].sort((a, b) =>
+    compareTeamKeys(a, b, teamFilterLabel),
+  ),
+)
+
 const filteredFlows = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
 
@@ -461,6 +528,10 @@ const filteredFlows = computed(() => {
     }
 
     if (!selectedAgeGroups.value.includes(flow.ageGroup)) {
+      return false
+    }
+
+    if (!selectedTeams.value.includes(flow.teamKey)) {
       return false
     }
 
@@ -502,6 +573,7 @@ function buildLegendItem(flow: (typeof flows.value)[number]): LegendItem {
     status: flow.status,
     genderKey: flow.genderKey,
     ageGroup: flow.ageGroup,
+    teamKey: flow.teamKey,
     bibNumber: flow.bibNumber,
     tooltip: buildParticipantFlowTooltip(flow, chartRaceType.value, unitsStore.unitSystem),
   }
@@ -551,6 +623,13 @@ const isLegendBusy = computed(() => {
     return true
   }
 
+  if (
+    availableTeams.value.length > 0 &&
+    selectedTeams.value.length < availableTeams.value.length
+  ) {
+    return true
+  }
+
   return false
 })
 
@@ -573,6 +652,10 @@ function syncFilterSelections(): void {
   selectedAgeGroups.value = mergeFilterSelections(
     selectedAgeGroups.value,
     availableAgeGroups.value,
+  )
+  selectedTeams.value = mergeFilterSelections(
+    selectedTeams.value,
+    availableTeams.value,
   )
 }
 
@@ -613,6 +696,10 @@ function toggleGenderFilter(genderKey: string): void {
 
 function toggleAgeGroupFilter(ageGroup: string): void {
   toggleFilterValue(selectedAgeGroups, ageGroup)
+}
+
+function toggleTeamFilter(teamKey: string): void {
+  toggleFilterValue(selectedTeams, teamKey)
 }
 
 function formatFilterSummary<T extends string>(

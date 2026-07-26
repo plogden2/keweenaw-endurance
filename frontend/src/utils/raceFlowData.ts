@@ -13,6 +13,8 @@ export interface FlowPoint {
   kind?: 'rfid' | 'karaoke'
 }
 
+export const NO_TEAM_KEY = 'no_team'
+
 export interface ParticipantFlow {
   participantId: string
   label: string
@@ -23,6 +25,8 @@ export interface ParticipantFlow {
   genderKey: string
   age?: number
   ageGroup: string
+  teamKey: string
+  teamName?: string
   status: ParticipantStatus
   points: FlowPoint[]
 }
@@ -34,7 +38,22 @@ export interface ParticipantFlowTooltip {
   gender?: string
   age?: number
   ageGroup?: string
+  teamKey?: string
+  teamName?: string
   progress: string
+}
+
+export type FlowParticipantInput = {
+  id: string
+  bib_number: string
+  first_name: string
+  last_name: string
+  gender?: string
+  age?: number
+  status: ParticipantStatus
+  team_id?: string | null
+  team_name?: string
+  team?: { id?: string; name?: string } | null
 }
 
 const FLOW_COLOR_SATURATION = 70
@@ -155,7 +174,46 @@ export function compareAgeGroupKeys(a: string, b: string): number {
   return order(a) - order(b)
 }
 
-function createParticipantFlow(participant: NonNullable<TimingRecord['participant']>): ParticipantFlow {
+export function getParticipantTeamKey(teamId?: string | null): string {
+  if (!teamId) {
+    return NO_TEAM_KEY
+  }
+  return teamId
+}
+
+export function resolveParticipantTeamName(
+  participant: Pick<FlowParticipantInput, 'team_id' | 'team_name' | 'team'>,
+): string | undefined {
+  const nested = participant.team?.name?.trim()
+  if (nested) {
+    return nested
+  }
+  const flat = participant.team_name?.trim()
+  if (flat) {
+    return flat
+  }
+  return undefined
+}
+
+export function getParticipantTeamLabel(teamKey: string, teamName?: string): string {
+  if (teamKey === NO_TEAM_KEY) {
+    return 'No team'
+  }
+  return teamName?.trim() || 'Team'
+}
+
+export function compareTeamKeys(a: string, b: string, labelFor: (key: string) => string): number {
+  if (a === NO_TEAM_KEY && b !== NO_TEAM_KEY) {
+    return 1
+  }
+  if (b === NO_TEAM_KEY && a !== NO_TEAM_KEY) {
+    return -1
+  }
+  return labelFor(a).localeCompare(labelFor(b), undefined, { sensitivity: 'base' })
+}
+
+function createParticipantFlow(participant: FlowParticipantInput): ParticipantFlow {
+  const teamKey = getParticipantTeamKey(participant.team_id ?? participant.team?.id)
   return {
     participantId: participant.id,
     label: `#${participant.bib_number} ${participant.first_name} ${participant.last_name}`.trim(),
@@ -166,6 +224,8 @@ function createParticipantFlow(participant: NonNullable<TimingRecord['participan
     genderKey: getParticipantGenderKey(participant.gender),
     age: participant.age,
     ageGroup: getParticipantAgeGroupKey(participant.age),
+    teamKey,
+    teamName: resolveParticipantTeamName(participant),
     status: participant.status,
     points: [],
   }
@@ -213,6 +273,8 @@ export function buildParticipantFlowTooltip(
     gender: flow.genderKey,
     age: flow.age,
     ageGroup: flow.ageGroup,
+    teamKey: flow.teamKey,
+    teamName: flow.teamName,
     progress,
   }
 }
@@ -428,18 +490,21 @@ export function expandSteppedLapPoints(
   return out
 }
 
+function applyParticipantMeta(flow: ParticipantFlow, participant: FlowParticipantInput): void {
+  flow.status = participant.status
+  flow.gender = participant.gender
+  flow.genderKey = getParticipantGenderKey(participant.gender)
+  flow.age = participant.age
+  flow.ageGroup = getParticipantAgeGroupKey(participant.age)
+  flow.lastName = participant.last_name
+  flow.teamKey = getParticipantTeamKey(participant.team_id ?? participant.team?.id)
+  flow.teamName = resolveParticipantTeamName(participant)
+}
+
 function buildLapFlows(
   records: TimingRecord[],
   raceStartMs: number,
-  registeredParticipants?: Array<{
-    id: string
-    bib_number: string
-    first_name: string
-    last_name: string
-    gender?: string
-    age?: number
-    status: ParticipantStatus
-  }>,
+  registeredParticipants?: FlowParticipantInput[],
 ): ParticipantFlow[] {
   // Include scored laps before gun start (leaderboard counts them). Elapsed is
   // clamped to >= 0 in pushLapPoint so the axis never goes negative.
@@ -454,16 +519,7 @@ function buildLapFlows(
   const flows = new Map<string, ParticipantFlow>()
 
   for (const participant of registeredParticipants ?? []) {
-    const flow = createParticipantFlow({
-      id: participant.id,
-      race_id: '',
-      bib_number: participant.bib_number,
-      first_name: participant.first_name,
-      last_name: participant.last_name,
-      gender: participant.gender,
-      age: participant.age,
-      status: participant.status,
-    })
+    const flow = createParticipantFlow(participant)
     flow.points.push({ elapsedMinutes: 0, value: 0 })
     flows.set(participant.id, flow)
   }
@@ -479,12 +535,7 @@ function buildLapFlows(
     if (!flows.has(participant.id)) {
       existingFlow.points.push({ elapsedMinutes: 0, value: 0 })
     }
-    existingFlow.status = participant.status
-    existingFlow.gender = participant.gender
-    existingFlow.genderKey = getParticipantGenderKey(participant.gender)
-    existingFlow.age = participant.age
-    existingFlow.ageGroup = getParticipantAgeGroupKey(participant.age)
-    existingFlow.lastName = participant.last_name
+    applyParticipantMeta(existingFlow, participant)
     pushLapPoint(existingFlow, elapsedMinutes, laps, lapKindForRecord(record))
     flows.set(participant.id, existingFlow)
   }
@@ -519,12 +570,7 @@ function buildDistanceFlows(
     const value = convertDistanceFromKm(distanceKm, unitSystem)
 
     const existingFlow = flows.get(participant.id) ?? createParticipantFlow(participant)
-    existingFlow.status = participant.status
-    existingFlow.gender = participant.gender
-    existingFlow.genderKey = getParticipantGenderKey(participant.gender)
-    existingFlow.age = participant.age
-    existingFlow.ageGroup = getParticipantAgeGroupKey(participant.age)
-    existingFlow.lastName = participant.last_name
+    applyParticipantMeta(existingFlow, participant)
     existingFlow.points.push({ elapsedMinutes, value })
     flows.set(participant.id, existingFlow)
   }
@@ -537,15 +583,7 @@ export function buildParticipantFlows(
   raceStartTime?: string,
   raceType: RaceType = 'time_based',
   unitSystem: UnitSystem = 'imperial',
-  registeredParticipants?: Array<{
-    id: string
-    bib_number: string
-    first_name: string
-    last_name: string
-    gender?: string
-    age?: number
-    status: ParticipantStatus
-  }>,
+  registeredParticipants?: FlowParticipantInput[],
 ): ParticipantFlow[] {
   const raceStartMs = resolveRaceStartMs(records, raceStartTime)
   if (raceStartMs === null) {

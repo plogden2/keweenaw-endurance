@@ -130,6 +130,28 @@
         </span>
       </div>
 
+      <div
+        class="mode-toggle"
+        data-testid="leaderboard-mode-toggle"
+        role="group"
+        aria-label="Leaderboard mode"
+      >
+        <button
+          type="button"
+          :aria-pressed="leaderboardMode === 'individuals'"
+          @click="leaderboardMode = 'individuals'"
+        >
+          Individuals
+        </button>
+        <button
+          type="button"
+          :aria-pressed="leaderboardMode === 'teams'"
+          @click="leaderboardMode = 'teams'"
+        >
+          Teams
+        </button>
+      </div>
+
       <div v-if="activeTab === '12h'" data-testid="race-panel-12h">
         <section class="panel">
           <h2>{{ race12?.name || '12 Hour' }}</h2>
@@ -159,8 +181,14 @@
           />
         </div>
         <section class="panel">
-          <h2>Leaderboard — Combined overall</h2>
-          <table data-testid="leaderboard-overall">
+          <h2>
+            {{
+              leaderboardMode === 'teams'
+                ? 'Leaderboard — Teams'
+                : 'Leaderboard — Combined overall'
+            }}
+          </h2>
+          <table v-if="leaderboardMode === 'individuals'" data-testid="leaderboard-overall">
             <thead>
               <tr>
                 <th>Place</th>
@@ -190,6 +218,31 @@
               </tr>
               <tr v-if="!(race12?.leaderboard_overall?.length)">
                 <td colspan="4">No results yet</td>
+              </tr>
+            </tbody>
+          </table>
+          <table v-else data-testid="leaderboard-teams">
+            <thead>
+              <tr>
+                <th>Place</th>
+                <th>Name</th>
+                <th>Avg laps</th>
+                <th>Members</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="e in race12?.leaderboard_teams || []"
+                :key="e.team_id"
+                data-testid="leaderboard-team-row"
+              >
+                <td class="place">{{ e.place }}</td>
+                <td>{{ e.name }}</td>
+                <td>{{ formatAvgLaps(e.avg_laps) }}</td>
+                <td>{{ e.member_count }}</td>
+              </tr>
+              <tr v-if="!(race12?.leaderboard_teams?.length)">
+                <td colspan="4">No team results yet</td>
               </tr>
             </tbody>
           </table>
@@ -224,8 +277,14 @@
           />
         </div>
         <section class="panel">
-          <h2>Leaderboard — Combined overall</h2>
-          <table>
+          <h2>
+            {{
+              leaderboardMode === 'teams'
+                ? 'Leaderboard — Teams'
+                : 'Leaderboard — Combined overall'
+            }}
+          </h2>
+          <table v-if="leaderboardMode === 'individuals'">
             <thead>
               <tr>
                 <th>Place</th>
@@ -249,6 +308,31 @@
               </tr>
               <tr v-if="!(race6?.leaderboard_overall?.length)">
                 <td colspan="4">No results yet</td>
+              </tr>
+            </tbody>
+          </table>
+          <table v-else data-testid="leaderboard-teams">
+            <thead>
+              <tr>
+                <th>Place</th>
+                <th>Name</th>
+                <th>Avg laps</th>
+                <th>Members</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="e in race6?.leaderboard_teams || []"
+                :key="e.team_id"
+                data-testid="leaderboard-team-row"
+              >
+                <td class="place">{{ e.place }}</td>
+                <td>{{ e.name }}</td>
+                <td>{{ formatAvgLaps(e.avg_laps) }}</td>
+                <td>{{ e.member_count }}</td>
+              </tr>
+              <tr v-if="!(race6?.leaderboard_teams?.length)">
+                <td colspan="4">No team results yet</td>
               </tr>
             </tbody>
           </table>
@@ -283,8 +367,14 @@
           />
         </div>
         <section class="panel">
-          <h2>Leaderboard — Combined overall</h2>
-          <table>
+          <h2>
+            {{
+              leaderboardMode === 'teams'
+                ? 'Leaderboard — Teams'
+                : 'Leaderboard — Combined overall'
+            }}
+          </h2>
+          <table v-if="leaderboardMode === 'individuals'">
             <thead>
               <tr>
                 <th>Place</th>
@@ -308,6 +398,31 @@
               </tr>
               <tr v-if="!(race90?.leaderboard_overall?.length)">
                 <td colspan="4">No results yet</td>
+              </tr>
+            </tbody>
+          </table>
+          <table v-else data-testid="leaderboard-teams">
+            <thead>
+              <tr>
+                <th>Place</th>
+                <th>Name</th>
+                <th>Avg laps</th>
+                <th>Members</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="e in race90?.leaderboard_teams || []"
+                :key="e.team_id"
+                data-testid="leaderboard-team-row"
+              >
+                <td class="place">{{ e.place }}</td>
+                <td>{{ e.name }}</td>
+                <td>{{ formatAvgLaps(e.avg_laps) }}</td>
+                <td>{{ e.member_count }}</td>
+              </tr>
+              <tr v-if="!(race90?.leaderboard_teams?.length)">
+                <td colspan="4">No team results yet</td>
               </tr>
             </tbody>
           </table>
@@ -387,8 +502,14 @@
             @pointerdown="onFsSplitPointerDown"
           />
           <div class="fs-panel" data-testid="rotator-leaderboard">
-            <h2>Leaderboard — Combined overall</h2>
-            <table>
+            <h2>
+              {{
+                leaderboardMode === 'teams'
+                  ? 'Leaderboard — Teams'
+                  : 'Leaderboard — Combined overall'
+              }}
+            </h2>
+            <table v-if="leaderboardMode === 'individuals'">
               <thead>
                 <tr>
                   <th>#</th>
@@ -409,6 +530,28 @@
                   <td>{{ e.bib_number }}</td>
                   <td>{{ e.name }}</td>
                   <td>{{ e.laps }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <table v-else data-testid="leaderboard-teams">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Avg</th>
+                  <th>Members</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="e in race12?.leaderboard_teams || []"
+                  :key="'fs-team-' + e.team_id"
+                  data-testid="leaderboard-team-row"
+                >
+                  <td>{{ e.place }}</td>
+                  <td>{{ e.name }}</td>
+                  <td>{{ formatAvgLaps(e.avg_laps) }}</td>
+                  <td>{{ e.member_count }}</td>
                 </tr>
               </tbody>
             </table>
@@ -464,6 +607,7 @@ const live = ref<EventLiveResponse | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const activeTab = ref<'12h' | '6h' | '90m' | 'overlap'>('12h')
+const leaderboardMode = ref<'individuals' | 'teams'>('individuals')
 const rotatorOpen = ref(false)
 const FS_FLOW_WIDTH_KEY = 'event-live-fs-flow-width'
 const FS_FLOW_WIDTH_MIN = 25
@@ -505,6 +649,10 @@ function formatCountdown(seconds: number): string {
   const m = Math.floor((s % 3600) / 60)
   const r = s % 60
   return [h, m, r].map((n) => String(n).padStart(2, '0')).join(':')
+}
+
+function formatAvgLaps(avg: number): string {
+  return Number.isFinite(avg) ? avg.toFixed(1) : '—'
 }
 
 /** Smooth 1s countdown from the last polled server value. */
@@ -1056,6 +1204,31 @@ onUnmounted(() => {
   background: var(--accent);
   color: var(--surface);
   border-color: var(--accent);
+}
+
+.mode-toggle {
+  display: inline-flex;
+  gap: 0;
+  margin: 0 0 1rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.mode-toggle button {
+  border: none;
+  background: transparent;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(0.9rem * var(--live-display-scale));
+  color: var(--ink);
+}
+
+.mode-toggle button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--surface);
 }
 
 .btn {

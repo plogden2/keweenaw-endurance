@@ -141,6 +141,14 @@ func (h *Handlers) createParticipantFromRequest(raceID uuid.UUID, req createPart
 		pub := uuidutil.NewPublicUUID(catID)
 		input.CategoryID = &pub
 	}
+	if req.TeamID != "" {
+		teamID, err := h.resolveTeamID(req.TeamID)
+		if err != nil {
+			return nil, err
+		}
+		pub := uuidutil.NewPublicUUID(teamID)
+		input.TeamID = &pub
+	}
 	return h.services.Participants.CreateParticipant(input)
 }
 
@@ -210,6 +218,20 @@ func (h *Handlers) UpdateParticipant(c *gin.Context) {
 			}
 			pub := uuidutil.NewPublicUUID(catID)
 			update.CategoryID = &pub
+		}
+	}
+	if req.TeamID != nil {
+		if *req.TeamID == "" {
+			zero := uuidutil.PublicUUID{}
+			update.TeamID = &zero
+		} else {
+			teamID, err := h.resolveTeamID(*req.TeamID)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid team_id"})
+				return
+			}
+			pub := uuidutil.NewPublicUUID(teamID)
+			update.TeamID = &pub
 		}
 	}
 

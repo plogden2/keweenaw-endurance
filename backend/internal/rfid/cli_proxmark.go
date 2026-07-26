@@ -74,15 +74,29 @@ func NewCLIProxmarkReader(cfg CLIProxmarkConfig) *CLIProxmarkReader {
 	if cfg.Runner != nil {
 		r.runner = cfg.Runner
 		r.useSession = false
+	} else if cfg.SessionFactory != nil {
+		r.sessionFactory = cfg.SessionFactory
+		r.useSession = true
+	} else if preferOneShotCLI() {
+		// Windows Proxmark clients using linenoise often never emit "pm3 -->"
+		// when stdin/stdout are pipes, so persistent sessions hang on startup.
+		r.runner = defaultCLICommandRunner(cliPath, cfg.Port)
+		r.useSession = false
 	} else {
-		factory := cfg.SessionFactory
-		if factory == nil {
-			factory = defaultSessionFactory(cliPath, cfg.Port)
-		}
-		r.sessionFactory = factory
+		r.sessionFactory = defaultSessionFactory(cliPath, cfg.Port)
 		r.useSession = true
 	}
 	return r
+}
+
+func preferOneShotCLI() bool {
+	if v := strings.TrimSpace(os.Getenv("PROXMARK3_SESSION")); v == "1" || strings.EqualFold(v, "true") {
+		return false
+	}
+	if v := strings.TrimSpace(os.Getenv("PROXMARK3_ONESHOT")); v == "0" || strings.EqualFold(v, "false") {
+		return false
+	}
+	return runtime.GOOS == "windows"
 }
 
 func defaultCLICommandRunner(cliPath, port string) CLICommandRunner {
@@ -409,6 +423,11 @@ func (r *CLIProxmarkReader) runLocked(ctx context.Context, command string) (stri
 	}
 	stdout, err := r.session.Run(ctx, command)
 	if err != nil {
+		// Card-select / empty-antenna failures still print a prompt. Keep the
+		// session warm so continuous Poll does not thrash COM reconnect backoff.
+		if pm3DeviceResponded(stdout) {
+			return stdout, err
+		}
 		_ = r.closeSessionLocked()
 		r.scheduleRetryLocked()
 		return stdout, err

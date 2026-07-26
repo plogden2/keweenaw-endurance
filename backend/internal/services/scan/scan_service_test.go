@@ -20,6 +20,7 @@ func setupScanTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, db.AutoMigrate(
 		&models.Event{},
 		&models.Race{},
+		&models.Team{},
 		&models.Participant{},
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},

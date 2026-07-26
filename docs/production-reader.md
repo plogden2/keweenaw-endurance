@@ -110,7 +110,9 @@ curl.exe http://127.0.0.1:8091/status
 
 Expect `"mode":"online_synced"` and `"connected":true`.
 
-**Taps:** Keep the bridge/GUI running so it holds one Proxmark session open. A brief wave should register quickly; the **laptop beeps** immediately on a successful chip read. The website still plays the Mario Kart sound when a lap is scored.
+**Taps:** Keep the bridge/GUI running so it holds one Proxmark session open. A brief wave should register quickly; the **laptop beeps** immediately on a successful chip read. The GUI shows **racer name · bib · UUID**. The website still plays the Mario Kart sound when a lap is scored.
+
+**All races:** In reader-gui, leave **Race** on **All races (event finish)** so one mat scores every distance. Arm the website Station to the event in finish mode (no race picker on Station). Manual bib entry auto-resolves across races; pick a race override only if a bib is shared.
 
 ---
 

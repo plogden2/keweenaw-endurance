@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/keweenaw-endurance/backend/internal/bridge"
+	"github.com/keweenaw-endurance/backend/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,6 +60,41 @@ func TestApp_ManualEntryOfflineQueuesPending(t *testing.T) {
 	require.NoError(t, app.ManualEntry("12", time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)))
 	assert.Equal(t, 1, app.store.PendingCount())
 	assert.True(t, filepath.IsAbs(app.store.PendingPath()) || app.store.PendingPath() != "")
+}
+
+func TestApp_ApplyScanResultMessage(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{
+		HostedAPIURL: "http://127.0.0.1:1",
+		BridgeToken:  "tok",
+		DeviceID:     "laptop-finish-1",
+		EventID:      "11111111-1111-1111-1111-111111111111",
+		DataDir:      dir,
+		LocalAddr:    "127.0.0.1:0",
+		BridgeMock:   true,
+		PollMS:       500,
+	}
+	normalizeConfig(&cfg)
+	app, err := New(cfg)
+	require.NoError(t, err)
+
+	app.applyScanResultMessage(&services.BridgeMessage{
+		Type:        "scan_result",
+		LogicalUUID: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+		Scan: map[string]any{
+			"result":           "lap",
+			"participant_name": "Ada Lovelace",
+			"bib_number":       "7",
+			"race_name":        "12 Hour",
+			"race_id":          "race-1",
+		},
+	})
+	st := app.StatusSnapshot()
+	assert.Equal(t, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", st.LastTapUUID)
+	assert.Equal(t, "Ada Lovelace", st.LastTapName)
+	assert.Equal(t, "7", st.LastTapBib)
+	assert.Equal(t, "12 Hour", st.LastTapRaceName)
+	assert.Equal(t, "lap", st.LastTapResult)
 }
 
 func TestApp_StartStopMock(t *testing.T) {

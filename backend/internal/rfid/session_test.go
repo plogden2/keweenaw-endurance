@@ -119,5 +119,37 @@ func TestPM3PromptPattern(t *testing.T) {
 	assert.True(t, pm3PromptPattern.MatchString("pm3 -->"))
 	assert.True(t, pm3PromptPattern.MatchString("[usb] pm3 -->"))
 	assert.True(t, pm3PromptPattern.MatchString("[usb|script] pm3 -->"))
+	assert.True(t, pm3PromptPattern.MatchString("boot banner\n[usb] pm3 --> "))
 	assert.False(t, pm3PromptPattern.MatchString("executing pm3 --> later"))
+}
+
+func TestCLIProxmarkReader_KeepsSessionOnCardMiss(t *testing.T) {
+	var sessions []*fakeSession
+	factory := func(context.Context) (PM3Session, error) {
+		s := &fakeSession{
+			outputs: []string{"[#] can't select card\n[usb] pm3 -->\n"},
+			errs:    []error{errors.New("exit status 1")},
+		}
+		sessions = append(sessions, s)
+		return s, nil
+	}
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled:        true,
+		SessionFactory: factory,
+		Beeper:         &recordingBeeper{},
+	})
+
+	got, err := reader.Poll()
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	require.Len(t, sessions, 1)
+	assert.False(t, sessions[0].closed)
+	assert.Same(t, sessions[0], reader.session)
+
+	// Second poll reuses the warm session (no reconnect thrash).
+	got, err = reader.Poll()
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	require.Len(t, sessions, 1)
+	assert.Equal(t, 2, sessions[0].runCalls)
 }

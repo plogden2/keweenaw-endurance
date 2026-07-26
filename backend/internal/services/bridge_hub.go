@@ -39,6 +39,8 @@ type BridgeMessage struct {
 	PendingCount *int    `json:"pending_count,omitempty"`
 	Syncing      *bool   `json:"syncing,omitempty"`
 	LastSyncAt   *string `json:"last_sync_at,omitempty"`
+	// Scan is set on type=scan_result (server → device) for reader-gui feedback.
+	Scan any `json:"scan,omitempty"`
 }
 
 // BridgeStatus is returned by GET /api/rfid/bridge/status.
@@ -224,6 +226,31 @@ func (h *BridgeHub) RequestWrite(deviceID, logicalUUID string, timeout time.Dura
 		h.cancelPending(deviceID, requestID)
 		return ErrBridgeWriteTimeout
 	}
+}
+
+// SendToDevice pushes a server→device message (e.g. scan_result) if connected.
+func (h *BridgeHub) SendToDevice(deviceID string, msg BridgeMessage) error {
+	deviceID = normalizeDeviceID(deviceID)
+	if deviceID == "" {
+		return ErrBridgeUnavailable
+	}
+	h.mu.RLock()
+	state, ok := h.devices[deviceID]
+	if !ok || state == nil || state.conn == nil || !state.status.Connected {
+		h.mu.RUnlock()
+		return ErrBridgeUnavailable
+	}
+	conn := state.conn
+	writeMu := &state.writeMu
+	h.mu.RUnlock()
+
+	writeMu.Lock()
+	err := conn.WriteJSON(msg)
+	writeMu.Unlock()
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrBridgeUnavailable, err)
+	}
+	return nil
 }
 
 func (h *BridgeHub) HandleMessage(deviceID string, msg *BridgeMessage) error {

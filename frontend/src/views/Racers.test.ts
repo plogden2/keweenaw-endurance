@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import Racers from '@/views/Racers.vue'
 import { setupPinia, createTestRouter } from '@/test/helpers'
-import { raceParticipantsApi, racesApi, rfidApi } from '@/services/api'
+import { raceParticipantsApi, racesApi, raceTeamsApi, rfidApi } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
 
 vi.mock('@/services/api', async () => {
@@ -20,6 +20,12 @@ vi.mock('@/services/api', async () => {
       listCategories: vi.fn(),
       listTags: vi.fn(),
       addTag: vi.fn(),
+    },
+    raceTeamsApi: {
+      list: vi.fn(),
+      create: vi.fn(),
+      remove: vi.fn(),
+      setMembers: vi.fn(),
     },
     rfidApi: {
       writeTag: vi.fn(),
@@ -80,6 +86,9 @@ describe('Racers.vue', () => {
     ;(raceParticipantsApi.list as Mock).mockResolvedValue({
       data: { data: sampleRacers, total: 2 },
     })
+    ;(raceTeamsApi.list as Mock).mockResolvedValue({
+      data: { data: [{ id: 'team-a', race_id: 'race-1', name: 'East Bluff A' }], total: 1 },
+    })
   })
 
   afterEach(() => {
@@ -110,6 +119,23 @@ describe('Racers.vue', () => {
     expect(wrapper.find('[data-testid="racers-search"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="racers-list"]').exists()).toBe(true)
     expect(wrapper.findAll('[data-testid="racer-row"]')).toHaveLength(2)
+  })
+
+  it('renders teams section and assigns team from racer dropdown', async () => {
+    ;(raceParticipantsApi.update as Mock).mockResolvedValue({
+      data: { ...sampleRacers[0], team_id: 'team-a' },
+    })
+    const wrapper = await mountRacers()
+
+    expect(wrapper.find('[data-testid="teams-section"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="teams-list"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('East Bluff A')
+
+    const select = wrapper.find('[data-testid="racer-team-select"]')
+    await select.setValue('team-a')
+    await flushPromises()
+
+    expect(raceParticipantsApi.update).toHaveBeenCalledWith('p1', { team_id: 'team-a' })
   })
 
   it('debounces search filtering (~200ms)', async () => {
@@ -172,7 +198,11 @@ describe('Racers.vue', () => {
     await writeBtn.trigger('click')
     await flushPromises()
 
-    expect(rfidApi.writeTag).toHaveBeenCalledWith({ participant_id: 'p2' })
+    expect(rfidApi.writeTag).toHaveBeenCalledWith({
+      participant_id: 'p2',
+      race_id: 'race-1',
+      logical_uuid: undefined,
+    })
     expect(raceParticipantsApi.listTags).toHaveBeenCalledWith('race-1', 'p2')
     expect(wrapper.find('[data-testid="program-tag-list"]').text()).toContain(logicalUuid)
   })

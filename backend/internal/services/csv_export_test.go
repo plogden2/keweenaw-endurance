@@ -87,6 +87,7 @@ func TestCSVExport_WriteLiveSnapshotContainsSections(t *testing.T) {
 	assert.Contains(t, text, "#SECTION,event")
 	assert.Contains(t, text, "#SECTION,races")
 	assert.Contains(t, text, "#SECTION,categories")
+	assert.Contains(t, text, "#SECTION,teams")
 	assert.Contains(t, text, "#SECTION,participants")
 	assert.Contains(t, text, "#SECTION,tags")
 	assert.Contains(t, text, "#SECTION,checkpoints")

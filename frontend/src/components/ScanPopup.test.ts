@@ -44,10 +44,27 @@ describe('ScanPopup.vue', () => {
     expect(wrapper.find('[data-testid="scan-placement"]').text()).toContain('3')
     expect(wrapper.find('[data-testid="scan-lap-count"]').text()).toContain('14')
     expect(wrapper.find('[data-testid="scan-race-name"]').text()).toContain('12 Hour')
+    expect(wrapper.find('[data-testid="scan-team-line"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="karaoke-bonus-button"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="scan-popup-dismiss"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="scan-sound-playing"]').exists()).toBe(false)
     expect(wrapper.text().toLowerCase()).not.toMatch(/playing sound/)
+  })
+
+  it('shows team secondary line when team fields are present', () => {
+    const wrapper = mount(ScanPopup, {
+      props: {
+        scan: lapScan({
+          team_name: 'East Bluff A',
+          team_placement: 2,
+          team_avg_laps: 11.25,
+        }),
+      },
+    })
+
+    const line = wrapper.find('[data-testid="scan-team-line"]')
+    expect(line.exists()).toBe(true)
+    expect(line.text()).toBe('East Bluff A · #2 · 11.3 avg')
   })
 
   it('plays new-lap audio on lap without showing a sound label', async () => {

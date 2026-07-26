@@ -38,6 +38,7 @@ func setupBridgeHandlerTest(t *testing.T) (*gin.Engine, *services.Services, *htt
 	require.NoError(t, db.AutoMigrate(
 		&models.Event{},
 		&models.Race{},
+		&models.Team{},
 		&models.Participant{},
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},

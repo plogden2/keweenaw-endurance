@@ -174,6 +174,7 @@ func respondServiceError(c *gin.Context, err error) {
 		errors.Is(err, services.ErrParticipantNotFound),
 		errors.Is(err, services.ErrCheckpointNotFound),
 		errors.Is(err, services.ErrCategoryNotFound),
+		errors.Is(err, services.ErrTeamNotFound),
 		errors.Is(err, services.ErrTimingRecordNotFound),
 		errors.Is(err, services.ErrRFIDTagNotFound),
 		errors.Is(err, services.ErrStationNotFound):
@@ -187,6 +188,7 @@ func respondServiceError(c *gin.Context, err error) {
 		errors.Is(err, services.ErrInvalidParticipantInput),
 		errors.Is(err, services.ErrInvalidCheckpointInput),
 		errors.Is(err, services.ErrInvalidCategoryInput),
+		errors.Is(err, services.ErrInvalidTeamInput),
 		errors.Is(err, services.ErrInvalidTimingInput),
 		errors.Is(err, services.ErrInvalidRFIDInput),
 		errors.Is(err, services.ErrInvalidStationInput),

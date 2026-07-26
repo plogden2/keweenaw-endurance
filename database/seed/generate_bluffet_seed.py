@@ -125,12 +125,16 @@ def main() -> None:
 
     checkpoint_rows: list[str] = []
     category_rows: list[str] = []
-    # (participant_id, race_id, bib, first, last, gender, age, tag_uid, category_id)
-    participants: list[tuple[str, str, str, str, str, str, int, str, str]] = []
+    team_rows: list[str] = []
+    # (participant_id, race_id, bib, first, last, gender, age, tag_uid, category_id, team_id|None)
+    participants: list[tuple[str, str, str, str, str, str, int, str, str, str | None]] = []
     association_rows: list[str] = []
 
     name_idx = 0
     all_tag_uids: list[str] = []
+    # 12 Hour only: 4 teams × 4 members (East Bluff A–D)
+    TEAM_NAMES = ("East Bluff A", "East Bluff B", "East Bluff C", "East Bluff D")
+    team_ids_12h: list[str] = []
 
     for race in races:
         race_id = race["id"]
@@ -155,6 +159,14 @@ def main() -> None:
                 f"NULL, NULL, {sql_null_or_str(gender)}, {order})"
             )
 
+        if race_key == "12-hour":
+            for order, tname in enumerate(TEAM_NAMES):
+                tid = stable_uuid(f"team:{race_key}:{tname}")
+                team_ids_12h.append(tid)
+                team_rows.append(
+                    f"    ('{tid}', '{race_id}', {sql_str(tname)}, {order})"
+                )
+
         count = race["participant_count"]
         for i in range(count):
             cat_id, gender = cat_ids[i % len(cat_ids)]
@@ -166,8 +178,11 @@ def main() -> None:
             age = 10 + (i % 8) if race_key == "90-minute-kids" else 25 + (i % 30)
             tag_uid = stable_uuid(f"tag:{race_key}:{i + 1}")
             all_tag_uids.append(tag_uid)
+            team_id: str | None = None
+            if race_key == "12-hour" and i < 16 and team_ids_12h:
+                team_id = team_ids_12h[i // 4]
             participants.append(
-                (pid, race_id, bib, first, last, gender, age, tag_uid, cat_id)
+                (pid, race_id, bib, first, last, gender, age, tag_uid, cat_id, team_id)
             )
             association_rows.append(
                 f"    ('{stable_uuid(f'tag-assoc:{tag_uid}')}', '{pid}', "
@@ -215,10 +230,25 @@ def main() -> None:
         f"-- Event id: {event_id}",
         "",
         "-- Clean prior Bluffet seed (order respects FKs)",
+        "UPDATE timing_records SET station_id = NULL WHERE station_id IN (",
+        "    SELECT rs.id FROM reader_stations rs",
+        "    JOIN events e ON rs.event_id = e.id",
+        f"    WHERE {event_filter}",
+        ");",
+        "DELETE FROM reader_stations WHERE event_id IN (",
+        "    SELECT e.id FROM events e",
+        f"    WHERE {event_filter}",
+        ");",
+        "DELETE FROM timing_records WHERE participant_id IN (",
+        f"    {participant_subq}",
+        ");",
         "DELETE FROM rfid_tag_associations WHERE participant_id IN (",
         f"    {participant_subq}",
         ");",
         "DELETE FROM participants WHERE race_id IN (",
+        f"    {race_subq}",
+        ");",
+        "DELETE FROM teams WHERE race_id IN (",
         f"    {race_subq}",
         ");",
         "DELETE FROM categories WHERE race_id IN (",
@@ -277,16 +307,26 @@ def main() -> None:
     lines.append("VALUES")
     lines.append(",\n".join(category_rows) + ";")
     lines.append("")
+    if team_rows:
+        lines.append(
+            "-- teams (migration 05): 12 Hour East Bluff A–D, 4 members each"
+        )
+        lines.append(
+            "INSERT INTO teams (id, race_id, name, display_order)"
+        )
+        lines.append("VALUES")
+        lines.append(",\n".join(team_rows) + ";")
+        lines.append("")
     lines.append(
-        "-- participants.category_id + rfid_tag_uid (migration 04); associations table for multi-tag lookups"
+        "-- participants.category_id + rfid_tag_uid (migration 04); team_id (migration 05); associations"
     )
     lines.append(
-        "INSERT INTO participants (id, race_id, bib_number, first_name, last_name, gender, age, location, rfid_tag_uid, status, category_id)"
+        "INSERT INTO participants (id, race_id, bib_number, first_name, last_name, gender, age, location, rfid_tag_uid, status, category_id, team_id)"
     )
     lines.append("VALUES")
 
     participant_rows = []
-    for pid, race_id, bib, first, last, gender, age, tag_uid, cat_id in participants:
+    for pid, race_id, bib, first, last, gender, age, tag_uid, cat_id, team_id in participants:
         participant_rows.append(
             "    (\n"
             f"        '{pid}',\n"
@@ -299,7 +339,8 @@ def main() -> None:
             "        'Copper Harbor, MI',\n"
             f"        {sql_str(tag_uid)},\n"
             "        'registered',\n"
-            f"        '{cat_id}'\n"
+            f"        '{cat_id}',\n"
+            f"        {sql_null_or_str(team_id)}\n"
             "    )"
         )
     lines.append(",\n".join(participant_rows) + ";")
@@ -316,7 +357,7 @@ def main() -> None:
     output_sql.write_text("\n".join(lines), encoding="utf-8")
     print(
         f"Wrote {output_sql} "
-        f"({len(races)} races, {len(category_rows)} categories, "
+        f"({len(races)} races, {len(category_rows)} categories, {len(team_rows)} teams, "
         f"{len(participants)} participants, {len(association_rows)} tag associations)"
     )
 

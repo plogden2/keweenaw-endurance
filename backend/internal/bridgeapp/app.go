@@ -33,6 +33,13 @@ type Status struct {
 	LastSyncAt   *time.Time `json:"last_sync_at,omitempty"`
 	LastRead     string     `json:"last_read,omitempty"`
 	LastReadAt   *time.Time `json:"last_read_at,omitempty"`
+	LastTapUUID     string     `json:"last_tap_uuid,omitempty"`
+	LastTapAt       *time.Time `json:"last_tap_at,omitempty"`
+	LastTapResult   string     `json:"last_tap_result,omitempty"`
+	LastTapName     string     `json:"last_tap_name,omitempty"`
+	LastTapBib      string     `json:"last_tap_bib,omitempty"`
+	LastTapRaceID   string     `json:"last_tap_race_id,omitempty"`
+	LastTapRaceName string     `json:"last_tap_race_name,omitempty"`
 	Running      bool       `json:"running"`
 	LastError    string     `json:"last_error,omitempty"`
 }
@@ -58,6 +65,13 @@ type App struct {
 	chipMemory string
 	lastRead   string
 	lastReadAt time.Time
+	lastTapUUID     string
+	lastTapAt       time.Time
+	lastTapResult   string
+	lastTapName     string
+	lastTapBib      string
+	lastTapRaceID   string
+	lastTapRaceName string
 	lastError  string
 	running    bool
 
@@ -140,13 +154,11 @@ func (a *App) Start(parent context.Context) error {
 		a.runBridgeLoop(ctx)
 	}()
 
-	if a.cfg.RaceID != "" {
-		go func() {
-			if err := a.RefreshRoster(); err != nil {
-				log.Printf("roster refresh: %v", err)
-			}
-		}()
-	}
+	go func() {
+		if err := a.RefreshRoster(); err != nil {
+			log.Printf("roster refresh: %v", err)
+		}
+	}()
 	return nil
 }
 
@@ -189,9 +201,15 @@ func (a *App) StatusSnapshot() Status {
 		EventID:      a.cfg.EventID,
 		CSVPath:      a.store.CSVPath(),
 		PendingPath:  a.store.PendingPath(),
-		LastRead:     a.lastRead,
-		Running:      a.running,
-		LastError:    a.lastError,
+		LastRead:        a.lastRead,
+		LastTapUUID:     a.lastTapUUID,
+		LastTapResult:   a.lastTapResult,
+		LastTapName:     a.lastTapName,
+		LastTapBib:      a.lastTapBib,
+		LastTapRaceID:   a.lastTapRaceID,
+		LastTapRaceName: a.lastTapRaceName,
+		Running:         a.running,
+		LastError:       a.lastError,
 	}
 	if a.lastSyncAt != nil {
 		t := *a.lastSyncAt
@@ -201,28 +219,45 @@ func (a *App) StatusSnapshot() Status {
 		t := a.lastReadAt
 		out.LastReadAt = &t
 	}
+	if !a.lastTapAt.IsZero() {
+		t := a.lastTapAt
+		out.LastTapAt = &t
+	}
 	return out
 }
 
-// RefreshRoster caches bib→UUID for offline manual entry.
+// RefreshRoster caches bib→UUID (+ names) for manual entry and tap labels.
+// Empty RaceID refreshes the whole event (All races mode).
 func (a *App) RefreshRoster() error {
 	if err := bridge.EnsureBearer(a.auth, a.client, a.cfg.OrganizerPIN); err != nil {
 		return err
 	}
-	return a.roster.Refresh(a.auth, a.client, a.cfg.RaceID)
+	if strings.TrimSpace(a.cfg.RaceID) == "" {
+		return a.roster.RefreshEvent(a.auth, a.client, a.cfg.EventID)
+	}
+	return a.roster.RefreshRace(a.auth, a.client, a.cfg.RaceID, "", a.cfg.CheckpointID)
 }
 
 // ManualEntry records a lap online, or queues offline via roster UUID.
+// raceOverride empty = auto-resolve across the event roster (All races).
 func (a *App) ManualEntry(bib string, ts time.Time) error {
+	return a.ManualEntryInRace(bib, ts, a.cfg.RaceID)
+}
+
+// ManualEntryInRace records a lap for an optional race override.
+func (a *App) ManualEntryInRace(bib string, ts time.Time, raceOverride string) error {
 	bib = strings.TrimSpace(bib)
 	if bib == "" {
 		return fmt.Errorf("bib number is required")
 	}
-	if a.cfg.RaceID == "" || a.cfg.CheckpointID == "" {
-		return fmt.Errorf("race_id and checkpoint_id are required in config")
-	}
 	if ts.IsZero() {
 		ts = time.Now().UTC()
+	}
+	raceOverride = strings.TrimSpace(raceOverride)
+
+	entry, err := a.resolveManualEntry(bib, raceOverride)
+	if err != nil {
+		return err
 	}
 
 	a.mu.RLock()
@@ -233,40 +268,92 @@ func (a *App) ManualEntry(bib string, ts time.Time) error {
 		if err := bridge.EnsureBearer(a.auth, a.client, a.cfg.OrganizerPIN); err != nil {
 			return err
 		}
+		checkpointID := entry.CheckpointID
+		if checkpointID == "" {
+			checkpointID = a.cfg.CheckpointID
+		}
+		if entry.RaceID == "" || checkpointID == "" {
+			return fmt.Errorf("could not resolve race/checkpoint for bib %s", bib)
+		}
 		err := bridge.PostManualEntry(a.auth, a.client, bridge.ManualEntryRequest{
-			RaceID:       a.cfg.RaceID,
-			CheckpointID: a.cfg.CheckpointID,
+			RaceID:       entry.RaceID,
+			CheckpointID: checkpointID,
 			BibNumber:    bib,
 			Timestamp:    ts,
 			DeviceID:     a.cfg.DeviceID,
 		})
 		if err == nil {
 			_ = a.RefreshRoster()
+			a.setLastTapFromRoster(entry, "lap")
 		}
 		return err
 	}
 
-	uid, ok := a.roster.LogicalUUIDForBib(bib)
-	if !ok {
-		// Try one refresh if we have credentials, then fail clearly.
-		if err := a.RefreshRoster(); err == nil {
-			uid, ok = a.roster.LogicalUUIDForBib(bib)
-		}
-	}
-	if !ok || uid == "" {
+	if entry.LogicalUUID == "" {
 		return fmt.Errorf("offline: no cached RFID UUID for bib %s (connect once to refresh roster)", bib)
 	}
 	lap := bridge.PendingLap{
-		LogicalUUID: uid,
+		LogicalUUID: entry.LogicalUUID,
 		TS:          ts.UTC(),
 		DeviceID:    a.cfg.DeviceID,
 	}
 	if err := a.store.EnqueueLap(lap); err != nil {
 		return err
 	}
+	a.setLastTapFromRoster(entry, "queued")
 	a.setMode(bridge.ModeOffline)
 	a.publishStatus()
 	return nil
+}
+
+func (a *App) resolveManualEntry(bib, raceOverride string) (bridge.RosterEntry, error) {
+	entries := a.roster.EntriesForBib(bib)
+	if len(entries) == 0 {
+		if err := a.RefreshRoster(); err == nil {
+			entries = a.roster.EntriesForBib(bib)
+		}
+	}
+	if raceOverride != "" {
+		var filtered []bridge.RosterEntry
+		for _, e := range entries {
+			if e.RaceID == raceOverride || strings.HasSuffix(e.RaceID, raceOverride) || strings.HasSuffix(raceOverride, e.RaceID) {
+				filtered = append(filtered, e)
+			}
+		}
+		entries = filtered
+		if len(entries) == 0 && a.cfg.RaceID == raceOverride && a.cfg.CheckpointID != "" {
+			// Online path can still post with config when roster miss but race forced.
+			return bridge.RosterEntry{Bib: bib, RaceID: raceOverride, CheckpointID: a.cfg.CheckpointID}, nil
+		}
+	}
+	switch len(entries) {
+	case 0:
+		return bridge.RosterEntry{}, fmt.Errorf("unknown bib %s", bib)
+	case 1:
+		return entries[0], nil
+	default:
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			if e.RaceName != "" {
+				names = append(names, e.RaceName)
+			} else {
+				names = append(names, e.RaceID)
+			}
+		}
+		return bridge.RosterEntry{}, fmt.Errorf("ambiguous bib %s — select a race (%s)", bib, strings.Join(names, ", "))
+	}
+}
+
+func (a *App) setLastTapFromRoster(entry bridge.RosterEntry, result string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.lastTapUUID = entry.LogicalUUID
+	a.lastTapAt = time.Now().UTC()
+	a.lastTapResult = result
+	a.lastTapName = entry.Name
+	a.lastTapBib = entry.Bib
+	a.lastTapRaceID = entry.RaceID
+	a.lastTapRaceName = entry.RaceName
 }
 
 func openReader(cfg Config) rfid.Reader {
@@ -471,6 +558,20 @@ func (a *App) pollOnce() {
 	}
 	a.lastRead = logicalUUID
 	a.lastReadAt = time.Now()
+	if e, ok := a.roster.EntryForUUID(logicalUUID); ok {
+		a.lastTapUUID = logicalUUID
+		a.lastTapAt = a.lastReadAt
+		a.lastTapName = e.Name
+		a.lastTapBib = e.Bib
+		a.lastTapRaceID = e.RaceID
+		a.lastTapRaceName = e.RaceName
+		if a.lastTapResult == "" {
+			a.lastTapResult = "read"
+		}
+	} else {
+		a.lastTapUUID = logicalUUID
+		a.lastTapAt = a.lastReadAt
+	}
 	online := a.online
 	conn := a.conn
 	a.mu.Unlock()
@@ -576,10 +677,8 @@ func (a *App) connectAndServe(ctx context.Context) error {
 		log.Printf("initial flush failed: %v", err)
 	}
 	a.publishStatus()
-	if a.cfg.RaceID != "" {
-		if err := a.RefreshRoster(); err != nil {
-			log.Printf("roster refresh on connect: %v", err)
-		}
+	if err := a.RefreshRoster(); err != nil {
+		log.Printf("roster refresh on connect: %v", err)
 	}
 
 	errCh := make(chan error, 1)
@@ -639,9 +738,68 @@ func (a *App) handleWSMessage(conn *websocket.Conn, msg *services.BridgeMessage)
 			errMsg = err.Error()
 		}
 		return bridge.SendWriteAck(conn, &a.writeMu, msg.RequestID, ok, errMsg)
+	case "scan_result":
+		a.applyScanResultMessage(msg)
+		return nil
 	default:
 		return nil
 	}
+}
+
+func (a *App) applyScanResultMessage(msg *services.BridgeMessage) {
+	if msg == nil {
+		return
+	}
+	uid := strings.ToLower(strings.TrimSpace(msg.LogicalUUID))
+	name, bib, raceID, raceName, result := "", "", "", "", ""
+	if msg.Scan != nil {
+		raw, err := json.Marshal(msg.Scan)
+		if err == nil {
+			var scan struct {
+				Result          string `json:"result"`
+				ParticipantName string `json:"participant_name"`
+				BibNumber       string `json:"bib_number"`
+				RaceName        string `json:"race_name"`
+				RaceID          string `json:"race_id"`
+			}
+			if json.Unmarshal(raw, &scan) == nil {
+				result = scan.Result
+				name = scan.ParticipantName
+				bib = scan.BibNumber
+				raceName = scan.RaceName
+				raceID = scan.RaceID
+			}
+		}
+	}
+	if (name == "" || bib == "") && uid != "" {
+		if e, ok := a.roster.EntryForUUID(uid); ok {
+			if name == "" {
+				name = e.Name
+			}
+			if bib == "" {
+				bib = e.Bib
+			}
+			if raceID == "" {
+				raceID = e.RaceID
+			}
+			if raceName == "" {
+				raceName = e.RaceName
+			}
+		}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if uid != "" {
+		a.lastTapUUID = uid
+		a.lastRead = uid
+		a.lastReadAt = time.Now().UTC()
+	}
+	a.lastTapAt = time.Now().UTC()
+	a.lastTapResult = result
+	a.lastTapName = name
+	a.lastTapBib = bib
+	a.lastTapRaceID = raceID
+	a.lastTapRaceName = raceName
 }
 
 func (a *App) flushPending(conn *websocket.Conn) error {

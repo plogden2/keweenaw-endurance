@@ -84,6 +84,13 @@
           {{ scan.participant_name || 'Unknown' }}
         </p>
         <p v-if="scan.bib_number" class="bib">Bib #{{ scan.bib_number }}</p>
+        <p
+          v-if="teamLine"
+          class="team-line"
+          data-testid="scan-team-line"
+        >
+          {{ teamLine }}
+        </p>
         <div class="stats">
           <div class="stat">
             <span>Placement</span>
@@ -153,6 +160,24 @@ const showKaraokeButton = computed(
     Boolean(props.scan.karaoke_available) &&
     !karaokeRecorded.value,
 )
+
+const teamLine = computed(() => {
+  const scan = props.scan
+  if (!scan || scan.result !== 'lap') {
+    return null
+  }
+  if (
+    !scan.team_name ||
+    scan.team_placement == null ||
+    scan.team_avg_laps == null
+  ) {
+    return null
+  }
+  const avg = Number.isFinite(scan.team_avg_laps)
+    ? scan.team_avg_laps.toFixed(1)
+    : String(scan.team_avg_laps)
+  return `${scan.team_name} · #${scan.team_placement} · ${avg} avg`
+})
 
 function onKaraoke() {
   karaokeRecorded.value = true
@@ -233,6 +258,13 @@ watch(
 .bib {
   color: #6c757d;
   margin: 0;
+}
+
+.team-line {
+  margin: 0.35rem 0 0;
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .stats {

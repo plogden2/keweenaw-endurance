@@ -4,6 +4,7 @@ import type {
   CreateEventPayload,
   CreateParticipantPayload,
   CreateRacePayload,
+  CreateTeamPayload,
   Event,
   LeaderboardResponse,
   ListParams,
@@ -15,13 +16,16 @@ import type {
   RaceType,
   RfidTagAssociation,
   Category,
+  SetTeamMembersPayload,
   SyncStatusResponse,
   BridgeStatusResponse,
   LocalBridgeStatusResponse,
+  Team,
   TimingRecord,
   UpdateEventPayload,
   UpdateParticipantPayload,
   UpdateRacePayload,
+  UpdateTeamPayload,
 } from '@/types/models'
 
 import type { BridgeStatusSnapshot } from './bridgeSyncStatus'
@@ -178,6 +182,20 @@ export const raceParticipantsApi = {
       tag_uid: tagUid,
     }),
 }
+
+/** Race-scoped teams (optional multi-racer units). */
+export const raceTeamsApi = {
+  list: (raceId: string) =>
+    apiClient.get<PaginatedResponse<Team> | Team[]>(`/api/races/${raceId}/teams`),
+  create: (raceId: string, data: CreateTeamPayload) =>
+    apiClient.post<Team>(`/api/races/${raceId}/teams`, data),
+  get: (teamId: string) => apiClient.get<Team>(`/api/teams/${teamId}`),
+  update: (teamId: string, data: UpdateTeamPayload) =>
+    apiClient.put<Team>(`/api/teams/${teamId}`, data),
+  remove: (teamId: string) => apiClient.delete<void>(`/api/teams/${teamId}`),
+  setMembers: (teamId: string, data: SetTeamMembersPayload) =>
+    apiClient.put<Team>(`/api/teams/${teamId}/members`, data),
+}
 export const checkpointsApi = {
   listByRace: (raceId: string, params?: ListParams) =>
     apiClient.get<PaginatedResponse<Checkpoint>>(`/api/races/${raceId}/checkpoints`, {
@@ -298,6 +316,10 @@ export interface ScanResult {
   category_label?: string
   retry_after_seconds?: number
   message?: string
+  team_id?: string
+  team_name?: string
+  team_placement?: number
+  team_avg_laps?: number
 }
 
 export interface PostScanPayload {
@@ -322,6 +344,15 @@ export interface LiveLeaderboardEntry {
   last_lap_at?: string
 }
 
+export interface LiveTeamLeaderboardEntry {
+  place: number
+  team_id: string
+  name: string
+  avg_laps: number
+  member_count: number
+  mean_last_lap_at?: string
+}
+
 export interface EventLiveRace {
   id: string
   name: string
@@ -331,6 +362,7 @@ export interface EventLiveRace {
   duration_minutes?: number
   countdown_seconds: number
   leaderboard_overall: LiveLeaderboardEntry[]
+  leaderboard_teams?: LiveTeamLeaderboardEntry[]
   flow_series: unknown[]
 }
 

@@ -66,7 +66,7 @@ func (s *ParticipantService) ListParticipants(page, limit int, raceID *uuid.UUID
 
 	var participants []models.Participant
 	offset := (page - 1) * limit
-	if err := query.Preload("Category").Order("bib_number ASC").Offset(offset).Limit(limit).Find(&participants).Error; err != nil {
+	if err := query.Preload("Category").Preload("Team").Order("bib_number ASC").Offset(offset).Limit(limit).Find(&participants).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -79,7 +79,7 @@ func (s *ParticipantService) ListParticipants(page, limit int, raceID *uuid.UUID
 
 func (s *ParticipantService) GetParticipant(id uuid.UUID) (*models.Participant, error) {
 	var participant models.Participant
-	if err := s.db.Preload("Category").First(&participant, "id = ?", id).Error; err != nil {
+	if err := s.db.Preload("Category").Preload("Team").First(&participant, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrParticipantNotFound
 		}
@@ -123,6 +123,11 @@ func (s *ParticipantService) CreateParticipant(input *models.Participant) (*mode
 
 	if input.CategoryID != nil && !input.CategoryID.IsZero() {
 		if err := s.ensureCategoryOnRace(input.CategoryID.UUID(), input.RaceID.UUID()); err != nil {
+			return nil, err
+		}
+	}
+	if input.TeamID != nil && !input.TeamID.IsZero() {
+		if err := NewTeamService(s.db).ValidateTeamForRace(input.TeamID.UUID(), input.RaceID.UUID()); err != nil {
 			return nil, err
 		}
 	}
@@ -215,6 +220,16 @@ func (s *ParticipantService) UpdateParticipant(id uuid.UUID, input *models.Parti
 				return nil, err
 			}
 			participant.CategoryID = input.CategoryID
+		}
+	}
+	if input.TeamID != nil {
+		if input.TeamID.IsZero() {
+			participant.TeamID = nil
+		} else {
+			if err := NewTeamService(s.db).ValidateTeamForRace(input.TeamID.UUID(), participant.RaceID.UUID()); err != nil {
+				return nil, err
+			}
+			participant.TeamID = input.TeamID
 		}
 	}
 

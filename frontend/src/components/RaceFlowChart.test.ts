@@ -6,7 +6,7 @@ import { Chart } from 'chart.js'
 import RaceFlowChart from './RaceFlowChart.vue'
 import { timingApi } from '@/services/api'
 import { resolveCategoryColor } from '@/themes/defaultLegend'
-import { buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, expandSteppedLapPoints, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, pickPlotClickDatasetIndex, PLOT_CLICK_HIT_PX, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
+import { buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, expandSteppedLapPoints, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, getParticipantTeamKey, getParticipantTeamLabel, NO_TEAM_KEY, pickPlotClickDatasetIndex, PLOT_CLICK_HIT_PX, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
 import { convertDistanceFromKm, KM_TO_MILES } from '@/utils/units'
 import { setupPinia } from '@/test/helpers'
 import type { TimingRecord } from '@/types/models'
@@ -69,6 +69,8 @@ const sampleRecords: TimingRecord[] = [
       gender: 'male',
       age: 32,
       status: 'finished',
+      team_id: 'team-a',
+      team: { id: 'team-a', race_id: 'race-1', name: 'East Bluff A' },
     },
     checkpoint: {
       id: 'cp-finish',
@@ -95,6 +97,7 @@ const sampleRecords: TimingRecord[] = [
       gender: 'female',
       age: 28,
       status: 'finished',
+      team_id: null,
     },
     checkpoint: {
       id: 'cp-finish',
@@ -689,6 +692,19 @@ describe('raceFlowData', () => {
     expect(['#1a3f3d', '#2f6b5a', '#9b654e', '#a1b383', '#6b7a76']).toContain(colors.get('p-beta'))
   })
 
+  it('derives team filter keys and labels from participant data', () => {
+    expect(getParticipantTeamKey('team-a')).toBe('team-a')
+    expect(getParticipantTeamKey(undefined)).toBe(NO_TEAM_KEY)
+    expect(getParticipantTeamKey(null)).toBe(NO_TEAM_KEY)
+    expect(getParticipantTeamLabel(NO_TEAM_KEY)).toBe('No team')
+    expect(getParticipantTeamLabel('team-a', 'East Bluff A')).toBe('East Bluff A')
+
+    const flows = buildParticipantFlows(sampleRecords, undefined, 'lap_based')
+    expect(flows.find((f) => f.participantId === 'p1')?.teamKey).toBe('team-a')
+    expect(flows.find((f) => f.participantId === 'p1')?.teamName).toBe('East Bluff A')
+    expect(flows.find((f) => f.participantId === 'p2')?.teamKey).toBe(NO_TEAM_KEY)
+  })
+
   it('derives gender and age group filter keys from participant data', () => {
     expect(getParticipantGenderKey('female')).toBe('female')
     expect(getParticipantGenderKey(undefined)).toBe('unknown')
@@ -789,11 +805,13 @@ describe('raceFlowData', () => {
       'lap_based',
     )
 
+    // Pre-start scored laps are kept (leaderboard counts them) but elapsed is
+    // clamped to >= 0 so the axis never goes negative.
     expect(flows).toHaveLength(1)
-    expect(flows[0].points).toHaveLength(2)
+    expect(flows[0].points).toHaveLength(3)
     expect(flows[0].points[0]).toEqual({ elapsedMinutes: 0, value: 0 })
-    expect(flows[0].points[1].elapsedMinutes).toBe(30)
-    expect(flows[0].points[1].value).toBe(1)
+    expect(flows[0].points[1]).toMatchObject({ elapsedMinutes: 0, value: 1 })
+    expect(flows[0].points[2]).toMatchObject({ elapsedMinutes: 30, value: 2 })
     expect(flows[0].points.every((point) => point.elapsedMinutes >= 0)).toBe(true)
   })
 
@@ -1190,10 +1208,12 @@ describe('RaceFlowChart.vue', () => {
     expect(wrapper.find('[data-testid="race-flow-status-filters"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="race-flow-gender-filters"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="race-flow-age-group-filters"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="race-flow-team-filters"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="race-flow-select-all"]').exists()).toBe(true)
     expect(wrapper.find('.filter-dropdown-trigger').exists()).toBe(true)
     expect(wrapper.text()).toContain('Gender')
     expect(wrapper.text()).toContain('Age group')
+    expect(wrapper.text()).toContain('Team')
     expect(wrapper.text()).toContain('#7 Alex')
     expect(wrapper.text()).toContain('#12 Sam')
   })
@@ -1240,6 +1260,30 @@ describe('RaceFlowChart.vue', () => {
     }
     expect(chartConfig.data.datasets).toHaveLength(1)
     expect(chartConfig.data.datasets[0].label).toContain('Alex')
+  })
+
+  it('filters legend items by team', async () => {
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: sampleRecords },
+    })
+
+    const wrapper = mount(RaceFlowChart, {
+      props: { raceId: 'race-1' },
+    })
+    await flushPromises()
+
+    const teamDropdown = wrapper.find('[data-testid="race-flow-team-filters"]')
+    expect(teamDropdown.exists()).toBe(true)
+    await teamDropdown.find('.filter-dropdown-trigger').trigger('click')
+    const noTeamOption = teamDropdown
+      .findAll('.filter-dropdown-option')
+      .find((option) => option.text().includes('No team'))
+    await noTeamOption?.trigger('click')
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('#7 Alex')
+    expect(wrapper.text()).not.toContain('#12 Sam')
   })
 
   it('filters legend items by search query', async () => {

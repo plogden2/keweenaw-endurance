@@ -59,6 +59,7 @@ func Migrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&models.Event{},
 		&models.Race{},
+		&models.Team{},
 		&models.Participant{},
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},

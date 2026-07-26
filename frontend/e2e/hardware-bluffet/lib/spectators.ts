@@ -105,6 +105,45 @@ export async function snapshotVisibleLaps(page: Page): Promise<number> {
   return total
 }
 
+/** Assert team leaderboard API + live UI surfaces for the 12h race (seeded East Bluff A–D). */
+export async function assertTeamSurfaces(
+  page: Page,
+  request: APIRequestContext,
+  opts: { eventId: string; raceId: string },
+): Promise<{ teamCount: number; uiOk: boolean }> {
+  const token = await pinToken(request)
+  const teamsRes = await request.get(`${API_BASE}/api/races/${opts.raceId}/teams`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!teamsRes.ok()) {
+    throw new Error(`teams list ${opts.raceId}: ${teamsRes.status()} ${await teamsRes.text()}`)
+  }
+  const teamsBody = await teamsRes.json()
+  const seededTeams = teamsBody.data ?? teamsBody
+  const seededCount = Array.isArray(seededTeams) ? seededTeams.length : 0
+
+  const boardRes = await request.get(`${API_BASE}/api/timing/team-leaderboard/${opts.raceId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!boardRes.ok()) {
+    throw new Error(`team-leaderboard ${opts.raceId}: ${boardRes.status()} ${await boardRes.text()}`)
+  }
+  const boardBody = await boardRes.json()
+  const rows = boardBody.data ?? boardBody
+  const teamCount = Array.isArray(rows) ? rows.length : 0
+
+  await page.goto(`/events/${opts.eventId}/live`, { timeout: 15_000 })
+  await page.getByTestId('live-view').waitFor({ state: 'visible', timeout: 15_000 })
+  await page.getByTestId('race-tab-12h').click({ timeout: 5_000 }).catch(() => {})
+  const toggle = page.getByTestId('leaderboard-mode-toggle')
+  await toggle.waitFor({ state: 'visible', timeout: 10_000 })
+  await toggle.getByRole('button', { name: 'Teams' }).click({ timeout: 5_000 })
+  await page.getByTestId('leaderboard-teams').waitFor({ state: 'visible', timeout: 10_000 })
+  const filterVisible = await page.getByTestId('race-flow-team-filters').isVisible().catch(() => false)
+  await toggle.getByRole('button', { name: 'Individuals' }).click({ timeout: 5_000 }).catch(() => {})
+  return { teamCount: Math.max(teamCount, seededCount), uiOk: seededCount >= 4 && filterVisible }
+}
+
 /** Always-online ground truth (via the `request` fixture, never taken offline). */
 export async function serverLapsTotal(request: APIRequestContext, raceId: string): Promise<number> {
   const token = await pinToken(request)

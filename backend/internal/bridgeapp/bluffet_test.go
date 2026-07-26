@@ -17,8 +17,8 @@ func TestApplyBluffetDefaults(t *testing.T) {
 	assert.Equal(t, DefaultOrganizerPIN, cfg.OrganizerPIN)
 	assert.Equal(t, "laptop-finish-1", cfg.DeviceID)
 	assert.Equal(t, BluffetEventIDFull, cfg.EventID)
-	assert.Equal(t, "17da3ba1-2e09-4eb1-aeb3-d9dd5b6a394e", cfg.RaceID)
-	assert.Equal(t, "81ca12c0-dfec-512e-b605-7e1dfbcb63f5", cfg.CheckpointID)
+	assert.Empty(t, cfg.RaceID, "default is All races")
+	assert.Empty(t, cfg.CheckpointID)
 	assert.True(t, cfg.RFIDHardware)
 }
 
@@ -81,6 +81,6 @@ func TestAutofillConfig_FillsEmptyOnly(t *testing.T) {
 	details, _ := AutofillConfig(&cfg, false)
 	assert.Equal(t, "from-env-token", cfg.BridgeToken)
 	assert.Equal(t, BluffetEventIDFull, cfg.EventID)
-	assert.NotEmpty(t, cfg.RaceID)
+	assert.Empty(t, cfg.RaceID, "All races remains empty — do not autofill a distance")
 	assert.NotEmpty(t, details.Races)
 }

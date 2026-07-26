@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -11,8 +13,11 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/keweenaw-endurance/backend/internal/bridge"
 	"github.com/keweenaw-endurance/backend/internal/bridgeapp"
 )
+
+const allRacesLabel = "All races (event finish)"
 
 type readerUI struct {
 	app     fyne.App
@@ -21,16 +26,19 @@ type readerUI struct {
 	cfgPath string
 	bridge  *bridgeapp.App
 	cancel  context.CancelFunc
-	races   []bridgeapp.BluffetRace
+
+	mu       sync.Mutex
+	events   []bridgeapp.CatalogEvent
+	races    []bridgeapp.CatalogRace
+	checkpoints []bridgeapp.CatalogCheckpoint
 
 	hostedURL    *widget.Entry
 	bridgeToken  *widget.Entry
 	organizerPIN *widget.Entry
 	deviceID     *widget.Entry
-	eventID      *widget.Entry
+	eventSelect  *widget.Select
 	raceSelect   *widget.Select
-	raceID       *widget.Entry
-	checkpointID *widget.Entry
+	checkpointSelect *widget.Select
 	dataDir      *widget.Entry
 	proxmarkCLI  *widget.Entry
 	proxmarkPort *widget.SelectEntry
@@ -40,23 +48,27 @@ type readerUI struct {
 
 	statusMode   *widget.Label
 	statusDetail *widget.Label
+	statusTap    *widget.Label
 	statusError  *widget.Label
 	startBtn     *widget.Button
 	stopBtn      *widget.Button
 
-	bibEntry  *widget.Entry
-	manualMsg *widget.Label
+	bibEntry         *widget.Entry
+	manualRaceSelect *widget.Select
+	manualMsg        *widget.Label
 }
 
 func newReaderWindow(a fyne.App, cfg bridgeapp.Config, cfgPath string) fyne.Window {
 	w := a.NewWindow("Keweenaw Endurance — Reader")
-	w.Resize(fyne.NewSize(740, 820))
+	w.Resize(fyne.NewSize(760, 860))
+	seedEv, seedRaces := bridgeapp.SeedCatalogFromBluffet()
 	ui := &readerUI{
 		app:     a,
 		win:     w,
 		cfg:     cfg,
 		cfgPath: cfgPath,
-		races:   bridgeapp.SeedBluffetDetails().Races,
+		events:  []bridgeapp.CatalogEvent{seedEv},
+		races:   seedRaces,
 	}
 	ui.build()
 	w.SetContent(ui.layout())
@@ -78,20 +90,21 @@ func (ui *readerUI) build() {
 	ui.organizerPIN.SetText(ui.cfg.OrganizerPIN)
 	ui.deviceID = widget.NewEntry()
 	ui.deviceID.SetText(ui.cfg.DeviceID)
-	ui.eventID = widget.NewEntry()
-	ui.eventID.SetText(ui.cfg.EventID)
-	ui.raceID = widget.NewEntry()
-	ui.raceID.SetText(ui.cfg.RaceID)
-	ui.checkpointID = widget.NewEntry()
-	ui.checkpointID.SetText(ui.cfg.CheckpointID)
 	ui.dataDir = widget.NewEntry()
 	ui.dataDir.SetText(ui.cfg.DataDir)
 	ui.proxmarkCLI = widget.NewEntry()
 	ui.proxmarkCLI.SetText(ui.cfg.ProxmarkCLI)
 
-	ui.raceSelect = widget.NewSelect(ui.raceOptionLabels(), func(name string) {
-		ui.applyRaceSelection(name)
+	ui.eventSelect = widget.NewSelect(ui.eventOptionLabels(), func(name string) {
+		ui.onEventSelected(name)
 	})
+	ui.raceSelect = widget.NewSelect(ui.raceOptionLabels(), func(name string) {
+		ui.onRaceSelected(name)
+	})
+	ui.checkpointSelect = widget.NewSelect([]string{}, func(name string) {
+		ui.onCheckpointSelected(name)
+	})
+	ui.selectEventMatchingConfig()
 	ui.selectRaceMatchingConfig()
 
 	ports, _ := bridgeapp.ListSerialPorts()
@@ -109,13 +122,15 @@ func (ui *readerUI) build() {
 	ui.hwCheck.SetChecked(ui.cfg.RFIDHardware)
 	ui.mockCheck = widget.NewCheck("Mock reader (no hardware)", nil)
 	ui.mockCheck.SetChecked(ui.cfg.BridgeMock)
-	ui.autofillMsg = widget.NewLabel("Autofill: loading Bluffet + bridge token…")
+	ui.autofillMsg = widget.NewLabel("Loading events & races…")
 	ui.autofillMsg.Wrapping = fyne.TextWrapWord
 
 	ui.statusMode = widget.NewLabel("Stopped")
 	ui.statusMode.TextStyle = fyne.TextStyle{Bold: true}
 	ui.statusDetail = widget.NewLabel("Start the bridge when ready.")
 	ui.statusDetail.Wrapping = fyne.TextWrapWord
+	ui.statusTap = widget.NewLabel("Last tap: —")
+	ui.statusTap.Wrapping = fyne.TextWrapWord
 	ui.statusError = widget.NewLabel("")
 	ui.statusError.Wrapping = fyne.TextWrapWord
 
@@ -126,48 +141,146 @@ func (ui *readerUI) build() {
 
 	ui.bibEntry = widget.NewEntry()
 	ui.bibEntry.SetPlaceHolder("Bib number")
+	ui.manualRaceSelect = widget.NewSelect(ui.manualRaceOptionLabels(), nil)
+	ui.manualRaceSelect.SetSelected(allRacesLabel)
 	ui.manualMsg = widget.NewLabel("")
 	ui.manualMsg.Wrapping = fyne.TextWrapWord
 }
 
+func (ui *readerUI) eventOptionLabels() []string {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+	labels := make([]string, 0, len(ui.events))
+	for _, e := range ui.events {
+		labels = append(labels, e.Name)
+	}
+	return labels
+}
+
 func (ui *readerUI) raceOptionLabels() []string {
-	labels := make([]string, 0, len(ui.races))
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+	labels := []string{allRacesLabel}
 	for _, r := range ui.races {
 		labels = append(labels, r.Name)
 	}
 	return labels
 }
 
-func (ui *readerUI) selectRaceMatchingConfig() {
-	if len(ui.races) == 0 {
-		return
+func (ui *readerUI) manualRaceOptionLabels() []string {
+	return ui.raceOptionLabels()
+}
+
+func (ui *readerUI) checkpointOptionLabels() []string {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+	labels := make([]string, 0, len(ui.checkpoints))
+	for _, cp := range ui.checkpoints {
+		label := cp.Name
+		if cp.Type != "" && !strings.EqualFold(cp.Name, cp.Type) {
+			label = fmt.Sprintf("%s (%s)", cp.Name, cp.Type)
+		}
+		labels = append(labels, label)
 	}
-	for _, r := range ui.races {
-		if r.RaceID == ui.cfg.RaceID || strings.HasSuffix(r.RaceID, ui.cfg.RaceID) || strings.HasSuffix(ui.cfg.RaceID, r.RaceID) {
-			ui.raceSelect.SetSelected(r.Name)
+	return labels
+}
+
+func (ui *readerUI) selectEventMatchingConfig() {
+	ui.mu.Lock()
+	events := append([]bridgeapp.CatalogEvent(nil), ui.events...)
+	eventID := ui.cfg.EventID
+	ui.mu.Unlock()
+	for _, e := range events {
+		if e.ID == eventID || strings.HasSuffix(e.ID, eventID) || strings.HasSuffix(eventID, e.ID) {
+			ui.eventSelect.SetSelected(e.Name)
 			return
 		}
 	}
-	ui.raceSelect.SetSelected(ui.races[0].Name)
-	ui.applyRaceSelection(ui.races[0].Name)
+	if len(events) > 0 {
+		ui.eventSelect.SetSelected(events[0].Name)
+	}
 }
 
-func (ui *readerUI) applyRaceSelection(name string) {
-	for _, r := range ui.races {
-		if r.Name != name {
-			continue
-		}
-		ui.raceID.SetText(r.RaceID)
-		ui.checkpointID.SetText(r.FinishCheckpointID)
-		ui.cfg.RaceID = r.RaceID
-		ui.cfg.CheckpointID = r.FinishCheckpointID
+func (ui *readerUI) selectRaceMatchingConfig() {
+	if strings.TrimSpace(ui.cfg.RaceID) == "" {
+		ui.raceSelect.SetSelected(allRacesLabel)
+		ui.checkpointSelect.Disable()
+		ui.checkpointSelect.SetOptions([]string{})
+		ui.checkpointSelect.ClearSelected()
 		return
+	}
+	ui.mu.Lock()
+	races := append([]bridgeapp.CatalogRace(nil), ui.races...)
+	raceID := ui.cfg.RaceID
+	ui.mu.Unlock()
+	for _, r := range races {
+		if r.ID == raceID || strings.HasSuffix(r.ID, raceID) || strings.HasSuffix(raceID, r.ID) {
+			ui.raceSelect.SetSelected(r.Name)
+			ui.checkpointSelect.Enable()
+			return
+		}
+	}
+	ui.raceSelect.SetSelected(allRacesLabel)
+}
+
+func (ui *readerUI) onEventSelected(name string) {
+	ui.mu.Lock()
+	var eventID string
+	for _, e := range ui.events {
+		if e.Name == name {
+			eventID = e.ID
+			break
+		}
+	}
+	ui.cfg.EventID = eventID
+	ui.mu.Unlock()
+	go ui.reloadRacesForEvent(eventID)
+}
+
+func (ui *readerUI) onRaceSelected(name string) {
+	if name == allRacesLabel || name == "" {
+		ui.cfg.RaceID = ""
+		ui.cfg.CheckpointID = ""
+		ui.checkpointSelect.SetOptions([]string{})
+		ui.checkpointSelect.ClearSelected()
+		ui.checkpointSelect.Disable()
+		return
+	}
+	ui.mu.Lock()
+	var race bridgeapp.CatalogRace
+	for _, r := range ui.races {
+		if r.Name == name {
+			race = r
+			break
+		}
+	}
+	ui.cfg.RaceID = race.ID
+	if race.FinishCheckpointID != "" {
+		ui.cfg.CheckpointID = race.FinishCheckpointID
+	}
+	ui.mu.Unlock()
+	ui.checkpointSelect.Enable()
+	go ui.reloadCheckpoints(race.ID, race.FinishCheckpointID)
+}
+
+func (ui *readerUI) onCheckpointSelected(name string) {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+	for _, cp := range ui.checkpoints {
+		label := cp.Name
+		if cp.Type != "" && !strings.EqualFold(cp.Name, cp.Type) {
+			label = fmt.Sprintf("%s (%s)", cp.Name, cp.Type)
+		}
+		if label == name {
+			ui.cfg.CheckpointID = cp.ID
+			return
+		}
 	}
 }
 
 func (ui *readerUI) layout() fyne.CanvasObject {
 	header := widget.NewRichTextFromMarkdown(
-		"## Keweenaw Endurance — Reader\nAll You Can East Bluffet · Proxmark bridge + manual lap entry",
+		"## Keweenaw Endurance — Reader\nProxmark bridge · event finish scores all races · manual lap fallback",
 	)
 
 	configForm := widget.NewForm(
@@ -175,10 +288,9 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 		widget.NewFormItem("Bridge token", ui.bridgeToken),
 		widget.NewFormItem("Organizer PIN", ui.organizerPIN),
 		widget.NewFormItem("Device ID", ui.deviceID),
-		widget.NewFormItem("Event ID", ui.eventID),
-		widget.NewFormItem("Bluffet race", ui.raceSelect),
-		widget.NewFormItem("Race ID", ui.raceID),
-		widget.NewFormItem("Finish checkpoint ID", ui.checkpointID),
+		widget.NewFormItem("Event", ui.eventSelect),
+		widget.NewFormItem("Race", ui.raceSelect),
+		widget.NewFormItem("Checkpoint (manual)", ui.checkpointSelect),
 		widget.NewFormItem("Data directory", ui.dataDir),
 		widget.NewFormItem("Proxmark CLI", ui.proxmarkCLI),
 		widget.NewFormItem("COM port", ui.proxmarkPort),
@@ -186,7 +298,7 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 
 	saveBtn := widget.NewButton("Save config", ui.onSave)
 	testBtn := widget.NewButton("Test Proxmark", ui.onTestProxmark)
-	reloadBtn := widget.NewButton("Reload Bluffet autofill", func() { go ui.runAutofill() })
+	reloadBtn := widget.NewButton("Reload catalog", func() { go ui.runAutofill() })
 	refreshPorts := widget.NewButton("Refresh COM ports", func() {
 		ports, err := bridgeapp.ListSerialPorts()
 		if err != nil {
@@ -207,6 +319,7 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 		widget.NewLabelWithStyle("Status", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		ui.statusMode,
 		ui.statusDetail,
+		ui.statusTap,
 		ui.statusError,
 	)
 
@@ -215,8 +328,9 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 	manualBox := container.NewVBox(
 		widget.NewSeparator(),
 		widget.NewLabelWithStyle("Manual entry (Proxmark fallback)", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		widget.NewLabel("Enter bib and record a lap when the reader misses a tap. Online uses PIN auth; offline uses the roster cache (connect once first)."),
+		widget.NewLabel("Bib auto-resolves across all races; pick a race only if the bib is ambiguous."),
 		ui.bibEntry,
+		widget.NewForm(widget.NewFormItem("Race override", ui.manualRaceSelect)),
 		manualSubmit,
 		ui.manualMsg,
 	)
@@ -235,64 +349,138 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 
 func (ui *readerUI) runAutofill() {
 	fyne.Do(func() {
-		ui.autofillMsg.SetText("Autofill: fetching bridge token + Bluffet races…")
+		ui.autofillMsg.SetText("Loading catalog (events / races)…")
 	})
 
-	cfg := ui.readFormSafe()
+	var cfg bridgeapp.Config
+	fyne.DoAndWait(func() {
+		cfg = ui.readForm()
+	})
+
 	details, fetchErr := bridgeapp.AutofillConfig(&cfg, true)
+	auth, _ := bridge.ResolveHostedAuth(cfg.HostedAPIURL, cfg.BridgeToken, cfg.OrganizerPIN, nil)
+	_ = bridge.EnsureBearer(auth, nil, cfg.OrganizerPIN)
+
+	events, evErr := bridgeapp.FetchCatalogEvents(auth, nil)
+	if evErr != nil || len(events) == 0 {
+		seedEv, _ := bridgeapp.SeedCatalogFromBluffet()
+		events = []bridgeapp.CatalogEvent{seedEv}
+	}
+	races, raceErr := bridgeapp.FetchCatalogRaces(auth, nil, cfg.EventID)
+	if raceErr != nil || len(races) == 0 {
+		_, seedRaces := bridgeapp.SeedCatalogFromBluffet()
+		races = seedRaces
+		if len(details.Races) > 0 {
+			races = nil
+			for _, r := range details.Races {
+				races = append(races, bridgeapp.CatalogRace{
+					ID: r.RaceID, Name: r.Name, FinishCheckpointID: r.FinishCheckpointID,
+				})
+			}
+		}
+	}
 
 	fyne.Do(func() {
 		ui.cfg = cfg
-		ui.races = details.Races
+		ui.mu.Lock()
+		ui.events = events
+		ui.races = races
+		ui.mu.Unlock()
+
 		ui.hostedURL.SetText(cfg.HostedAPIURL)
 		ui.bridgeToken.SetText(cfg.BridgeToken)
 		ui.organizerPIN.SetText(cfg.OrganizerPIN)
 		ui.deviceID.SetText(cfg.DeviceID)
-		ui.eventID.SetText(cfg.EventID)
-		ui.raceID.SetText(cfg.RaceID)
-		ui.checkpointID.SetText(cfg.CheckpointID)
 		ui.dataDir.SetText(cfg.DataDir)
 		ui.proxmarkCLI.SetText(cfg.ProxmarkCLI)
 		ui.proxmarkPort.SetText(cfg.ProxmarkPort)
 		ui.hwCheck.SetChecked(cfg.RFIDHardware)
 		ui.mockCheck.SetChecked(cfg.BridgeMock)
-		ui.raceSelect.Options = ui.raceOptionLabels()
-		ui.selectRaceMatchingConfig()
 
-		tokenOK := cfg.BridgeToken != ""
-		msg := fmt.Sprintf("Autofill ready · event %s · %d races", shortID(cfg.EventID), len(details.Races))
-		if tokenOK {
-			msg += " · bridge token loaded"
-		} else {
-			msg += " · bridge token missing (set BRIDGE_TOKEN or gcloud auth)"
+		ui.eventSelect.Options = ui.eventOptionLabels()
+		ui.raceSelect.Options = ui.raceOptionLabels()
+		ui.manualRaceSelect.Options = ui.manualRaceOptionLabels()
+		ui.selectEventMatchingConfig()
+		ui.selectRaceMatchingConfig()
+		if ui.cfg.RaceID != "" {
+			go ui.reloadCheckpoints(ui.cfg.RaceID, ui.cfg.CheckpointID)
 		}
-		if fetchErr != nil && !tokenOK {
+
+		msg := fmt.Sprintf("Catalog ready · %d events · %d races", len(events), len(races))
+		if cfg.BridgeToken != "" {
+			msg += " · bridge token loaded"
+		}
+		if fetchErr != nil {
 			msg += " · " + fetchErr.Error()
-		} else if fetchErr != nil {
-			msg += " · hosted races: seed fallback (" + fetchErr.Error() + ")"
+		}
+		if evErr != nil {
+			msg += " · events: seed/fallback"
 		}
 		ui.autofillMsg.SetText(msg)
 		_ = bridgeapp.SaveConfig(ui.cfgPath, cfg)
 	})
 }
 
-func (ui *readerUI) readFormSafe() bridgeapp.Config {
-	// Called from background goroutine before widgets exist is OK via cfg copy;
-	// after build, prefer widget values on UI thread only. Here we start from cfg.
+func (ui *readerUI) reloadRacesForEvent(eventID string) {
 	cfg := ui.cfg
-	if ui.hostedURL != nil {
-		// May race; AutofillConfig only fills empties when force=false.
-		// We pass force=true and rebuild from current cfg snapshot taken on UI thread first.
+	auth, err := bridge.ResolveHostedAuth(cfg.HostedAPIURL, cfg.BridgeToken, cfg.OrganizerPIN, nil)
+	if err != nil {
+		return
 	}
-	return cfg
+	_ = bridge.EnsureBearer(auth, &http.Client{Timeout: 15 * time.Second}, cfg.OrganizerPIN)
+	races, err := bridgeapp.FetchCatalogRaces(auth, nil, eventID)
+	if err != nil || len(races) == 0 {
+		return
+	}
+	fyne.Do(func() {
+		ui.mu.Lock()
+		ui.races = races
+		ui.mu.Unlock()
+		ui.raceSelect.Options = ui.raceOptionLabels()
+		ui.manualRaceSelect.Options = ui.manualRaceOptionLabels()
+		// Keep All races selected when switching events unless a race still matches.
+		ui.selectRaceMatchingConfig()
+	})
 }
 
-func shortID(id string) string {
-	id = strings.TrimSpace(id)
-	if len(id) <= 8 {
-		return id
+func (ui *readerUI) reloadCheckpoints(raceID, preferID string) {
+	cfg := ui.cfg
+	auth, err := bridge.ResolveHostedAuth(cfg.HostedAPIURL, cfg.BridgeToken, cfg.OrganizerPIN, nil)
+	if err != nil {
+		return
 	}
-	return id[len(id)-6:]
+	_ = bridge.EnsureBearer(auth, nil, cfg.OrganizerPIN)
+	cps, err := bridgeapp.FetchCatalogCheckpoints(auth, nil, raceID)
+	if err != nil {
+		return
+	}
+	fyne.Do(func() {
+		ui.mu.Lock()
+		ui.checkpoints = cps
+		ui.mu.Unlock()
+		labels := ui.checkpointOptionLabels()
+		ui.checkpointSelect.SetOptions(labels)
+		selected := ""
+		for _, cp := range cps {
+			label := cp.Name
+			if cp.Type != "" && !strings.EqualFold(cp.Name, cp.Type) {
+				label = fmt.Sprintf("%s (%s)", cp.Name, cp.Type)
+			}
+			if preferID != "" && (cp.ID == preferID || strings.EqualFold(cp.Type, "finish")) {
+				selected = label
+				if cp.ID == preferID {
+					break
+				}
+			}
+		}
+		if selected == "" && len(labels) > 0 {
+			selected = labels[0]
+		}
+		if selected != "" {
+			ui.checkpointSelect.SetSelected(selected)
+			ui.onCheckpointSelected(selected)
+		}
+	})
 }
 
 func (ui *readerUI) readForm() bridgeapp.Config {
@@ -301,14 +489,15 @@ func (ui *readerUI) readForm() bridgeapp.Config {
 	cfg.BridgeToken = strings.TrimSpace(ui.bridgeToken.Text)
 	cfg.OrganizerPIN = strings.TrimSpace(ui.organizerPIN.Text)
 	cfg.DeviceID = strings.TrimSpace(ui.deviceID.Text)
-	cfg.EventID = strings.TrimSpace(ui.eventID.Text)
-	cfg.RaceID = strings.TrimSpace(ui.raceID.Text)
-	cfg.CheckpointID = strings.TrimSpace(ui.checkpointID.Text)
 	cfg.DataDir = strings.TrimSpace(ui.dataDir.Text)
 	cfg.ProxmarkCLI = strings.TrimSpace(ui.proxmarkCLI.Text)
 	cfg.ProxmarkPort = strings.TrimSpace(ui.proxmarkPort.Text)
 	cfg.RFIDHardware = ui.hwCheck.Checked
 	cfg.BridgeMock = ui.mockCheck.Checked
+	// Event/race/checkpoint kept in ui.cfg via select handlers.
+	cfg.EventID = ui.cfg.EventID
+	cfg.RaceID = ui.cfg.RaceID
+	cfg.CheckpointID = ui.cfg.CheckpointID
 	if cfg.PollMS <= 0 {
 		cfg.PollMS = 500
 	}
@@ -395,7 +584,19 @@ func (ui *readerUI) onManualEntry() {
 		ui.manualMsg.SetText("Start the bridge first (needed for auth + offline queue).")
 		return
 	}
-	err := ui.bridge.ManualEntry(bib, time.Now().UTC())
+	raceOverride := ""
+	sel := ui.manualRaceSelect.Selected
+	if sel != "" && sel != allRacesLabel {
+		ui.mu.Lock()
+		for _, r := range ui.races {
+			if r.Name == sel {
+				raceOverride = r.ID
+				break
+			}
+		}
+		ui.mu.Unlock()
+	}
+	err := ui.bridge.ManualEntryInRace(bib, time.Now().UTC(), raceOverride)
 	if err != nil {
 		ui.manualMsg.SetText("Error: " + err.Error())
 		return
@@ -418,17 +619,45 @@ func (ui *readerUI) statusLoop() {
 			mode = "unknown"
 		}
 		detail := fmt.Sprintf(
-			"mode=%s  connected=%v  pending=%d  last_read=%s",
-			mode, st.Connected, st.PendingCount, st.LastRead,
+			"mode=%s  connected=%v  pending=%d",
+			mode, st.Connected, st.PendingCount,
 		)
 		if st.LastSyncAt != nil {
 			detail += "  last_sync=" + st.LastSyncAt.Local().Format(time.Kitchen)
 		}
+		tap := formatLastTap(st)
 		errText := st.LastError
 		fyne.Do(func() {
 			ui.statusMode.SetText(strings.ToUpper(mode))
 			ui.statusDetail.SetText(detail)
+			ui.statusTap.SetText(tap)
 			ui.statusError.SetText(errText)
 		})
 	}
+}
+
+func formatLastTap(st bridgeapp.Status) string {
+	if st.LastTapUUID == "" && st.LastRead == "" {
+		return "Last tap: —"
+	}
+	uid := st.LastTapUUID
+	if uid == "" {
+		uid = st.LastRead
+	}
+	parts := []string{}
+	if st.LastTapName != "" {
+		parts = append(parts, st.LastTapName)
+	}
+	if st.LastTapBib != "" {
+		parts = append(parts, "bib "+st.LastTapBib)
+	}
+	if st.LastTapRaceName != "" {
+		parts = append(parts, st.LastTapRaceName)
+	}
+	parts = append(parts, uid)
+	line := "Last tap: " + strings.Join(parts, " · ")
+	if st.LastTapResult != "" {
+		line += " (" + st.LastTapResult + ")"
+	}
+	return line
 }

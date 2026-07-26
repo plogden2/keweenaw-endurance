@@ -5,6 +5,7 @@ import {
   racesApi,
   participantsApi,
   raceParticipantsApi,
+  raceTeamsApi,
   rfidApi,
   scansApi,
   eventsLiveApi,
@@ -142,6 +143,39 @@ describe('participantsApi', () => {
     expect(apiClient.post).toHaveBeenCalledWith('/api/participants', payload)
     expect(apiClient.put).toHaveBeenCalledWith('/api/participants/p-1', payload)
     expect(apiClient.delete).toHaveBeenCalledWith('/api/participants/p-1')
+  })
+})
+
+describe('raceTeamsApi', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('lists, creates, updates, deletes teams and sets members', async () => {
+    ;(apiClient.get as Mock).mockResolvedValue({ data: { data: [] } })
+    ;(apiClient.post as Mock).mockResolvedValue({ data: { id: 'team-1' } })
+    ;(apiClient.put as Mock).mockResolvedValue({ data: { id: 'team-1' } })
+    ;(apiClient.delete as Mock).mockResolvedValue({ data: null })
+
+    await raceTeamsApi.list('race-1')
+    await raceTeamsApi.create('race-1', { name: 'East Bluff A' })
+    await raceTeamsApi.get('team-1')
+    await raceTeamsApi.update('team-1', { name: 'East Bluff B' })
+    await raceTeamsApi.setMembers('team-1', { participant_ids: ['p1', 'p2'] })
+    await raceTeamsApi.remove('team-1')
+
+    expect(apiClient.get).toHaveBeenCalledWith('/api/races/race-1/teams')
+    expect(apiClient.post).toHaveBeenCalledWith('/api/races/race-1/teams', {
+      name: 'East Bluff A',
+    })
+    expect(apiClient.get).toHaveBeenCalledWith('/api/teams/team-1')
+    expect(apiClient.put).toHaveBeenCalledWith('/api/teams/team-1', {
+      name: 'East Bluff B',
+    })
+    expect(apiClient.put).toHaveBeenCalledWith('/api/teams/team-1/members', {
+      participant_ids: ['p1', 'p2'],
+    })
+    expect(apiClient.delete).toHaveBeenCalledWith('/api/teams/team-1')
   })
 })
 

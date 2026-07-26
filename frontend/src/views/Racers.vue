@@ -93,6 +93,62 @@
       </form>
     </div>
 
+    <div class="panel" data-testid="teams-section">
+      <h2>
+        Teams
+        <span class="muted">({{ teams.length }})</span>
+      </h2>
+      <form class="row team-create" @submit.prevent="onCreateTeam">
+        <label class="grow">
+          New team name
+          <input
+            v-model="newTeamName"
+            type="text"
+            data-testid="team-name-input"
+            placeholder="East Bluff A"
+            required
+          />
+        </label>
+        <button
+          type="submit"
+          class="btn"
+          data-testid="team-create"
+          :disabled="creatingTeam"
+        >
+          {{ creatingTeam ? 'Creating…' : 'Create team' }}
+        </button>
+      </form>
+      <p v-if="teamError" class="error" role="alert">{{ teamError }}</p>
+      <table data-testid="teams-list">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Members</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="team in teams" :key="team.id" data-testid="team-row">
+            <td>{{ team.name }}</td>
+            <td>{{ memberCountForTeam(team.id) }}</td>
+            <td>
+              <button
+                type="button"
+                class="btn secondary"
+                data-testid="team-delete"
+                @click="onDeleteTeam(team)"
+              >
+                Delete
+              </button>
+            </td>
+          </tr>
+          <tr v-if="!teams.length">
+            <td colspan="3" class="muted">No teams yet. Create one, then assign racers below.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
     <div class="panel">
       <h2>
         Racer list
@@ -105,6 +161,7 @@
             <th>Bib</th>
             <th>Name</th>
             <th>Category</th>
+            <th>Team</th>
             <th>Tags</th>
             <th>Actions</th>
           </tr>
@@ -167,6 +224,20 @@
               </td>
               <td>{{ racer.first_name }} {{ racer.last_name }}</td>
               <td>{{ categoryLabel(racer) }}</td>
+              <td>
+                <select
+                  class="team-select"
+                  data-testid="racer-team-select"
+                  :aria-label="`Team for ${racer.first_name} ${racer.last_name}`"
+                  :value="racer.team_id ?? ''"
+                  @change="onAssignTeam(racer, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="">No team</option>
+                  <option v-for="team in teams" :key="team.id" :value="team.id">
+                    {{ team.name }}
+                  </option>
+                </select>
+              </td>
               <td class="tag-count">
                 {{ (racer.tag_uids?.length || 0) }}
                 {{ (racer.tag_uids?.length || 0) === 1 ? 'tag' : 'tags' }}
@@ -183,7 +254,7 @@
               </td>
             </tr>
             <tr v-if="programmingId === racer.id" class="program-row">
-              <td colspan="5">
+              <td colspan="6">
                 <div class="program-inline" data-testid="program-tag-panel">
                   <p class="muted">
                     Place a tag on the Proxmark3, then write. This programs this racer’s permanent
@@ -227,7 +298,7 @@
             </tr>
           </template>
           <tr v-if="!filteredRacers.length">
-            <td colspan="5" class="muted">No racers match.</td>
+            <td colspan="6" class="muted">No racers match.</td>
           </tr>
         </tbody>
       </table>
@@ -238,9 +309,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { raceParticipantsApi, racesApi, rfidApi } from '@/services/api'
+import { raceParticipantsApi, racesApi, raceTeamsApi, rfidApi } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
-import type { Category, Participant, Race } from '@/types/models'
+import type { Category, Participant, Race, Team } from '@/types/models'
 import { getErrorMessage } from '@/utils/error'
 
 const SEARCH_DEBOUNCE_MS = 200
@@ -254,12 +325,16 @@ const raceId = computed(() => String(route.params.raceId || ''))
 const race = ref<Race | null>(null)
 const categories = ref<Category[]>([])
 const racers = ref<Participant[]>([])
+const teams = ref<Team[]>([])
 const searchInput = ref('')
 const searchQuery = ref('')
 const showAdd = ref(false)
 const saving = ref(false)
 const formError = ref<string | null>(null)
 const loadError = ref<string | null>(null)
+const teamError = ref<string | null>(null)
+const newTeamName = ref('')
+const creatingTeam = ref(false)
 
 const editingBibId = ref<string | null>(null)
 const bibOriginal = ref('')
@@ -310,6 +385,20 @@ function categoryLabel(racer: Participant): string {
   if (racer.category?.name) return racer.category.name
   const cat = categories.value.find((c) => c.id === racer.category_id)
   return cat?.name ?? '—'
+}
+
+function memberCountForTeam(teamId: string): number {
+  return racers.value.filter((r) => r.team_id === teamId).length
+}
+
+function normalizeTeamsResponse(data: unknown): Team[] {
+  if (Array.isArray(data)) {
+    return data as Team[]
+  }
+  if (data && typeof data === 'object' && Array.isArray((data as { data?: Team[] }).data)) {
+    return (data as { data: Team[] }).data
+  }
+  return []
 }
 
 watch(searchInput, (value) => {
@@ -419,17 +508,101 @@ async function onAddRacer() {
   }
 }
 
+async function onCreateTeam() {
+  teamError.value = null
+  if (!pinAuth.isAuthenticated) {
+    await router.push('/pin')
+    return
+  }
+  const name = newTeamName.value.trim()
+  if (!name) return
+  creatingTeam.value = true
+  try {
+    const { data } = await raceTeamsApi.create(raceId.value, { name })
+    teams.value = [...teams.value, data].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    )
+    newTeamName.value = ''
+  } catch (err) {
+    teamError.value = getErrorMessage(err, 'Failed to create team')
+  } finally {
+    creatingTeam.value = false
+  }
+}
+
+async function onDeleteTeam(team: Team) {
+  teamError.value = null
+  if (!pinAuth.isAuthenticated) {
+    await router.push('/pin')
+    return
+  }
+  try {
+    await raceTeamsApi.remove(team.id)
+    teams.value = teams.value.filter((t) => t.id !== team.id)
+    racers.value = racers.value.map((r) =>
+      r.team_id === team.id ? { ...r, team_id: null, team: undefined } : r,
+    )
+  } catch (err) {
+    teamError.value = getErrorMessage(err, 'Failed to delete team')
+  }
+}
+
+async function onAssignTeam(racer: Participant, teamIdValue: string) {
+  teamError.value = null
+  if (!pinAuth.isAuthenticated) {
+    await router.push('/pin')
+    return
+  }
+  const nextTeamId = teamIdValue || null
+  const previous = racer.team_id ?? null
+  if (previous === nextTeamId) return
+
+  const idx = racers.value.findIndex((r) => r.id === racer.id)
+  if (idx >= 0) {
+    const team = nextTeamId ? teams.value.find((t) => t.id === nextTeamId) : undefined
+    racers.value[idx] = {
+      ...racers.value[idx],
+      team_id: nextTeamId,
+      team: team ?? undefined,
+    }
+  }
+
+  try {
+    const { data } = await raceParticipantsApi.update(racer.id, { team_id: nextTeamId })
+    if (idx >= 0) {
+      racers.value[idx] = {
+        ...racers.value[idx],
+        ...data,
+        team_id: data.team_id ?? nextTeamId,
+      }
+    }
+  } catch (err) {
+    if (idx >= 0) {
+      const team = previous ? teams.value.find((t) => t.id === previous) : undefined
+      racers.value[idx] = {
+        ...racers.value[idx],
+        team_id: previous,
+        team: team ?? undefined,
+      }
+    }
+    teamError.value = getErrorMessage(err, 'Failed to assign team')
+  }
+}
+
 async function load() {
   loadError.value = null
+  teamError.value = null
   try {
-    const [raceRes, catsRes, listRes] = await Promise.all([
+    const [raceRes, catsRes, listRes, teamsRes] = await Promise.all([
       racesApi.get(raceId.value),
       raceParticipantsApi.listCategories(raceId.value),
       raceParticipantsApi.list(raceId.value, { limit: 500 }),
+      raceTeamsApi.list(raceId.value),
     ])
     race.value = raceRes.data
     categories.value = catsRes.data.data ?? []
     racers.value = listRes.data.data ?? []
+    teams.value = normalizeTeamsResponse(teamsRes.data)
     if (!addForm.category_id && categories.value.length) {
       addForm.category_id = categories.value[0].id
     }
@@ -500,6 +673,16 @@ onUnmounted(() => {
 .toolbar {
   justify-content: space-between;
   width: 100%;
+}
+
+.team-create {
+  margin-bottom: 0.75rem;
+  align-items: flex-end;
+}
+
+.team-select {
+  min-width: 9rem;
+  margin: 0;
 }
 
 .search-label {

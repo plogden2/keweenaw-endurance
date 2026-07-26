@@ -18,6 +18,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	err = db.AutoMigrate(
 		&Event{},
 		&Race{},
+		&Team{},
 		&Participant{},
 		&TimingCheckpoint{},
 		&TimingRecord{},

@@ -99,6 +99,8 @@ func main() {
 			races.POST("/:id/checkpoints", append(adminOnly, handlers.CreateCheckpoint)...)
 			races.GET("/:id/categories", handlers.GetCategoriesByRace)
 			races.POST("/:id/categories", append(adminOnly, handlers.CreateCategory)...)
+			races.GET("/:id/teams", handlers.GetTeamsByRace)
+			races.POST("/:id/teams", append(adminOnly, handlers.CreateTeam)...)
 			races.GET("/:id/participants", handlers.GetRaceParticipants)
 			races.POST("/:id/participants", append(adminOnly, handlers.CreateRaceParticipant)...)
 			races.GET("/:id/participants/:participantId/tags", handlers.GetParticipantTags)
@@ -108,6 +110,14 @@ func main() {
 			races.GET("/:id", handlers.GetRace)
 			races.PUT("/:id", append(adminOnly, handlers.UpdateRace)...)
 			races.DELETE("/:id", append(adminOnly, handlers.DeleteRace)...)
+		}
+
+		teams := api.Group("/teams")
+		{
+			teams.GET("/:id", handlers.GetTeam)
+			teams.PUT("/:id", append(adminOnly, handlers.UpdateTeam)...)
+			teams.DELETE("/:id", append(adminOnly, handlers.DeleteTeam)...)
+			teams.PUT("/:id/members", append(adminOnly, handlers.SetTeamMembers)...)
 		}
 
 		// Checkpoint routes
@@ -144,6 +154,7 @@ func main() {
 			timing.PUT("/records/:id", append(timerWrite, handlers.UpdateTimingRecord)...)
 			timing.GET("/results/:raceId", handlers.GetRaceResults)
 			timing.GET("/leaderboard/:raceId", handlers.GetLeaderboard)
+			timing.GET("/team-leaderboard/:raceId", handlers.GetTeamLeaderboard)
 		}
 
 		// Karaoke bonus (open like scans — no re-PIN on armed station)

@@ -53,6 +53,7 @@ type createParticipantRequest struct {
 	RFIDTagUID string `json:"rfid_tag_uid"`
 	Status     string `json:"status"`
 	CategoryID string `json:"category_id"`
+	TeamID     string `json:"team_id"`
 }
 
 type updateParticipantRequest struct {
@@ -65,6 +66,21 @@ type updateParticipantRequest struct {
 	RFIDTagUID *string `json:"rfid_tag_uid"`
 	Status     *string `json:"status"`
 	CategoryID *string `json:"category_id"`
+	TeamID     *string `json:"team_id"`
+}
+
+type createTeamRequest struct {
+	Name         string `json:"name" binding:"required"`
+	DisplayOrder int    `json:"display_order"`
+}
+
+type updateTeamRequest struct {
+	Name         *string `json:"name"`
+	DisplayOrder *int    `json:"display_order"`
+}
+
+type setTeamMembersRequest struct {
+	ParticipantIDs []string `json:"participant_ids"`
 }
 
 type createCheckpointRequest struct {

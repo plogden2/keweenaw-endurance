@@ -54,6 +54,16 @@ type CategoryLegendEntry struct {
 	Color string `json:"color"`
 }
 
+// LiveTeamEntry is a row on the public event live team leaderboard.
+type LiveTeamEntry struct {
+	Place          int                 `json:"place"`
+	TeamID         uuidutil.PublicUUID `json:"team_id"`
+	Name           string              `json:"name"`
+	AvgLaps        float64             `json:"avg_laps"`
+	MemberCount    int                 `json:"member_count"`
+	MeanLastLapAt  *time.Time          `json:"mean_last_lap_at,omitempty"`
+}
+
 // LiveRaceView is one race block inside GET /api/events/:id/live.
 type LiveRaceView struct {
 	ID                 uuidutil.PublicUUID `json:"id"`
@@ -64,6 +74,7 @@ type LiveRaceView struct {
 	DurationMinutes    int                 `json:"duration_minutes"`
 	CountdownSeconds   int                 `json:"countdown_seconds"`
 	LeaderboardOverall []LiveOverallEntry  `json:"leaderboard_overall"`
+	LeaderboardTeams   []LiveTeamEntry     `json:"leaderboard_teams"`
 	FlowSeries         []interface{}       `json:"flow_series"`
 }
 
@@ -220,6 +231,10 @@ func (s *ResultsService) GetEventLive(eventID uuid.UUID, categoryID *uuid.UUID) 
 		if err != nil {
 			return nil, err
 		}
+		teamBoard, err := s.BuildTeamLeaderboard(race.ID.UUID())
+		if err != nil {
+			return nil, err
+		}
 
 		views = append(views, LiveRaceView{
 			ID:                 race.ID,
@@ -230,6 +245,7 @@ func (s *ResultsService) GetEventLive(eventID uuid.UUID, categoryID *uuid.UUID) 
 			DurationMinutes:    race.DurationMinutes,
 			CountdownSeconds:   countdown,
 			LeaderboardOverall: board,
+			LeaderboardTeams:   teamBoard,
 			FlowSeries:         []interface{}{},
 		})
 	}
@@ -325,6 +341,103 @@ func (s *ResultsService) buildOverallLeaderboard(raceID uuid.UUID, categoryFilte
 	out := make([]LiveOverallEntry, len(scoredResults))
 	for i, item := range scoredResults {
 		item.entry.Place = i + 1
+		out[i] = item.entry
+	}
+	return out, nil
+}
+
+// BuildTeamLeaderboard ranks teams by average member laps (full roster denominator).
+func (s *ResultsService) BuildTeamLeaderboard(raceID uuid.UUID) ([]LiveTeamEntry, error) {
+	race, err := s.loadRace(raceID)
+	if err != nil {
+		return nil, err
+	}
+	raceEnd := race.StartTime.Add(time.Duration(race.DurationMinutes) * time.Minute)
+
+	var teams []models.Team
+	if err := s.db.Where("race_id = ?", raceID).Find(&teams).Error; err != nil {
+		return nil, err
+	}
+
+	type scored struct {
+		entry    LiveTeamEntry
+		avg      float64
+		meanLast time.Time
+		nameKey  string
+	}
+	var scoredResults []scored
+
+	for _, team := range teams {
+		var members []models.Participant
+		if err := s.db.Where("team_id = ?", team.ID).Find(&members).Error; err != nil {
+			return nil, err
+		}
+		if len(members) < MinTeamMembers {
+			continue
+		}
+
+		sumLaps := 0
+		var lastSumNs int64
+		for _, m := range members {
+			var records []models.TimingRecord
+			if err := s.db.Where(
+				"participant_id = ? AND record_type IN ?",
+				m.ID,
+				[]string{"rfid_lap", "karaoke_bonus"},
+			).Find(&records).Error; err != nil {
+				return nil, err
+			}
+			sumLaps += len(records)
+			memberLast := raceEnd
+			hasRFID := false
+			for _, r := range records {
+				if r.RecordType != "rfid_lap" {
+					continue
+				}
+				if !hasRFID || r.Timestamp.After(memberLast) {
+					memberLast = r.Timestamp
+					hasRFID = true
+				}
+			}
+			lastSumNs += memberLast.UnixNano()
+		}
+
+		n := len(members)
+		avg := float64(sumLaps) / float64(n)
+		meanLast := time.Unix(0, lastSumNs/int64(n)).UTC()
+		entry := LiveTeamEntry{
+			TeamID:      team.ID,
+			Name:        team.Name,
+			AvgLaps:     avg,
+			MemberCount: n,
+		}
+		if sumLaps > 0 {
+			ml := meanLast
+			entry.MeanLastLapAt = &ml
+		}
+		scoredResults = append(scoredResults, scored{
+			entry:    entry,
+			avg:      avg,
+			meanLast: meanLast,
+			nameKey:  strings.ToLower(team.Name),
+		})
+	}
+
+	sort.Slice(scoredResults, func(i, j int) bool {
+		if scoredResults[i].avg != scoredResults[j].avg {
+			return scoredResults[i].avg > scoredResults[j].avg
+		}
+		if !scoredResults[i].meanLast.Equal(scoredResults[j].meanLast) {
+			return scoredResults[i].meanLast.Before(scoredResults[j].meanLast)
+		}
+		return scoredResults[i].nameKey < scoredResults[j].nameKey
+	})
+
+	out := make([]LiveTeamEntry, len(scoredResults))
+	for i, item := range scoredResults {
+		item.entry.Place = i + 1
+		// Round display to 1 decimal for JSON consumers (still precise enough).
+		item.entry.AvgLaps = float64(int(item.entry.AvgLaps*10+0.5)) / 10
 		out[i] = item.entry
 	}
 	return out, nil

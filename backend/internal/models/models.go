@@ -40,16 +40,33 @@ type Race struct {
 	CreatedAt      time.Time `gorm:"autoCreateTime" json:"created_at"`
 	
 	// Relationships
-	Event        Event           `gorm:"foreignKey:EventID" json:"event,omitempty"`
-	Participants []Participant   `gorm:"foreignKey:RaceID" json:"participants,omitempty"`
+	Event        Event              `gorm:"foreignKey:EventID" json:"event,omitempty"`
+	Participants []Participant      `gorm:"foreignKey:RaceID" json:"participants,omitempty"`
+	Teams        []Team             `gorm:"foreignKey:RaceID" json:"teams,omitempty"`
 	Checkpoints  []TimingCheckpoint `gorm:"foreignKey:RaceID" json:"checkpoints,omitempty"`
 }
+
+// Team is an optional multi-racer unit scored by average member laps within one race.
+type Team struct {
+	ID           uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
+	RaceID       uuidutil.PublicUUID `gorm:"type:uuid;not null;index" json:"race_id"`
+	Name         string              `gorm:"type:varchar(255);not null" json:"name"`
+	DisplayOrder int                 `gorm:"type:integer;not null;default:0" json:"display_order"`
+	CreatedAt    time.Time           `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships
+	Race         Race          `gorm:"foreignKey:RaceID" json:"race,omitempty"`
+	Participants []Participant `gorm:"foreignKey:TeamID" json:"participants,omitempty"`
+}
+
+func (Team) TableName() string { return "teams" }
 
 // Participant represents a race participant
 type Participant struct {
 	ID         uuidutil.PublicUUID  `gorm:"type:uuid;primary_key" json:"id"`
 	RaceID     uuidutil.PublicUUID  `gorm:"type:uuid;not null" json:"race_id"`
 	CategoryID *uuidutil.PublicUUID `gorm:"type:uuid" json:"category_id,omitempty"`
+	TeamID     *uuidutil.PublicUUID `gorm:"type:uuid;index" json:"team_id,omitempty"`
 	BibNumber  string               `gorm:"type:varchar(20);not null" json:"bib_number"`
 	FirstName  string               `gorm:"type:varchar(100);not null" json:"first_name"`
 	LastName   string               `gorm:"type:varchar(100);not null" json:"last_name"`
@@ -66,6 +83,7 @@ type Participant struct {
 	// Relationships
 	Race              Race                 `gorm:"foreignKey:RaceID" json:"race,omitempty"`
 	Category          *Category            `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
+	Team              *Team                `gorm:"foreignKey:TeamID" json:"team,omitempty"`
 	TimingRecords     []TimingRecord       `gorm:"foreignKey:ParticipantID" json:"timing_records,omitempty"`
 	TagAssociations   []RFIDTagAssociation `gorm:"foreignKey:ParticipantID" json:"tag_associations,omitempty"`
 }
@@ -214,6 +232,13 @@ func (tr *TimingRecord) BeforeCreate(tx *gorm.DB) error {
 func (c *Category) BeforeCreate(tx *gorm.DB) error {
 	if c.ID.IsZero() {
 		c.ID = uuidutil.PublicUUID(uuid.New())
+	}
+	return nil
+}
+
+func (t *Team) BeforeCreate(tx *gorm.DB) error {
+	if t.ID.IsZero() {
+		t.ID = uuidutil.PublicUUID(uuid.New())
 	}
 	return nil
 }
