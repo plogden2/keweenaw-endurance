@@ -1,0 +1,736 @@
+package bridgeapp
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/keweenaw-endurance/backend/internal/bridge"
+	"github.com/keweenaw-endurance/backend/internal/rfid"
+	"github.com/keweenaw-endurance/backend/internal/services"
+)
+
+// Status is a snapshot for GUI / local HTTP.
+type Status struct {
+	Connected    bool       `json:"connected"`
+	PendingCount int        `json:"pending_count"`
+	Syncing      bool       `json:"syncing"`
+	Mode         string     `json:"mode"`
+	ChipMemory   string     `json:"chip_memory"`
+	DeviceID     string     `json:"device_id"`
+	EventID      string     `json:"event_id"`
+	CSVPath      string     `json:"csv_path"`
+	PendingPath  string     `json:"pending_path"`
+	LastSyncAt   *time.Time `json:"last_sync_at,omitempty"`
+	LastRead     string     `json:"last_read,omitempty"`
+	LastReadAt   *time.Time `json:"last_read_at,omitempty"`
+	Running      bool       `json:"running"`
+	LastError    string     `json:"last_error,omitempty"`
+}
+
+// App owns Proxmark + hosted bridge loops.
+type App struct {
+	cfg    Config
+	auth   *bridge.HostedAuth
+	store  *bridge.LocalStore
+	syncer *bridge.Syncer
+	reader rfid.Reader
+	pm3    *rfid.Proxmark3
+	client *http.Client
+	roster *bridge.RosterCache
+
+	mu         sync.RWMutex
+	conn       *websocket.Conn
+	writeMu    sync.Mutex
+	online     bool
+	syncing    bool
+	mode       bridge.ConnectionMode
+	lastSyncAt *time.Time
+	chipMemory string
+	lastRead   string
+	lastReadAt time.Time
+	lastError  string
+	running    bool
+
+	runCancel context.CancelFunc
+	runDone   chan struct{}
+}
+
+// New constructs an App (does not start loops).
+func New(cfg Config) (*App, error) {
+	normalizeConfig(&cfg)
+	if cfg.EventID == "" {
+		return nil, fmt.Errorf("EVENT_ID is required")
+	}
+	if cfg.HostedAPIURL == "" {
+		return nil, fmt.Errorf("HOSTED_API_URL is required")
+	}
+	if cfg.BridgeToken == "" && cfg.OrganizerPIN == "" {
+		return nil, fmt.Errorf("BRIDGE_TOKEN or ORGANIZER_PIN is required")
+	}
+
+	auth, err := bridge.ResolveHostedAuth(cfg.HostedAPIURL, cfg.BridgeToken, cfg.OrganizerPIN, nil)
+	if err != nil {
+		return nil, fmt.Errorf("auth: %w", err)
+	}
+	// Prefer PIN JWT for HTTP admin routes even when bridge token is set.
+	if cfg.OrganizerPIN != "" {
+		_ = bridge.EnsureBearer(auth, nil, cfg.OrganizerPIN)
+	}
+
+	store, err := bridge.NewLocalStore(cfg.DataDir, cfg.EventID)
+	if err != nil {
+		return nil, fmt.Errorf("local store: %w", err)
+	}
+
+	reader := openReader(cfg)
+	return &App{
+		cfg:    cfg,
+		auth:   auth,
+		store:  store,
+		syncer: bridge.NewSyncer(store),
+		reader: reader,
+		pm3:    rfid.NewProxmark3(reader),
+		client: &http.Client{Timeout: 15 * time.Second},
+		roster: bridge.NewRosterCache(),
+		mode:   bridge.ModeOffline,
+	}, nil
+}
+
+// Config returns a copy of the active config.
+func (a *App) Config() Config {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.cfg
+}
+
+// Start begins local HTTP, poll, and bridge loops until Stop or ctx done.
+func (a *App) Start(parent context.Context) error {
+	a.mu.Lock()
+	if a.running {
+		a.mu.Unlock()
+		return fmt.Errorf("bridge already running")
+	}
+	ctx, cancel := context.WithCancel(parent)
+	a.runCancel = cancel
+	a.runDone = make(chan struct{})
+	a.running = true
+	a.lastError = ""
+	a.mu.Unlock()
+
+	go func() {
+		defer close(a.runDone)
+		defer func() {
+			a.mu.Lock()
+			a.running = false
+			a.runCancel = nil
+			a.mu.Unlock()
+		}()
+		go a.runLocalHTTP(ctx)
+		go a.runPollLoop(ctx)
+		a.runBridgeLoop(ctx)
+	}()
+
+	if a.cfg.RaceID != "" {
+		go func() {
+			if err := a.RefreshRoster(); err != nil {
+				log.Printf("roster refresh: %v", err)
+			}
+		}()
+	}
+	return nil
+}
+
+// Stop cancels background loops and waits briefly for exit.
+func (a *App) Stop() {
+	a.mu.Lock()
+	cancel := a.runCancel
+	done := a.runDone
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+		}
+	}
+	a.handleDisconnect()
+}
+
+// Running reports whether Start loops are active.
+func (a *App) Running() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.running
+}
+
+// StatusSnapshot returns operator-facing state.
+func (a *App) StatusSnapshot() Status {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	out := Status{
+		Connected:    a.online,
+		PendingCount: a.store.PendingCount(),
+		Syncing:      a.syncing,
+		Mode:         string(a.mode),
+		ChipMemory:   a.chipMemory,
+		DeviceID:     a.cfg.DeviceID,
+		EventID:      a.cfg.EventID,
+		CSVPath:      a.store.CSVPath(),
+		PendingPath:  a.store.PendingPath(),
+		LastRead:     a.lastRead,
+		Running:      a.running,
+		LastError:    a.lastError,
+	}
+	if a.lastSyncAt != nil {
+		t := *a.lastSyncAt
+		out.LastSyncAt = &t
+	}
+	if !a.lastReadAt.IsZero() {
+		t := a.lastReadAt
+		out.LastReadAt = &t
+	}
+	return out
+}
+
+// RefreshRoster caches bib→UUID for offline manual entry.
+func (a *App) RefreshRoster() error {
+	if err := bridge.EnsureBearer(a.auth, a.client, a.cfg.OrganizerPIN); err != nil {
+		return err
+	}
+	return a.roster.Refresh(a.auth, a.client, a.cfg.RaceID)
+}
+
+// ManualEntry records a lap online, or queues offline via roster UUID.
+func (a *App) ManualEntry(bib string, ts time.Time) error {
+	bib = strings.TrimSpace(bib)
+	if bib == "" {
+		return fmt.Errorf("bib number is required")
+	}
+	if a.cfg.RaceID == "" || a.cfg.CheckpointID == "" {
+		return fmt.Errorf("race_id and checkpoint_id are required in config")
+	}
+	if ts.IsZero() {
+		ts = time.Now().UTC()
+	}
+
+	a.mu.RLock()
+	online := a.online && !a.partitioned()
+	a.mu.RUnlock()
+
+	if online {
+		if err := bridge.EnsureBearer(a.auth, a.client, a.cfg.OrganizerPIN); err != nil {
+			return err
+		}
+		err := bridge.PostManualEntry(a.auth, a.client, bridge.ManualEntryRequest{
+			RaceID:       a.cfg.RaceID,
+			CheckpointID: a.cfg.CheckpointID,
+			BibNumber:    bib,
+			Timestamp:    ts,
+			DeviceID:     a.cfg.DeviceID,
+		})
+		if err == nil {
+			_ = a.RefreshRoster()
+		}
+		return err
+	}
+
+	uid, ok := a.roster.LogicalUUIDForBib(bib)
+	if !ok {
+		// Try one refresh if we have credentials, then fail clearly.
+		if err := a.RefreshRoster(); err == nil {
+			uid, ok = a.roster.LogicalUUIDForBib(bib)
+		}
+	}
+	if !ok || uid == "" {
+		return fmt.Errorf("offline: no cached RFID UUID for bib %s (connect once to refresh roster)", bib)
+	}
+	lap := bridge.PendingLap{
+		LogicalUUID: uid,
+		TS:          ts.UTC(),
+		DeviceID:    a.cfg.DeviceID,
+	}
+	if err := a.store.EnqueueLap(lap); err != nil {
+		return err
+	}
+	a.setMode(bridge.ModeOffline)
+	a.publishStatus()
+	return nil
+}
+
+func openReader(cfg Config) rfid.Reader {
+	if cfg.BridgeMock {
+		return rfid.NewMockReader()
+	}
+	if cfg.RFIDHardware {
+		cli := cfg.ProxmarkCLI
+		if cli == "" {
+			cli = "pm3"
+		}
+		return rfid.NewCLIProxmarkReader(rfid.CLIProxmarkConfig{
+			CLIPath: cli,
+			Port:    cfg.ProxmarkPort,
+			Enabled: true,
+		})
+	}
+	return rfid.NewMockReader()
+}
+
+func (a *App) setMode(mode bridge.ConnectionMode) {
+	a.mu.Lock()
+	a.mode = mode
+	a.mu.Unlock()
+}
+
+func (a *App) setLastError(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err == nil {
+		a.lastError = ""
+		return
+	}
+	a.lastError = err.Error()
+}
+
+func (a *App) partitioned() bool {
+	p := strings.TrimSpace(a.cfg.PartitionSignal)
+	if p == "" {
+		return false
+	}
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+func (a *App) snapshotStatusMap() map[string]any {
+	st := a.StatusSnapshot()
+	out := map[string]any{
+		"connected":     st.Connected,
+		"pending_count": st.PendingCount,
+		"syncing":       st.Syncing,
+		"mode":          st.Mode,
+		"chip_memory":   st.ChipMemory,
+		"device_id":     st.DeviceID,
+		"event_id":      st.EventID,
+		"csv_path":      st.CSVPath,
+		"pending_path":  st.PendingPath,
+		"running":       st.Running,
+	}
+	if st.LastSyncAt != nil {
+		out["last_sync_at"] = st.LastSyncAt.UTC().Format(time.RFC3339)
+	}
+	if st.LastRead != "" {
+		out["last_read"] = st.LastRead
+	}
+	if st.LastReadAt != nil {
+		out["last_read_at"] = st.LastReadAt.UTC().Format(time.RFC3339)
+	}
+	if st.LastError != "" {
+		out["last_error"] = st.LastError
+	}
+	return out
+}
+
+func (a *App) runLocalHTTP(ctx context.Context) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/status", a.handleStatus)
+	mux.HandleFunc("/write-tag", a.handleWriteTag)
+
+	srv := &http.Server{
+		Addr:    a.cfg.LocalAddr,
+		Handler: mux,
+	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
+
+	log.Printf("local bridge HTTP listening on http://%s (status, write-tag)", a.cfg.LocalAddr)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Printf("local HTTP stopped: %v", err)
+		a.setLastError(err)
+	}
+}
+
+func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(a.snapshotStatusMap())
+}
+
+type writeTagRequest struct {
+	ParticipantID string `json:"participant_id"`
+	RaceID        string `json:"race_id"`
+	LogicalUUID   string `json:"logical_uuid"`
+}
+
+func (a *App) handleWriteTag(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		http.Error(w, "read body failed", http.StatusBadRequest)
+		return
+	}
+
+	var req writeTagRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+
+	logicalUUID, err := a.resolveLogicalUUID(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := a.writeChip(logicalUUID); err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"logical_uuid": logicalUUID,
+		"ok":           true,
+	})
+}
+
+func (a *App) resolveLogicalUUID(req writeTagRequest) (string, error) {
+	if uid := strings.TrimSpace(strings.ToLower(req.LogicalUUID)); uid != "" {
+		return uid, nil
+	}
+	if req.ParticipantID == "" {
+		return "", fmt.Errorf("logical_uuid or participant_id is required")
+	}
+	if req.RaceID == "" {
+		return "", fmt.Errorf("race_id is required when using participant_id offline")
+	}
+	return a.auth.FetchLogicalUUID(a.client, req.RaceID, req.ParticipantID)
+}
+
+func (a *App) writeChip(logicalUUID string) error {
+	if err := a.pm3.WriteLogicalUUID(logicalUUID); err != nil {
+		return err
+	}
+	a.mu.Lock()
+	a.chipMemory = logicalUUID
+	a.mu.Unlock()
+	return nil
+}
+
+func (a *App) runPollLoop(ctx context.Context) {
+	ticker := time.NewTicker(a.cfg.PollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			a.pollOnce()
+		}
+	}
+}
+
+func (a *App) pollOnce() {
+	logicalUUID, err := a.pm3.Poll()
+	if err != nil || logicalUUID == "" {
+		return
+	}
+	logicalUUID = strings.ToLower(strings.TrimSpace(logicalUUID))
+
+	a.mu.Lock()
+	a.chipMemory = logicalUUID
+	debounce := 2 * time.Second
+	if a.partitioned() || !a.online {
+		debounce = 60 * time.Second
+	}
+	if logicalUUID == a.lastRead && time.Since(a.lastReadAt) < debounce {
+		a.mu.Unlock()
+		return
+	}
+	a.lastRead = logicalUUID
+	a.lastReadAt = time.Now()
+	online := a.online
+	conn := a.conn
+	a.mu.Unlock()
+
+	if a.partitioned() || !online || conn == nil {
+		lap := bridge.PendingLap{
+			LogicalUUID: logicalUUID,
+			TS:          time.Now().UTC(),
+			DeviceID:    a.cfg.DeviceID,
+		}
+		if err := a.store.EnqueueLap(lap); err != nil {
+			log.Printf("offline enqueue failed: %v", err)
+			a.setLastError(err)
+			return
+		}
+		a.setMode(bridge.ModeOffline)
+		a.publishStatus()
+		log.Printf("offline lap queued logical_uuid=%s pending=%d", logicalUUID, a.store.PendingCount())
+		return
+	}
+
+	msg := services.BridgeMessage{
+		Type:        "read",
+		LogicalUUID: logicalUUID,
+		TS:          time.Now().UTC().Format(time.RFC3339),
+	}
+	a.writeMu.Lock()
+	err = conn.WriteJSON(msg)
+	a.writeMu.Unlock()
+	if err != nil {
+		log.Printf("poll read send failed: %v", err)
+		a.setLastError(err)
+		a.handleDisconnect()
+	}
+}
+
+func (a *App) runBridgeLoop(ctx context.Context) {
+	backoff := time.Second
+	for {
+		select {
+		case <-ctx.Done():
+			a.handleDisconnect()
+			return
+		default:
+		}
+
+		if a.partitioned() {
+			a.handleDisconnect()
+			a.setMode(bridge.ModeOffline)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second):
+			}
+			continue
+		}
+
+		if err := a.connectAndServe(ctx); err != nil {
+			log.Printf("bridge disconnected: %v", err)
+			a.setLastError(err)
+		}
+		a.handleDisconnect()
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+		}
+	}
+}
+
+func (a *App) connectAndServe(ctx context.Context) error {
+	wsURL, err := bridge.BridgeWebSocketURL(a.cfg.HostedAPIURL, a.cfg.DeviceID)
+	if err != nil {
+		return err
+	}
+
+	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
+	conn, resp, err := dialer.Dial(wsURL, a.auth.WSHeaders())
+	if err != nil {
+		if resp != nil {
+			resp.Body.Close()
+		}
+		return err
+	}
+	if resp != nil {
+		resp.Body.Close()
+	}
+	defer conn.Close()
+
+	a.mu.Lock()
+	a.conn = conn
+	a.online = true
+	a.lastError = ""
+	a.mu.Unlock()
+
+	log.Printf("bridge connected device_id=%s", a.cfg.DeviceID)
+
+	if err := a.flushPending(conn); err != nil {
+		log.Printf("initial flush failed: %v", err)
+	}
+	a.publishStatus()
+	if a.cfg.RaceID != "" {
+		if err := a.RefreshRoster(); err != nil {
+			log.Printf("roster refresh on connect: %v", err)
+		}
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		for {
+			var msg services.BridgeMessage
+			if err := conn.ReadJSON(&msg); err != nil {
+				errCh <- err
+				return
+			}
+			if err := a.handleWSMessage(conn, &msg); err != nil {
+				log.Printf("bridge message error: %v", err)
+			}
+		}
+	}()
+
+	partitionCh := make(chan struct{}, 1)
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if a.partitioned() {
+					select {
+					case partitionCh <- struct{}{}:
+					default:
+					}
+					return
+				}
+			}
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errCh:
+		return err
+	case <-partitionCh:
+		return fmt.Errorf("partition signal active")
+	}
+}
+
+func (a *App) handleWSMessage(conn *websocket.Conn, msg *services.BridgeMessage) error {
+	if msg == nil {
+		return nil
+	}
+	switch msg.Type {
+	case "write":
+		ok := true
+		errMsg := ""
+		if err := a.writeChip(strings.TrimSpace(msg.LogicalUUID)); err != nil {
+			ok = false
+			errMsg = err.Error()
+		}
+		return bridge.SendWriteAck(conn, &a.writeMu, msg.RequestID, ok, errMsg)
+	default:
+		return nil
+	}
+}
+
+func (a *App) flushPending(conn *websocket.Conn) error {
+	pending := a.store.PendingCount()
+	if pending == 0 {
+		a.mu.Lock()
+		a.syncing = false
+		a.mode = bridge.ModeOnlineSynced
+		now := time.Now().UTC()
+		a.lastSyncAt = &now
+		a.mu.Unlock()
+		return nil
+	}
+
+	a.mu.Lock()
+	a.syncing = true
+	a.mode = bridge.ModeSyncing
+	a.mu.Unlock()
+	_ = bridge.SendStatus(conn, &a.writeMu, pending, true, a.lastSyncAt)
+
+	sender := bridge.NewWSReadSender(conn, &a.writeMu)
+	n, err := a.syncer.Flush(sender)
+	if err != nil {
+		a.mu.Lock()
+		a.syncing = false
+		if a.store.PendingCount() > 0 {
+			a.mode = bridge.ModeOffline
+		}
+		a.mu.Unlock()
+		a.publishStatus()
+		return err
+	}
+
+	now := time.Now().UTC()
+	a.mu.Lock()
+	a.syncing = false
+	a.lastSyncAt = &now
+	if a.store.PendingCount() == 0 {
+		a.mode = bridge.ModeOnlineSynced
+	} else {
+		a.mode = bridge.ModeOffline
+	}
+	a.mu.Unlock()
+
+	a.publishStatus()
+	log.Printf("flushed %d pending laps", n)
+	return nil
+}
+
+func (a *App) publishStatus() {
+	a.mu.RLock()
+	conn := a.conn
+	online := a.online
+	pending := a.store.PendingCount()
+	syncing := a.syncing
+	lastSync := a.lastSyncAt
+	a.mu.RUnlock()
+
+	if !online || conn == nil {
+		return
+	}
+	_ = bridge.SendStatus(conn, &a.writeMu, pending, syncing, lastSync)
+}
+
+func (a *App) handleDisconnect() {
+	a.mu.Lock()
+	if a.conn != nil {
+		_ = a.conn.Close()
+		a.conn = nil
+	}
+	a.online = false
+	a.syncing = false
+	if a.store != nil && a.store.PendingCount() > 0 {
+		a.mode = bridge.ModeOffline
+	}
+	a.mu.Unlock()
+	a.publishStatus()
+}
+
+// RunHeadless blocks until ctx is cancelled (CLI device-bridge entrypoint).
+func RunHeadless(ctx context.Context, cfg Config) error {
+	app, err := New(cfg)
+	if err != nil {
+		return err
+	}
+	if err := app.Start(ctx); err != nil {
+		return err
+	}
+	<-ctx.Done()
+	app.Stop()
+	return nil
+}

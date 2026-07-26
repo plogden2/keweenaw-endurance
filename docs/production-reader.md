@@ -11,14 +11,16 @@ Short setup and ops guide for the finish-line laptop against live production.
 
 | Control | Where |
 |---------|--------|
+| **Start Proxmark bridge** | `reader-gui.exe` (preferred) · or headless `device-bridge.exe` |
+| **Manual lap (reader miss)** | `reader-gui.exe` → Manual entry · or website Manual entry |
 | **PIN** / **Manage** | Top header (every page) · also footer |
 | **Station** | Top header · also footer |
 | **CSV recovery** | Footer · also PIN page after unlock |
 | **Racers** | After PIN unlock: each race row on **Manage** · live view toolbar · race details · event page |
-| **Manual entry** | Same places as Racers (opens Live timing) |
+| **Manual entry (website)** | Same places as Racers (opens Live timing) |
 | **Add racer** / **Program tag** / **Write tag** | On the Racers page for that race |
 | **Save & arm reader** | Station page |
-| **Record time** | Manual entry (Live timing) page |
+| **Record time** | Manual entry (Live timing) page · or reader GUI |
 | **Online · Synced** chip | Live race flow page (when PIN unlocked) |
 
 ---
@@ -30,7 +32,13 @@ Short setup and ops guide for the finish-line laptop against live production.
 
    `scripts\pm3.cmd` → ProxSpace client on COM3
 
-3. Build the device-bridge once:
+3. Build the reader GUI once (64-bit MinGW required — ProxSpace provides it):
+
+```powershell
+powershell -File C:\Users\gener\Documents\keweenaw-endurance\scripts\build-reader-gui.ps1
+```
+
+Optional headless binary:
 
 ```powershell
 cd C:\Users\gener\Documents\keweenaw-endurance\backend
@@ -39,9 +47,33 @@ go build -o device-bridge.exe ./cmd/device-bridge
 
 ---
 
-## 2. Start the reader against production
+## 2. Start the reader against production (GUI — preferred)
 
-Run this **on the reader laptop** (outside Docker) every race day:
+1. Run `backend\reader-gui.exe` (double-click or from Explorer).
+2. Fill in:
+   - **Hosted API URL:** `https://www.keweenawendurance.com`
+   - **Bridge token** (from Secret Manager `keweenaw-bridge-token`) and/or **Organizer PIN** `1738`
+   - **Device ID:** `laptop-finish-1`
+   - **Event ID:** `1441674d-a011-471a-a601-722b88b117f5` (Bluffet 2026)
+   - **Race ID** + **Checkpoint ID** for the finish (needed for GUI manual entry)
+   - **COM port:** usually `COM3`
+   - **Proxmark CLI:** `C:\Users\gener\Documents\keweenaw-endurance\scripts\pm3.cmd`
+   - Check **Use Proxmark hardware**
+3. **Save config** → **Test Proxmark** → **Start bridge**
+4. Confirm status shows **ONLINE_SYNCED** (or `online_synced`).
+
+Then in Chrome:
+
+1. Open https://www.keweenawendurance.com
+2. Top header → **PIN** → enter organizer PIN → **Unlock management**
+3. Top header → **Station** → event, **Finish station**, Device ID `laptop-finish-1` → **Save & arm reader**
+4. Work the race from **Manage** / live race flow
+
+If Proxmark misses a finish: in the GUI, type the **bib** → **Record lap** (works offline too — queues and syncs later).
+
+Config is stored under `%LOCALAPPDATA%\KeweenawEndurance\bridge-data\reader-gui-config.json`.
+
+### Headless alternative (PowerShell)
 
 ```powershell
 $env:HOSTED_API_URL = "https://www.keweenawendurance.com"
@@ -66,18 +98,6 @@ curl.exe http://127.0.0.1:8091/status
 
 Expect `"mode":"online_synced"` and `"connected":true`.
 
-Then in Chrome:
-
-1. Open https://www.keweenawendurance.com
-2. Top header → **PIN** → enter organizer PIN → **Unlock management**  
-   (header label becomes **Manage**; footer shows **PIN · Unlocked**)
-3. Top header → **Station**
-4. Select the event, keep **Finish station**, set **Device ID** to `laptop-finish-1`
-5. Click **Save & arm reader**
-6. Header → **Manage** (or Timing → event → **Open live race flow**) to work the race
-
-Watch the sync chip on the live view: **Online · Synced**. If it shows **Offline**, the bridge is down or unreachable; keep scoring locally — it will auto-sync when back.
-
 ---
 
 ## 3. Program tags for racers
@@ -95,7 +115,7 @@ Notes:
 
 - Each racer has a permanent logical RFID UUID. Replacement chips get the **same** UUID.
 - You can program multiple physical tags for one racer (lost-tag replacements).
-- Bridge must be running; write goes hosted → bridge → Proxmark.
+- Bridge/GUI must be running; write goes hosted → bridge → Proxmark.
 
 ---
 
@@ -114,7 +134,9 @@ They can race as soon as the tag is written and the station is armed.
 
 ## 5. Manual taps (add a lap without a chip read)
 
-Use this when a racer finishes but the tag didn’t read.
+**Preferred on the reader laptop:** `reader-gui.exe` → enter bib → **Record lap**.
+
+Website path (same as before):
 
 1. Unlock with PIN.
 2. Open **Manual entry** for that race (Manage → race → **Manual entry**, or live view → **Manual entry**).
@@ -135,10 +157,10 @@ There is **no “delete this lap” button** in the UI today.
 
 What you can do on race day:
 
-| Situation | What to do |
-|-----------|------------|
+| Situation | Fix |
+|-----------|-----|
 | Accidental double-tap | Usually blocked by the **1-minute cooldown** — no action |
-| Missed tap | **Manual entry** (section 5) |
+| Missed tap | **reader-gui** manual entry or website Manual entry (section 5) |
 | Wrong racer credited | Add the correct lap via manual entry; note the bad tap for post-race cleanup |
 | Need to wipe/rebuild timing data | Emergency only: footer **CSV recovery** (PIN required). This replaces event timing data — stop all scoring first |
 
@@ -149,11 +171,11 @@ Do **not** call CSV import for normal outages. Offline scoring uses the device-b
 ## 7. Quick day-of checklist
 
 - [ ] Proxmark on COM3; `scripts\pm3.cmd` works
-- [ ] `device-bridge.exe` running → `http://127.0.0.1:8091/status` = `online_synced`
+- [ ] `reader-gui.exe` running → status `ONLINE_SYNCED` (or `curl.exe http://127.0.0.1:8091/status`)
 - [ ] Browser on https://www.keweenawendurance.com
 - [ ] Header shows **PIN** / **Station**; unlock PIN; arm station as finish / `laptop-finish-1`
 - [ ] From Manage, open **Racers** for a race; spot-check program + tap
-- [ ] Know **Manual entry** on Manage / live view for missed taps
+- [ ] Know **GUI Record lap** / website **Manual entry** for missed taps
 
 ---
 
@@ -161,10 +183,11 @@ Do **not** call CSV import for normal outages. Offline scoring uses the device-b
 
 | Symptom | Fix |
 |---------|-----|
-| Write tag / 500 / `pm3` not found | Set `PROXMARK3_CLI` to `scripts\pm3.cmd` and restart the bridge |
-| Sync chip offline | Restart bridge; check internet; confirm `HOSTED_API_URL` is the public domain |
+| Write tag / 500 / `pm3` not found | Set Proxmark CLI to `scripts\pm3.cmd` in the GUI (or `PROXMARK3_CLI`) and restart |
+| Sync chip offline | Restart bridge/GUI; check internet; confirm Hosted API URL is the public domain |
 | Frontend loads but API broken | Don’t use the raw `*.run.app` frontend URL; use https://www.keweenawendurance.com |
 | Local `keweenawendurance.com` hits nothing | Your hosts file may map it to `127.0.0.1` — use `www.` or fix hosts to the LB IP |
 | Can’t find Racers | Unlock PIN first → **Manage** → race row **Racers** (also on live view when unlocked) |
+| GUI build fails (`64-bit mode not compiled in`) | Use ProxSpace `mingw64\bin\gcc.exe`, not 32-bit `C:\MinGW` |
 
-More detail: `backend/cmd/device-bridge/README.md`, `deploy/README.md`.
+More detail: `backend/cmd/reader-gui/README.md`, `backend/cmd/device-bridge/README.md`, `deploy/README.md`.

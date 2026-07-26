@@ -2,6 +2,8 @@
 
 Native laptop process that owns the Proxmark3 USB serial port, relays RFID reads/writes to the hosted API over WebSocket, and keeps scoring during outages by appending to a local live CSV + durable pending queue. On reconnect it automatically flushes pending laps — operators never call `import.csv` for normal outages.
 
+**Race-day preferred UI:** build and run `cmd/reader-gui` (`reader-gui.exe`) — same bridge logic in-process, plus config form and manual bib entry. This binary remains the headless / scripted entrypoint.
+
 ## When to run natively (Windows)
 
 Run the bridge **on the reader laptop outside Docker** so it can open the Proxmark COM port (`PROXMARK3_PORT=COM3`). The hosted backend container sets `RFID_HARDWARE=false`; only this binary talks to USB.

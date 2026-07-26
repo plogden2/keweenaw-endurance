@@ -148,11 +148,53 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 		hexData := fmt.Sprintf("%x", raw[off:off+proxmarkPageSize])
 		parts = append(parts, fmt.Sprintf("hf mfu wrbl -b %d -d %s", page, hexData))
 	}
-	if _, err := r.runner(strings.Join(parts, "; ")); err != nil {
+	stdout, writeErr := r.runner(strings.Join(parts, "; "))
+	if writeErr != nil {
+		// Proxmark CLI often exits -10 (0xfffffff6) even when the device ran the
+		// script; confirm by reading user memory before failing the operator.
+		if pm3DeviceResponded(stdout) {
+			if verifyErr := r.verifyLogicalUUIDLocked(logicalUUID); verifyErr == nil {
+				return nil
+			}
+		}
 		return fmt.Errorf("write pages %d-%d: %w",
 			proxmarkUserMemoryStartPage,
 			proxmarkUserMemoryStartPage+proxmarkLogicalUUIDPages-1,
-			err)
+			writeErr)
+	}
+	return nil
+}
+
+// verifyLogicalUUIDLocked reads pages 4–7 and checks they decode to logicalUUID.
+// Caller must hold r.mu.
+func (r *CLIProxmarkReader) verifyLogicalUUIDLocked(logicalUUID string) error {
+	parts := make([]string, 0, proxmarkLogicalUUIDPages)
+	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
+		page := proxmarkUserMemoryStartPage + i
+		parts = append(parts, fmt.Sprintf("hf mfu rdbl -b %d", page))
+	}
+	stdout, err := r.runner(strings.Join(parts, "; "))
+	if err != nil && !pm3DeviceResponded(stdout) {
+		return err
+	}
+	raw := make([]byte, 0, 16)
+	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
+		page := proxmarkUserMemoryStartPage + i
+		pageBytes, parseErr := parseReadPageOutput(stdout, page)
+		if parseErr != nil {
+			return parseErr
+		}
+		if len(pageBytes) == 0 {
+			return fmt.Errorf("readback page %d empty", page)
+		}
+		raw = append(raw, pageBytes...)
+	}
+	got, err := DecodeLogicalUUID(raw)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(got, logicalUUID) {
+		return fmt.Errorf("readback mismatch: got %s want %s", got, logicalUUID)
 	}
 	return nil
 }
