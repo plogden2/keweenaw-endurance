@@ -98,6 +98,11 @@ func (c *RosterCache) RefreshEvent(auth *HostedAuth, client *http.Client, eventI
 	return nil
 }
 
+// SeedForTest replaces cache contents (unit tests).
+func (c *RosterCache) SeedForTest(entries []RosterEntry) {
+	c.replace(entries)
+}
+
 func (c *RosterCache) replace(entries []RosterEntry) {
 	nextBib := map[string][]RosterEntry{}
 	nextUUID := map[string]RosterEntry{}

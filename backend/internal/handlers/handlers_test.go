@@ -145,6 +145,8 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		api.GET("/timing/live/:raceId", h.GetLiveTiming)
 		api.POST("/timing/record", append(timerWrite, h.CreateTimingRecord)...)
 		api.PUT("/timing/records/:id", append(timerWrite, h.UpdateTimingRecord)...)
+		api.POST("/timing/records/:id/void", append(timerWrite, h.VoidTimingRecord)...)
+		api.POST("/timing/records/:id/restore", append(timerWrite, h.RestoreTimingRecord)...)
 		api.GET("/timing/results/:raceId", h.GetRaceResults)
 		api.GET("/timing/leaderboard/:raceId", h.GetLeaderboard)
 		api.GET("/timing/team-leaderboard/:raceId", h.GetTeamLeaderboard)
@@ -868,6 +870,61 @@ func TestKaraokeBonus_CreatesAndConflicts(t *testing.T) {
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusConflict, w.Code)
+}
+
+func TestVoidTimingRecord_RequiresPINAndCascades(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+	eventID, tagUID := seedScanHandlerFixture(t, svc, "active")
+
+	body := map[string]string{
+		"tag_uid":         tagUID,
+		"device_id":       "laptop-finish-1",
+		"local_timestamp": time.Now().UTC().Format(time.RFC3339),
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/events/"+eventID+"/scans", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var lapResp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &lapResp))
+	timingID := lapResp["timing_record_id"].(string)
+
+	req = httptest.NewRequest(http.MethodPost, "/api/timing-records/"+timingID+"/karaoke-bonus", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	// Unauthenticated void rejected
+	req = httptest.NewRequest(http.MethodPost, "/api/timing/records/"+timingID+"/void", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.True(t, w.Code == http.StatusUnauthorized || w.Code == http.StatusForbidden)
+
+	req = httptest.NewRequest(http.MethodPost, "/api/timing/records/"+timingID+"/void", nil)
+	req.Header.Set("Authorization", pinBearerToken(t, router))
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var voidResp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &voidResp))
+	assert.Equal(t, float64(0), voidResp["lap_count"])
+	cascaded, ok := voidResp["cascaded_ids"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, cascaded, 1)
+	rec := voidResp["record"].(map[string]interface{})
+	assert.NotNil(t, rec["voided_at"])
+
+	req = httptest.NewRequest(http.MethodPost, "/api/timing/records/"+timingID+"/restore", nil)
+	req.Header.Set("Authorization", pinBearerToken(t, router))
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &voidResp))
+	assert.Equal(t, float64(1), voidResp["lap_count"])
 }
 
 func TestRFIDHandlers_ReadPayload(t *testing.T) {

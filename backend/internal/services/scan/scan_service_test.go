@@ -214,6 +214,26 @@ func TestProcessScan_Cooldown(t *testing.T) {
 	assert.Equal(t, 2, third.LapCount)
 }
 
+func TestProcessScan_VoidLatestLapClearsCooldown(t *testing.T) {
+	fx := seedActiveLapFixture(t, "active")
+	svc := NewScanService(fx.db, nil)
+
+	base := time.Now().UTC().Truncate(time.Second)
+	first, err := svc.ProcessScan(fx.event.ID.UUID(), fx.tagUID, "laptop-finish-1", base)
+	require.NoError(t, err)
+	require.NotNil(t, first.TimingRecordID)
+
+	voidedAt := base.Add(time.Second)
+	require.NoError(t, fx.db.Model(&models.TimingRecord{}).
+		Where("id = ?", first.TimingRecordID).
+		Update("voided_at", voidedAt).Error)
+
+	retry, err := svc.ProcessScan(fx.event.ID.UUID(), fx.tagUID, "laptop-finish-1", base.Add(10*time.Second))
+	require.NoError(t, err)
+	assert.Equal(t, ResultLap, retry.Result)
+	assert.Equal(t, 1, retry.LapCount)
+}
+
 func TestProcessScan_TestReadWhenScheduled(t *testing.T) {
 	fx := seedActiveLapFixture(t, "scheduled")
 	svc := NewScanService(fx.db, nil)

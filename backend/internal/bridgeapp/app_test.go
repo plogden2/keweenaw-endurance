@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/keweenaw-endurance/backend/internal/bridge"
+	"github.com/keweenaw-endurance/backend/internal/rfid"
 	"github.com/keweenaw-endurance/backend/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,6 +61,64 @@ func TestApp_ManualEntryOfflineQueuesPending(t *testing.T) {
 	require.NoError(t, app.ManualEntry("12", time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)))
 	assert.Equal(t, 1, app.store.PendingCount())
 	assert.True(t, filepath.IsAbs(app.store.PendingPath()) || app.store.PendingPath() != "")
+}
+
+func TestApp_WriteOnlyPollDoesNotRecord(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{
+		HostedAPIURL: "http://127.0.0.1:1",
+		BridgeToken:  "tok",
+		DeviceID:     "laptop-finish-1",
+		EventID:      "11111111-1111-1111-1111-111111111111",
+		DataDir:      dir,
+		LocalAddr:    "127.0.0.1:0",
+		BridgeMock:   true,
+		WriteOnly:    true,
+		PollMS:       500,
+	}
+	normalizeConfig(&cfg)
+	app, err := New(cfg)
+	require.NoError(t, err)
+
+	mock := app.reader.(*rfid.MockReader)
+	mock.Enqueue("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+	app.roster.SeedForTest([]bridge.RosterEntry{{
+		Bib: "7", Name: "Ada Lovelace", RaceID: "race-1", RaceName: "12 Hour",
+		LogicalUUID: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+	}})
+
+	app.mu.Lock()
+	app.online = false
+	app.mu.Unlock()
+
+	app.pollOnce()
+	st := app.StatusSnapshot()
+	assert.True(t, st.WriteOnly)
+	assert.Equal(t, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", st.LastTapUUID)
+	assert.Equal(t, "Ada Lovelace", st.LastTapName)
+	assert.Equal(t, "7", st.LastTapBib)
+	assert.Equal(t, "write_only", st.LastTapResult)
+	assert.Equal(t, 0, app.store.PendingCount(), "write-only must not enqueue offline laps")
+
+	app.SetWriteOnly(false)
+	assert.False(t, app.StatusSnapshot().WriteOnly)
+}
+
+func TestConfig_WriteOnlyRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "reader-gui-config.json")
+	cfg := Config{
+		HostedAPIURL: "https://www.keweenawendurance.com",
+		DeviceID:     "laptop-finish-1",
+		EventID:      "evt-1",
+		DataDir:      dir,
+		WriteOnly:    true,
+		PollMS:       500,
+	}
+	require.NoError(t, SaveConfig(path, cfg))
+	loaded, err := LoadConfigFile(path)
+	require.NoError(t, err)
+	assert.True(t, loaded.WriteOnly)
 }
 
 func TestApp_ApplyScanResultMessage(t *testing.T) {

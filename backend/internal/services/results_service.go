@@ -286,7 +286,7 @@ func (s *ResultsService) buildOverallLeaderboard(raceID uuid.UUID, categoryFilte
 	for _, p := range participants {
 		var records []models.TimingRecord
 		if err := s.db.Where(
-			"participant_id = ? AND record_type IN ?",
+			"participant_id = ? AND record_type IN ? AND voided_at IS NULL",
 			p.ID,
 			[]string{"rfid_lap", "karaoke_bonus"},
 		).Order("timestamp ASC").Find(&records).Error; err != nil {
@@ -381,7 +381,7 @@ func (s *ResultsService) BuildTeamLeaderboard(raceID uuid.UUID) ([]LiveTeamEntry
 		for _, m := range members {
 			var records []models.TimingRecord
 			if err := s.db.Where(
-				"participant_id = ? AND record_type IN ?",
+				"participant_id = ? AND record_type IN ? AND voided_at IS NULL",
 				m.ID,
 				[]string{"rfid_lap", "karaoke_bonus"},
 			).Find(&records).Error; err != nil {
@@ -555,7 +555,7 @@ func (s *ResultsService) calculateLapResults(raceID uuid.UUID) ([]LeaderboardEnt
 	for _, participant := range participants {
 		var records []models.TimingRecord
 		if err := s.db.Where(
-			"participant_id = ? AND record_type IN ?",
+			"participant_id = ? AND record_type IN ? AND voided_at IS NULL",
 			participant.ID,
 			[]string{"rfid_lap", "karaoke_bonus"},
 		).Order("timestamp ASC").Find(&records).Error; err != nil {

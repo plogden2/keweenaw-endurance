@@ -42,9 +42,10 @@ type readerUI struct {
 	dataDir      *widget.Entry
 	proxmarkCLI  *widget.Entry
 	proxmarkPort *widget.SelectEntry
-	hwCheck      *widget.Check
-	mockCheck    *widget.Check
-	autofillMsg  *widget.Label
+	hwCheck        *widget.Check
+	mockCheck      *widget.Check
+	writeOnlyCheck *widget.Check
+	autofillMsg    *widget.Label
 
 	statusMode   *widget.Label
 	statusDetail *widget.Label
@@ -122,6 +123,14 @@ func (ui *readerUI) build() {
 	ui.hwCheck.SetChecked(ui.cfg.RFIDHardware)
 	ui.mockCheck = widget.NewCheck("Mock reader (no hardware)", nil)
 	ui.mockCheck.SetChecked(ui.cfg.BridgeMock)
+	ui.writeOnlyCheck = widget.NewCheck("Write-only mode (show taps, do not record)", func(on bool) {
+		ui.cfg.WriteOnly = on
+		if ui.bridge != nil && ui.bridge.Running() {
+			ui.bridge.SetWriteOnly(on)
+		}
+		_ = bridgeapp.SaveConfig(ui.cfgPath, ui.readForm())
+	})
+	ui.writeOnlyCheck.SetChecked(ui.cfg.WriteOnly)
 	ui.autofillMsg = widget.NewLabel("Loading events & races…")
 	ui.autofillMsg.Wrapping = fyne.TextWrapWord
 
@@ -341,6 +350,7 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 		configForm,
 		ui.hwCheck,
 		ui.mockCheck,
+		ui.writeOnlyCheck,
 		controls,
 		statusBox,
 		manualBox,
@@ -396,6 +406,7 @@ func (ui *readerUI) runAutofill() {
 		ui.proxmarkPort.SetText(cfg.ProxmarkPort)
 		ui.hwCheck.SetChecked(cfg.RFIDHardware)
 		ui.mockCheck.SetChecked(cfg.BridgeMock)
+		ui.writeOnlyCheck.SetChecked(cfg.WriteOnly)
 
 		ui.eventSelect.Options = ui.eventOptionLabels()
 		ui.raceSelect.Options = ui.raceOptionLabels()
@@ -494,6 +505,7 @@ func (ui *readerUI) readForm() bridgeapp.Config {
 	cfg.ProxmarkPort = strings.TrimSpace(ui.proxmarkPort.Text)
 	cfg.RFIDHardware = ui.hwCheck.Checked
 	cfg.BridgeMock = ui.mockCheck.Checked
+	cfg.WriteOnly = ui.writeOnlyCheck.Checked
 	// Event/race/checkpoint kept in ui.cfg via select handlers.
 	cfg.EventID = ui.cfg.EventID
 	cfg.RaceID = ui.cfg.RaceID
@@ -618,17 +630,24 @@ func (ui *readerUI) statusLoop() {
 		if mode == "" {
 			mode = "unknown"
 		}
+		modeLabel := strings.ToUpper(mode)
+		if st.WriteOnly {
+			modeLabel = "WRITE ONLY"
+		}
 		detail := fmt.Sprintf(
 			"mode=%s  connected=%v  pending=%d",
 			mode, st.Connected, st.PendingCount,
 		)
+		if st.WriteOnly {
+			detail += "  (taps shown, not recorded)"
+		}
 		if st.LastSyncAt != nil {
 			detail += "  last_sync=" + st.LastSyncAt.Local().Format(time.Kitchen)
 		}
 		tap := formatLastTap(st)
 		errText := st.LastError
 		fyne.Do(func() {
-			ui.statusMode.SetText(strings.ToUpper(mode))
+			ui.statusMode.SetText(modeLabel)
 			ui.statusDetail.SetText(detail)
 			ui.statusTap.SetText(tap)
 			ui.statusError.SetText(errText)

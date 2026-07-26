@@ -26,6 +26,7 @@ type Config struct {
 	ProxmarkPort    string        `json:"proxmark3_port"`
 	RFIDHardware    bool          `json:"rfid_hardware"`
 	BridgeMock      bool          `json:"bridge_mock"`
+	WriteOnly       bool          `json:"write_only"`
 	PollInterval    time.Duration `json:"-"`
 	PollMS          int           `json:"poll_ms"`
 }
@@ -45,6 +46,7 @@ type configFile struct {
 	ProxmarkPort    string `json:"proxmark3_port"`
 	RFIDHardware    bool   `json:"rfid_hardware"`
 	BridgeMock      bool   `json:"bridge_mock"`
+	WriteOnly       bool   `json:"write_only"`
 	PollMS          int    `json:"poll_ms"`
 }
 
@@ -140,6 +142,7 @@ func SaveConfig(path string, cfg Config) error {
 		ProxmarkPort:    cfg.ProxmarkPort,
 		RFIDHardware:    cfg.RFIDHardware,
 		BridgeMock:      cfg.BridgeMock,
+		WriteOnly:       cfg.WriteOnly,
 		PollMS:          cfg.PollMS,
 	}
 	raw, err := json.MarshalIndent(file, "", "  ")
@@ -196,6 +199,9 @@ func ApplyEnv(cfg *Config) {
 	if v := strings.TrimSpace(os.Getenv("BRIDGE_MOCK")); v != "" {
 		cfg.BridgeMock = strings.EqualFold(v, "true")
 	}
+	if v := strings.TrimSpace(os.Getenv("BRIDGE_WRITE_ONLY")); v != "" {
+		cfg.WriteOnly = strings.EqualFold(v, "true")
+	}
 	if v := strings.TrimSpace(os.Getenv("BRIDGE_POLL_MS")); v != "" {
 		if ms, err := time.ParseDuration(v + "ms"); err == nil && ms > 0 {
 			cfg.PollInterval = ms
@@ -220,6 +226,7 @@ func configFromFile(file configFile) Config {
 		ProxmarkPort:    file.ProxmarkPort,
 		RFIDHardware:    file.RFIDHardware,
 		BridgeMock:      file.BridgeMock,
+		WriteOnly:       file.WriteOnly,
 		PollMS:          file.PollMS,
 	}
 	return cfg
@@ -265,6 +272,7 @@ func mergeConfig(base, overlay Config) Config {
 	}
 	out.RFIDHardware = overlay.RFIDHardware
 	out.BridgeMock = overlay.BridgeMock
+	out.WriteOnly = overlay.WriteOnly
 	if overlay.PollMS > 0 {
 		out.PollMS = overlay.PollMS
 	}

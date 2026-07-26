@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -47,6 +48,7 @@ type CLIProxmarkReader struct {
 	runner         CLICommandRunner // one-shot (tests); nil ⇒ persistent session
 	sessionFactory PM3SessionFactory
 	beeper         Beeper
+	beepEnabled    atomic.Bool
 
 	mu         sync.Mutex
 	session    PM3Session
@@ -71,6 +73,7 @@ func NewCLIProxmarkReader(cfg CLIProxmarkConfig) *CLIProxmarkReader {
 		beeper:  beeper,
 		backoff: proxmarkReconnectMinBackoff,
 	}
+	r.beepEnabled.Store(true)
 	if cfg.Runner != nil {
 		r.runner = cfg.Runner
 		r.useSession = false
@@ -372,8 +375,18 @@ func (r *CLIProxmarkReader) Poll() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	r.beeper.Beep()
+	if r.beepEnabled.Load() {
+		r.beeper.Beep()
+	}
 	return uid, nil
+}
+
+// SetBeepEnabled toggles the laptop beep on successful Poll (write-only disables it).
+func (r *CLIProxmarkReader) SetBeepEnabled(enabled bool) {
+	if r == nil {
+		return
+	}
+	r.beepEnabled.Store(enabled)
 }
 
 // DetectISO14443A probes for an ISO14443-A tag (NTAG / Ultralight / Classic).

@@ -254,7 +254,7 @@ func (s *ScanService) participantInEvent(p *models.Participant, eventID uuid.UUI
 
 func (s *ScanService) cooldownRemaining(participantID uuid.UUID, at time.Time) int {
 	var last models.TimingRecord
-	err := s.db.Where("participant_id = ? AND record_type = ?", participantID, "rfid_lap").
+	err := s.db.Where("participant_id = ? AND record_type = ? AND voided_at IS NULL", participantID, "rfid_lap").
 		Order("timestamp DESC").
 		First(&last).Error
 	if err != nil {
@@ -286,9 +286,29 @@ func (s *ScanService) finishCheckpoint(raceID uuid.UUID) (*models.TimingCheckpoi
 func (s *ScanService) scoredLapCount(participantID uuid.UUID) (int, error) {
 	var count int64
 	err := s.db.Model(&models.TimingRecord{}).
-		Where("participant_id = ? AND record_type IN ?", participantID, []string{"rfid_lap", "karaoke_bonus"}).
+		Where("participant_id = ? AND record_type IN ? AND voided_at IS NULL", participantID, []string{"rfid_lap", "karaoke_bonus"}).
 		Count(&count).Error
 	return int(count), err
+}
+
+// ScoreSnapshot returns current scored lap count and placements after a timing mutation,
+// and refreshes the live CSV via onChange.
+func (s *ScanService) ScoreSnapshot(participantID uuid.UUID) (lapCount, placement, placementCategory int, eventID uuid.UUID, err error) {
+	var participant models.Participant
+	if err := s.db.Preload("Category").Preload("Team").Preload("Race").First(&participant, "id = ?", participantID).Error; err != nil {
+		return 0, 0, 0, uuid.Nil, err
+	}
+	lapCount, err = s.scoredLapCount(participantID)
+	if err != nil {
+		return 0, 0, 0, uuid.Nil, err
+	}
+	placement, placementCategory, err = s.placements(participant.RaceID.UUID(), &participant)
+	if err != nil {
+		return 0, 0, 0, uuid.Nil, err
+	}
+	eventID = participant.Race.EventID.UUID()
+	s.notifyChange(eventID)
+	return lapCount, placement, placementCategory, eventID, nil
 }
 
 type scoredEntry struct {
@@ -363,7 +383,7 @@ func (s *ScanService) teamPlacement(raceID uuid.UUID, participant *models.Partic
 		for _, m := range members {
 			var records []models.TimingRecord
 			_ = s.db.Where(
-				"participant_id = ? AND record_type IN ?",
+				"participant_id = ? AND record_type IN ? AND voided_at IS NULL",
 				m.ID,
 				[]string{"rfid_lap", "karaoke_bonus"},
 			).Find(&records).Error
@@ -417,7 +437,7 @@ func (s *ScanService) scoreRace(raceID uuid.UUID) ([]scoredEntry, error) {
 	for _, p := range participants {
 		var records []models.TimingRecord
 		_ = s.db.Where(
-			"participant_id = ? AND record_type IN ?",
+			"participant_id = ? AND record_type IN ? AND voided_at IS NULL",
 			p.ID,
 			[]string{"rfid_lap", "karaoke_bonus"},
 		).Order("timestamp ASC").Find(&records).Error

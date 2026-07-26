@@ -40,6 +40,7 @@ type Status struct {
 	LastTapBib      string     `json:"last_tap_bib,omitempty"`
 	LastTapRaceID   string     `json:"last_tap_race_id,omitempty"`
 	LastTapRaceName string     `json:"last_tap_race_name,omitempty"`
+	WriteOnly    bool       `json:"write_only"`
 	Running      bool       `json:"running"`
 	LastError    string     `json:"last_error,omitempty"`
 }
@@ -107,7 +108,7 @@ func New(cfg Config) (*App, error) {
 	}
 
 	reader := openReader(cfg)
-	return &App{
+	app := &App{
 		cfg:    cfg,
 		auth:   auth,
 		store:  store,
@@ -117,7 +118,9 @@ func New(cfg Config) (*App, error) {
 		client: &http.Client{Timeout: 15 * time.Second},
 		roster: bridge.NewRosterCache(),
 		mode:   bridge.ModeOffline,
-	}, nil
+	}
+	app.applyWriteOnlyToReader(cfg.WriteOnly)
+	return app, nil
 }
 
 // Config returns a copy of the active config.
@@ -125,6 +128,41 @@ func (a *App) Config() Config {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.cfg
+}
+
+// SetWriteOnly enables/disables automatic tap recording without restarting.
+// Reads still update last-tap display; writes and manual entry stay available.
+func (a *App) SetWriteOnly(enabled bool) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	was := a.cfg.WriteOnly
+	a.cfg.WriteOnly = enabled
+	conn := a.conn
+	online := a.online
+	a.mu.Unlock()
+	a.applyWriteOnlyToReader(enabled)
+	a.publishStatus()
+	// Turning write-only off: flush any laps that were held in the queue.
+	if was && !enabled && online && conn != nil && !a.partitioned() {
+		if err := a.flushPending(conn); err != nil {
+			log.Printf("flush after leaving write-only: %v", err)
+		}
+	}
+}
+
+func (a *App) applyWriteOnlyToReader(writeOnly bool) {
+	if cli, ok := a.reader.(*rfid.CLIProxmarkReader); ok {
+		cli.SetBeepEnabled(!writeOnly)
+	}
+}
+
+// WriteOnly reports whether automatic tap recording is suppressed.
+func (a *App) WriteOnly() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.cfg.WriteOnly
 }
 
 // Start begins local HTTP, poll, and bridge loops until Stop or ctx done.
@@ -208,6 +246,7 @@ func (a *App) StatusSnapshot() Status {
 		LastTapBib:      a.lastTapBib,
 		LastTapRaceID:   a.lastTapRaceID,
 		LastTapRaceName: a.lastTapRaceName,
+		WriteOnly:       a.cfg.WriteOnly,
 		Running:         a.running,
 		LastError:       a.lastError,
 	}
@@ -572,9 +611,18 @@ func (a *App) pollOnce() {
 		a.lastTapUUID = logicalUUID
 		a.lastTapAt = a.lastReadAt
 	}
+	writeOnly := a.cfg.WriteOnly
+	if writeOnly {
+		a.lastTapResult = "write_only"
+	}
 	online := a.online
 	conn := a.conn
 	a.mu.Unlock()
+
+	if writeOnly {
+		a.publishStatus()
+		return
+	}
 
 	if a.partitioned() || !online || conn == nil {
 		lap := bridge.PendingLap{
@@ -803,6 +851,15 @@ func (a *App) applyScanResultMessage(msg *services.BridgeMessage) {
 }
 
 func (a *App) flushPending(conn *websocket.Conn) error {
+	a.mu.RLock()
+	writeOnly := a.cfg.WriteOnly
+	a.mu.RUnlock()
+	if writeOnly {
+		// Hold queued automatic reads until write-only is turned off.
+		log.Printf("write-only: skipping pending flush (%d queued)", a.store.PendingCount())
+		return nil
+	}
+
 	pending := a.store.PendingCount()
 	if pending == 0 {
 		a.mu.Lock()

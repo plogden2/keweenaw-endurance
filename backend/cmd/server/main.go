@@ -152,6 +152,8 @@ func main() {
 			timing.GET("/live/:raceId", handlers.GetLiveTiming)
 			timing.POST("/record", append(timerWrite, handlers.CreateTimingRecord)...)
 			timing.PUT("/records/:id", append(timerWrite, handlers.UpdateTimingRecord)...)
+			timing.POST("/records/:id/void", append(timerWrite, handlers.VoidTimingRecord)...)
+			timing.POST("/records/:id/restore", append(timerWrite, handlers.RestoreTimingRecord)...)
 			timing.GET("/results/:raceId", handlers.GetRaceResults)
 			timing.GET("/leaderboard/:raceId", handlers.GetLeaderboard)
 			timing.GET("/team-leaderboard/:raceId", handlers.GetTeamLeaderboard)

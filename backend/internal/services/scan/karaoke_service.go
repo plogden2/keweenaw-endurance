@@ -40,12 +40,12 @@ func (s *ScanService) AddKaraokeBonus(sourceLapID uuid.UUID) (*KaraokeBonusResul
 		return nil, err
 	}
 	// Karaoke is only for completed RFID laps — never checkpoint_pass or other types.
-	if source.RecordType != "rfid_lap" {
+	if source.RecordType != "rfid_lap" || source.VoidedAt != nil {
 		return nil, ErrInvalidSourceLap
 	}
 
 	var existing models.TimingRecord
-	err := s.db.Where("record_type = ? AND source_lap_id = ?", "karaoke_bonus", sourceLapID).
+	err := s.db.Where("record_type = ? AND source_lap_id = ? AND voided_at IS NULL", "karaoke_bonus", sourceLapID).
 		First(&existing).Error
 	if err == nil {
 		return nil, ErrAlreadyExists

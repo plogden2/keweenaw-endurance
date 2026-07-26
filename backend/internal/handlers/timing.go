@@ -168,6 +168,78 @@ func (h *Handlers) UpdateTimingRecord(c *gin.Context) {
 	c.JSON(http.StatusOK, record)
 }
 
+// VoidTimingRecord handles POST /api/timing/records/:id/void (PIN / timerWrite).
+func (h *Handlers) VoidTimingRecord(c *gin.Context) {
+	h.mutateTimingVoidState(c, true)
+}
+
+// RestoreTimingRecord handles POST /api/timing/records/:id/restore (PIN / timerWrite).
+func (h *Handlers) RestoreTimingRecord(c *gin.Context) {
+	h.mutateTimingVoidState(c, false)
+}
+
+func (h *Handlers) mutateTimingVoidState(c *gin.Context, voiding bool) {
+	id, err := h.resolveTimingRecordID(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid timing record id"})
+		return
+	}
+
+	var (
+		record   *models.TimingRecord
+		cascaded []uuid.UUID
+	)
+	if voiding {
+		record, cascaded, err = h.services.Timing.VoidRecord(id)
+	} else {
+		record, cascaded, err = h.services.Timing.RestoreRecord(id)
+	}
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+
+	cascadedIDs := make([]string, 0, len(cascaded))
+	for _, cid := range cascaded {
+		cascadedIDs = append(cascadedIDs, cid.String())
+	}
+
+	lapCount, placement, placementCat, eventID, scoreErr := h.services.Scan.ScoreSnapshot(record.ParticipantID.UUID())
+	if scoreErr != nil {
+		respondServiceError(c, scoreErr)
+		return
+	}
+	h.refreshLiveCSV(eventID)
+
+	eventType := "lap_restored"
+	if voiding {
+		eventType = "lap_voided"
+	}
+	if h.services.LiveStream != nil {
+		var participant models.Participant
+		if err := h.services.DB.Preload("Race").First(&participant, "id = ?", record.ParticipantID).Error; err == nil {
+			h.services.LiveStream.Publish(eventID, services.LapRecordedEvent{
+				Type:            eventType,
+				EventID:         eventID.String(),
+				RaceID:          participant.RaceID.UUID().String(),
+				ParticipantID:   participant.ID.UUID().String(),
+				ParticipantName: strings.TrimSpace(participant.FirstName + " " + participant.LastName),
+				BibNumber:       participant.BibNumber,
+				LapCount:        lapCount,
+				RecordedAt:      time.Now().UTC(),
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"record":             record,
+		"cascaded_ids":       cascadedIDs,
+		"lap_count":          lapCount,
+		"placement":          placement,
+		"placement_category": placementCat,
+	})
+}
+
 func (h *Handlers) GetRaceResults(c *gin.Context) {
 	raceID, err := h.resolveRaceID(c.Param("raceId"))
 	if err != nil {

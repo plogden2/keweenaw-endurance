@@ -114,6 +114,8 @@ Expect `"mode":"online_synced"` and `"connected":true`.
 
 **All races:** In reader-gui, leave **Race** on **All races (event finish)** so one mat scores every distance. Arm the website Station to the event in finish mode (no race picker on Station). Manual bib entry auto-resolves across races; pick a race override only if a bib is shared.
 
+**Write-only mode:** Check **Write-only mode** in reader-gui when programming tags. Taps still show name/UUID in the GUI but are **not** scored or queued. Uncheck to resume normal finish recording. Tag writes and manual bib entry still work while write-only is on.
+
 ---
 
 ## 3. Program tags for racers

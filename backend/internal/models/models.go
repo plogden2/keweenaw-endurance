@@ -116,6 +116,7 @@ type TimingRecord struct {
 	RecordType     string               `gorm:"type:varchar(50);not null;default:'rfid_lap';check:record_type IN ('rfid_lap','karaoke_bonus','checkpoint_pass')" json:"record_type"`
 	SourceLapID    *uuidutil.PublicUUID `gorm:"type:uuid" json:"source_lap_id,omitempty"`
 	StationID      *uuidutil.PublicUUID `gorm:"type:uuid" json:"station_id,omitempty"`
+	VoidedAt       *time.Time           `gorm:"type:timestamp" json:"voided_at,omitempty"`
 	CreatedAt      time.Time            `gorm:"autoCreateTime" json:"created_at"`
 
 	// Relationships
@@ -123,6 +124,11 @@ type TimingRecord struct {
 	Checkpoint  TimingCheckpoint  `gorm:"foreignKey:CheckpointID" json:"checkpoint,omitempty"`
 	SourceLap   *TimingRecord     `gorm:"foreignKey:SourceLapID" json:"source_lap,omitempty"`
 	Station     *ReaderStation    `gorm:"foreignKey:StationID" json:"station,omitempty"`
+}
+
+// IsVoided reports whether this timing record is soft-voided from scoring.
+func (r *TimingRecord) IsVoided() bool {
+	return r != nil && r.VoidedAt != nil
 }
 
 // RFIDTagAssociation links an RFID tag UID to a participant

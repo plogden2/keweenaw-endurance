@@ -135,3 +135,125 @@ func TestTimingService_ListByRace(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, records, 1)
 }
+
+func TestTimingService_VoidRecord_CascadesKaraoke(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	finish := createCheckpoint(t, db, race.ID, "Finish", "finish")
+	partSvc := NewParticipantService(db)
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "44", FirstName: "Void", LastName: "Me",
+	})
+	require.NoError(t, err)
+
+	svc := NewTimingService(db)
+	now := time.Now().UTC().Truncate(time.Second)
+	lap, err := svc.CreateRecord(&models.TimingRecord{
+		ParticipantID: participant.ID, CheckpointID: finish.ID,
+		Timestamp: now, LocalTimestamp: now, RecordType: "rfid_lap",
+	})
+	require.NoError(t, err)
+
+	sourceID := lap.ID
+	bonus, err := svc.CreateRecord(&models.TimingRecord{
+		ParticipantID: participant.ID, CheckpointID: finish.ID,
+		Timestamp: now.Add(time.Second), LocalTimestamp: now.Add(time.Second),
+		RecordType: "karaoke_bonus", SourceLapID: &sourceID,
+	})
+	require.NoError(t, err)
+
+	voided, cascaded, err := svc.VoidRecord(lap.ID.UUID())
+	require.NoError(t, err)
+	require.NotNil(t, voided.VoidedAt)
+	require.Len(t, cascaded, 1)
+	assert.Equal(t, bonus.ID.UUID(), cascaded[0])
+
+	refetched, err := svc.GetRecord(bonus.ID.UUID())
+	require.NoError(t, err)
+	require.NotNil(t, refetched.VoidedAt)
+
+	// Idempotent
+	again, cascaded2, err := svc.VoidRecord(lap.ID.UUID())
+	require.NoError(t, err)
+	require.NotNil(t, again.VoidedAt)
+	assert.Empty(t, cascaded2)
+}
+
+func TestTimingService_VoidKaraokeAlone(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	finish := createCheckpoint(t, db, race.ID, "Finish", "finish")
+	partSvc := NewParticipantService(db)
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "45", FirstName: "Keep", LastName: "Lap",
+	})
+	require.NoError(t, err)
+
+	svc := NewTimingService(db)
+	now := time.Now().UTC().Truncate(time.Second)
+	lap, err := svc.CreateRecord(&models.TimingRecord{
+		ParticipantID: participant.ID, CheckpointID: finish.ID,
+		Timestamp: now, LocalTimestamp: now, RecordType: "rfid_lap",
+	})
+	require.NoError(t, err)
+	sourceID := lap.ID
+	bonus, err := svc.CreateRecord(&models.TimingRecord{
+		ParticipantID: participant.ID, CheckpointID: finish.ID,
+		Timestamp: now.Add(time.Second), LocalTimestamp: now.Add(time.Second),
+		RecordType: "karaoke_bonus", SourceLapID: &sourceID,
+	})
+	require.NoError(t, err)
+
+	_, cascaded, err := svc.VoidRecord(bonus.ID.UUID())
+	require.NoError(t, err)
+	assert.Empty(t, cascaded)
+
+	stillActive, err := svc.GetRecord(lap.ID.UUID())
+	require.NoError(t, err)
+	assert.Nil(t, stillActive.VoidedAt)
+}
+
+func TestTimingService_RestoreRules(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	finish := createCheckpoint(t, db, race.ID, "Finish", "finish")
+	partSvc := NewParticipantService(db)
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "46", FirstName: "Restore", LastName: "Me",
+	})
+	require.NoError(t, err)
+
+	svc := NewTimingService(db)
+	now := time.Now().UTC().Truncate(time.Second)
+	lap, err := svc.CreateRecord(&models.TimingRecord{
+		ParticipantID: participant.ID, CheckpointID: finish.ID,
+		Timestamp: now, LocalTimestamp: now, RecordType: "rfid_lap",
+	})
+	require.NoError(t, err)
+	sourceID := lap.ID
+	bonus, err := svc.CreateRecord(&models.TimingRecord{
+		ParticipantID: participant.ID, CheckpointID: finish.ID,
+		Timestamp: now.Add(time.Second), LocalTimestamp: now.Add(time.Second),
+		RecordType: "karaoke_bonus", SourceLapID: &sourceID,
+	})
+	require.NoError(t, err)
+
+	_, _, err = svc.VoidRecord(lap.ID.UUID())
+	require.NoError(t, err)
+
+	_, _, err = svc.RestoreRecord(bonus.ID.UUID())
+	assert.ErrorIs(t, err, ErrKaraokeSourceStillVoided)
+
+	restored, _, err := svc.RestoreRecord(lap.ID.UUID())
+	require.NoError(t, err)
+	assert.Nil(t, restored.VoidedAt)
+
+	restoredBonus, _, err := svc.RestoreRecord(bonus.ID.UUID())
+	require.NoError(t, err)
+	assert.Nil(t, restoredBonus.VoidedAt)
+
+	// Idempotent restore
+	again, _, err := svc.RestoreRecord(lap.ID.UUID())
+	require.NoError(t, err)
+	assert.Nil(t, again.VoidedAt)
+}

@@ -407,6 +407,10 @@ func (s *CSVExportService) BuildCSV(eventID uuid.UUID) ([]byte, error) {
 		if tr.StationID != nil {
 			station = tr.StationID.String()
 		}
+		voided := ""
+		if tr.VoidedAt != nil {
+			voided = tr.VoidedAt.UTC().Format(time.RFC3339)
+		}
 		trRows = append(trRows, []string{
 			tr.ID.String(),
 			tr.ParticipantID.String(),
@@ -418,10 +422,11 @@ func (s *CSVExportService) BuildCSV(eventID uuid.UUID) ([]byte, error) {
 			tr.RecordType,
 			source,
 			station,
+			voided,
 		})
 	}
 	if err := writeSection("timing_records",
-		[]string{"id", "participant_id", "checkpoint_id", "timestamp", "local_timestamp", "device_id", "sync_status", "record_type", "source_lap_id", "station_id"},
+		[]string{"id", "participant_id", "checkpoint_id", "timestamp", "local_timestamp", "device_id", "sync_status", "record_type", "source_lap_id", "station_id", "voided_at"},
 		trRows,
 	); err != nil {
 		return nil, err
@@ -976,6 +981,13 @@ func parseTimingRows(rows []map[string]string) ([]models.TimingRecord, error) {
 			}
 			pu := uuidutil.NewPublicUUID(sid)
 			rec.StationID = &pu
+		}
+		if v := strings.TrimSpace(row["voided_at"]); v != "" {
+			vt, err := time.Parse(time.RFC3339, v)
+			if err != nil {
+				return nil, fmt.Errorf("%w: timing_records.voided_at: %v", ErrInvalidCSV, err)
+			}
+			rec.VoidedAt = &vt
 		}
 		out = append(out, rec)
 	}
