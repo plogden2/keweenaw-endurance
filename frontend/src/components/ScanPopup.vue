@@ -101,7 +101,32 @@
             <strong data-testid="scan-lap-count">{{ scan.lap_count ?? '—' }}</strong>
           </div>
         </div>
-        <div class="actions">
+        <div v-if="confirmDiscard" class="confirm" data-testid="discard-confirm">
+          <p>
+            Discard this lap for Bib {{ scan.bib_number || '—' }}? It will be
+            removed from the score<span v-if="karaokeRecorded"> and its karaoke
+            bonus</span>.
+          </p>
+          <div class="actions">
+            <button
+              type="button"
+              class="btn secondary"
+              data-testid="discard-keep"
+              @click="confirmDiscard = false"
+            >
+              Keep
+            </button>
+            <button
+              type="button"
+              class="btn danger"
+              data-testid="discard-confirm-btn"
+              @click="confirmDiscardLap"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+        <div v-else class="actions">
           <button
             v-if="showKaraokeButton"
             type="button"
@@ -121,6 +146,16 @@
           >
             Karaoke bonus lap recorded
           </span>
+          <button
+            v-if="canDiscard"
+            type="button"
+            class="btn danger"
+            data-testid="discard-lap-button"
+            aria-label="Discard this lap"
+            @click="confirmDiscard = true"
+          >
+            Discard lap
+          </button>
           <button
             type="button"
             class="btn secondary"
@@ -148,10 +183,17 @@ const props = defineProps<{
 const emit = defineEmits<{
   dismiss: []
   karaoke: []
+  discard: []
 }>()
 
 const nameId = 'scan-racer-name-label'
 const karaokeRecorded = ref(false)
+const confirmDiscard = ref(false)
+
+const canDiscard = computed(
+  () =>
+    props.scan?.result === 'lap' && Boolean(props.scan.timing_record_id),
+)
 
 const showKaraokeButton = computed(
   () =>
@@ -184,6 +226,11 @@ function onKaraoke() {
   emit('karaoke')
 }
 
+function confirmDiscardLap() {
+  confirmDiscard.value = false
+  emit('discard')
+}
+
 function formatRetry(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
@@ -194,6 +241,7 @@ watch(
   () => props.scan?.timing_record_id,
   () => {
     karaokeRecorded.value = false
+    confirmDiscard.value = false
   },
 )
 
@@ -316,6 +364,21 @@ watch(
 
 .btn.ok {
   background: #1e8449;
+}
+
+.btn.danger {
+  background: #922b21;
+  color: #fff;
+}
+
+.confirm {
+  text-align: center;
+}
+
+.confirm p {
+  margin: 0 0 1rem;
+  color: var(--ink);
+  font-size: 0.95rem;
 }
 
 .karaoke-done {

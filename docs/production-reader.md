@@ -171,16 +171,17 @@ The lap is stored with the current timestamp and shows under **Recent Records**.
 
 ## 6. Removing / fixing bad taps
 
-There is **no “delete this lap” button** in the UI today.
-
-What you can do on race day:
+Unlock **PIN** first. Scored laps can be soft-voided (and restored) without wiping the event.
 
 | Situation | Fix |
 |-----------|-----|
+| Just scored the wrong lap | On the scan popup: **Discard lap** → confirm **Discard** |
+| Older bad lap / karaoke | Open **Manual entry** / live timing for the race → **Recent Records** → **Discard** (or **Restore** if already voided) |
 | Accidental double-tap | Usually blocked by the **1-minute cooldown** — no action |
 | Missed tap | **reader-gui** manual entry or website Manual entry (section 5) |
-| Wrong racer credited | Add the correct lap via manual entry; note the bad tap for post-race cleanup |
 | Need to wipe/rebuild timing data | Emergency only: footer **CSV recovery** (PIN required). This replaces event timing data — stop all scoring first |
+
+Voided laps stay in the database/CSV for audit but do not count toward standings or cooldown. Voiding an RFID lap also voids its karaoke bonus.
 
 Do **not** call CSV import for normal outages. Offline scoring uses the device-bridge queue and auto-flushes when production is reachable again.
 

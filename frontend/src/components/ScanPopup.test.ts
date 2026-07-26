@@ -162,4 +162,22 @@ describe('ScanPopup.vue', () => {
     await wrapper.find('[data-testid="scan-popup-dismiss"]').trigger('click')
     expect(wrapper.emitted('dismiss')).toBeTruthy()
   })
+
+  it('shows discard confirm and emits discard on confirm', async () => {
+    const wrapper = mount(ScanPopup, { props: { scan: lapScan() } })
+    expect(wrapper.find('[data-testid="discard-lap-button"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="discard-lap-button"]').trigger('click')
+    expect(wrapper.find('[data-testid="discard-confirm"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="discard-confirm-btn"]').trigger('click')
+    expect(wrapper.emitted('discard')).toBeTruthy()
+  })
+
+  it('keeps lap when discard confirm is cancelled', async () => {
+    const wrapper = mount(ScanPopup, { props: { scan: lapScan() } })
+    await wrapper.find('[data-testid="discard-lap-button"]').trigger('click')
+    await wrapper.find('[data-testid="discard-keep"]').trigger('click')
+    expect(wrapper.find('[data-testid="discard-confirm"]').exists()).toBe(false)
+    expect(wrapper.emitted('discard')).toBeFalsy()
+    expect(wrapper.find('[data-testid="discard-lap-button"]').exists()).toBe(true)
+  })
 })

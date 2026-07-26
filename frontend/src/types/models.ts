@@ -168,6 +168,7 @@ export interface TimingRecord {
   device_id?: string
   sync_status: SyncStatus
   record_type?: 'rfid_lap' | 'karaoke_bonus' | 'checkpoint_pass' | string
+  voided_at?: string | null
   participant?: Participant
   checkpoint?: Checkpoint
 }

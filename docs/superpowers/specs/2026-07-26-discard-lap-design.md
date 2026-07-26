@@ -1,7 +1,7 @@
 # Discard / Remove Lap — Design
 
 **Date**: 2026-07-26  
-**Status**: Approved via advisor (user directed: no further user Q&A; implement to completion)  
+**Status**: Implemented (2026-07-26) — advisor-approved requirements  
 **Feature branch context**: `002-rfid-race-scanner` / race-day PIN management
 
 ## Problem

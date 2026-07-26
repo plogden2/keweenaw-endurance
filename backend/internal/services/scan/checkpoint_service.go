@@ -211,11 +211,11 @@ func (s *ScanService) expectedCheckpoint(
 	}
 
 	var lastLap models.TimingRecord
-	lapErr := s.db.Where("participant_id = ? AND record_type = ?", participantID, "rfid_lap").
+	lapErr := s.db.Where("participant_id = ? AND record_type = ? AND voided_at IS NULL", participantID, "rfid_lap").
 		Order("timestamp DESC").
 		First(&lastLap).Error
 
-	q := s.db.Where("participant_id = ? AND record_type = ?", participantID, "checkpoint_pass")
+	q := s.db.Where("participant_id = ? AND record_type = ? AND voided_at IS NULL", participantID, "checkpoint_pass")
 	if lapErr == nil {
 		q = q.Where("timestamp > ?", lastLap.Timestamp)
 	} else if !errors.Is(lapErr, gorm.ErrRecordNotFound) {

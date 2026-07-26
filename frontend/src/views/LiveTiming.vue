@@ -84,17 +84,24 @@
         <h2 class="section-title">Recent Records</h2>
         <div v-if="liveLoading" class="status">Loading records…</div>
         <div v-else-if="liveError" class="status error">{{ liveError }}</div>
-        <table v-else-if="liveRecords.length" class="records-table">
+        <table v-else-if="liveRecords.length" class="records-table" data-testid="recent-records-table">
           <thead>
             <tr>
               <th>Time</th>
               <th>Participant</th>
               <th>Checkpoint</th>
+              <th>Type</th>
               <th>Sync</th>
+              <th v-if="pinAuth.isAuthenticated">Actions</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="record in liveRecords" :key="record.id">
+            <tr
+              v-for="record in liveRecordsNewestFirst"
+              :key="record.id"
+              :class="{ voided: Boolean(record.voided_at) }"
+              :data-testid="`timing-row-${record.id}`"
+            >
               <td>{{ formatTime(record.timestamp) }}</td>
               <td>
                 <template v-if="record.participant">
@@ -103,13 +110,36 @@
                   {{ record.participant.last_name }}
                 </template>
                 <template v-else>{{ formatShortId(record.participant_id) }}</template>
+                <span v-if="record.voided_at" class="void-badge" data-testid="voided-badge">voided</span>
               </td>
               <td>{{ record.checkpoint?.name ?? formatShortId(record.checkpoint_id) }}</td>
+              <td>{{ record.record_type || 'rfid_lap' }}</td>
               <td>{{ record.sync_status }}</td>
+              <td v-if="pinAuth.isAuthenticated">
+                <button
+                  v-if="!record.voided_at"
+                  type="button"
+                  class="row-action discard"
+                  data-testid="void-record-btn"
+                  @click="confirmVoid(record)"
+                >
+                  Discard
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="row-action restore"
+                  data-testid="restore-record-btn"
+                  @click="confirmRestore(record)"
+                >
+                  Restore
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
         <p v-else class="empty">No timing records yet.</p>
+        <p v-if="actionError" class="error" data-testid="timing-action-error">{{ actionError }}</p>
       </section>
     </template>
   </div>
@@ -121,11 +151,13 @@ import { useRoute } from 'vue-router'
 import ManualTimingForm from '@/components/ManualTimingForm.vue'
 import SyncStatus from '@/components/SyncStatus.vue'
 import { useRacesStore } from '@/stores/races'
+import { usePinAuthStore } from '@/stores/pinAuth'
 import {
   checkpointsApi,
   participantsApi,
   rfidApi,
   timingApi,
+  timingRecordsApi,
 } from '@/services/api'
 import { enqueue } from '@/services/offlineQueue'
 import type {
@@ -139,6 +171,7 @@ import { formatShortId } from '@/utils/id'
 
 const route = useRoute()
 const racesStore = useRacesStore()
+const pinAuth = usePinAuthStore()
 const syncStatusRef = ref<InstanceType<typeof SyncStatus> | null>(null)
 
 const raceId = computed(() => String(route.params.raceId))
@@ -151,6 +184,14 @@ const bibLookup = ref('')
 const rfidLookup = ref('')
 const lookupError = ref<string | null>(null)
 const submitting = ref(false)
+const actionError = ref<string | null>(null)
+const actionBusy = ref(false)
+
+const liveRecordsNewestFirst = computed(() =>
+  [...liveRecords.value].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  ),
+)
 
 function formatTime(iso: string): string {
   try {
@@ -245,6 +286,41 @@ async function onManualSubmit(payload: ManualTimingEntryPayload): Promise<void> 
     lookupError.value = getErrorMessage(err, 'Failed to record timing')
   } finally {
     submitting.value = false
+  }
+}
+
+async function confirmVoid(record: TimingRecord): Promise<void> {
+  if (actionBusy.value) return
+  const bib = record.participant?.bib_number ?? '—'
+  const ok = window.confirm(
+    `Discard this lap for Bib ${bib}? It will be removed from the score.`,
+  )
+  if (!ok) return
+  actionBusy.value = true
+  actionError.value = null
+  try {
+    await timingRecordsApi.voidRecord(record.id)
+    await refreshLive()
+  } catch (err) {
+    actionError.value = getErrorMessage(err, 'Failed to discard lap')
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+async function confirmRestore(record: TimingRecord): Promise<void> {
+  if (actionBusy.value) return
+  const ok = window.confirm('Restore this lap to the score?')
+  if (!ok) return
+  actionBusy.value = true
+  actionError.value = null
+  try {
+    await timingRecordsApi.restoreRecord(record.id)
+    await refreshLive()
+  } catch (err) {
+    actionError.value = getErrorMessage(err, 'Failed to restore lap')
+  } finally {
+    actionBusy.value = false
   }
 }
 
@@ -369,6 +445,42 @@ watch(raceId, async () => {
 .records-table th {
   color: var(--muted);
   font-weight: 600;
+}
+
+.records-table tr.voided td {
+  opacity: 0.65;
+  text-decoration: line-through;
+}
+
+.void-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: #fadbd8;
+  color: #922b21;
+  font-size: 0.75rem;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.row-action {
+  border: none;
+  border-radius: 4px;
+  padding: 0.35rem 0.65rem;
+  font: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.row-action.discard {
+  background: #922b21;
+  color: #fff;
+}
+
+.row-action.restore {
+  background: #1e8449;
+  color: #fff;
 }
 
 .status {

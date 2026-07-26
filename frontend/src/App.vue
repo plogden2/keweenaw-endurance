@@ -11,7 +11,16 @@
       :scan="lastScan"
       @dismiss="clearLastScan"
       @karaoke="onKaraoke"
+      @discard="onDiscardLap"
     />
+    <div
+      v-if="discardToast"
+      class="discard-toast"
+      role="status"
+      data-testid="discard-toast"
+    >
+      {{ discardToast }}
+    </div>
 
     <footer class="footer">
       <div class="footer-content">
@@ -38,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import AppHeader from '@/components/AppHeader.vue'
 import UnitToggle from '@/components/UnitToggle.vue'
 import ScanPopup from '@/components/ScanPopup.vue'
@@ -52,10 +61,20 @@ const station = useStationStore()
 const pinAuth = usePinAuthStore()
 const { lastScan, clearLastScan, start, stop } = useReaderStation()
 const { active: bluffetActive, themeClass } = useBluffetTheme()
+const discardToast = ref<string | null>(null)
+let discardToastTimer: ReturnType<typeof setTimeout> | undefined
 
 const csvPath = computed(() =>
   station.eventId ? `/csv?eventId=${station.eventId}` : '/csv',
 )
+
+function showDiscardToast(message: string) {
+  discardToast.value = message
+  if (discardToastTimer) clearTimeout(discardToastTimer)
+  discardToastTimer = setTimeout(() => {
+    discardToast.value = null
+  }, 2500)
+}
 
 async function onKaraoke() {
   const scan = lastScan.value
@@ -71,6 +90,18 @@ async function onKaraoke() {
     }
   } catch {
     /* ScanPopup already shows recorded; duplicate POSTs return 409 */
+  }
+}
+
+async function onDiscardLap() {
+  const scan = lastScan.value
+  if (!scan?.timing_record_id) return
+  try {
+    await timingRecordsApi.voidRecord(scan.timing_record_id)
+    clearLastScan()
+    showDiscardToast('Lap discarded.')
+  } catch {
+    showDiscardToast('Could not discard lap.')
   }
 }
 
@@ -99,6 +130,19 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.discard-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  z-index: 2100;
+  padding: 0.75rem 1.25rem;
+  border-radius: 6px;
+  background: #1e8449;
+  color: #fff;
+  font-weight: 600;
+}
+
 .main {
   min-height: calc(100vh - 80px);
   padding: 2rem 0;

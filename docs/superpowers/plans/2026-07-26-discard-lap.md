@@ -20,7 +20,7 @@
 - Modify: `backend/internal/services/timing_service_test.go`
 - Modify: `backend/internal/services/csv_export.go` (column `voided_at`)
 
-- [ ] **Step 1: Add failing tests** in `timing_service_test.go` for:
+- [x] **Step 1: Add failing tests** in `timing_service_test.go` for:
   - Void RFID lap sets `voided_at`, cascades karaoke via `source_lap_id`
   - Void karaoke alone leaves RFID active
   - Idempotent void
@@ -28,16 +28,16 @@
   - Restore karaoke while source voided → error
   - Idempotent restore
 
-- [ ] **Step 2: Add field** to `TimingRecord`:
+- [x] **Step 2: Add field** to `TimingRecord`:
 ```go
 VoidedAt *time.Time `gorm:"type:timestamp" json:"voided_at,omitempty"`
 ```
 
-- [ ] **Step 3: Implement** `VoidRecord(id)` / `RestoreRecord(id)` returning `(record *TimingRecord, cascaded []uuid.UUID, err error)`. Use transaction. Errors: `ErrTimingRecordNotFound`, `ErrKaraokeSourceStillVoided` (new).
+- [x] **Step 3: Implement** `VoidRecord(id)` / `RestoreRecord(id)` returning `(record *TimingRecord, cascaded []uuid.UUID, err error)`. Use transaction. Errors: `ErrTimingRecordNotFound`, `ErrKaraokeSourceStillVoided` (new).
 
-- [ ] **Step 4: CSV** — append `voided_at` to timing CSV headers/rows and parse on import (RFC3339 or empty).
+- [x] **Step 4: CSV** — append `voided_at` to timing CSV headers/rows and parse on import (RFC3339 or empty).
 
-- [ ] **Step 5: Run** `go test ./internal/services/ -count=1 -run Timing` — pass. Commit.
+- [x] **Step 5: Run** `go test ./internal/services/ -count=1 -run Timing` — pass. Commit.
 
 ---
 
@@ -50,9 +50,9 @@ VoidedAt *time.Time `gorm:"type:timestamp" json:"voided_at,omitempty"`
 - Modify: team scoring paths if they query timing rows directly
 - Test: extend `scan_service_test.go` — void latest lap clears cooldown; lap count drops
 
-- [ ] Add `AND voided_at IS NULL` (or `Where("voided_at IS NULL")`) on every scored-lap query.
-- [ ] Karaoke: if `source.VoidedAt != nil` → `ErrInvalidSourceLap`; existing karaoke lookup only non-voided.
-- [ ] Run scan + results tests. Commit.
+- [x] Add `AND voided_at IS NULL` (or `Where("voided_at IS NULL")`) on every scored-lap query.
+- [x] Karaoke: if `source.VoidedAt != nil` → `ErrInvalidSourceLap`; existing karaoke lookup only non-voided.
+- [x] Run scan + results tests. Commit.
 
 ---
 
@@ -73,8 +73,8 @@ VoidedAt *time.Time `gorm:"type:timestamp" json:"voided_at,omitempty"`
 
 Response JSON: `record`, `cascaded_ids`, `lap_count`, `placement` (compute via ScanService helpers or Timing+Results). Publish live event after success. Call CSV notify if existing create paths do.
 
-- [ ] Tests require PIN JWT; unauth → 401/403.
-- [ ] Commit.
+- [x] Tests require PIN JWT; unauth → 401/403.
+- [x] Commit.
 
 ---
 
@@ -86,9 +86,9 @@ Response JSON: `record`, `cascaded_ids`, `lap_count`, `placement` (compute via S
 - Modify: `frontend/src/components/ScanPopup.vue` + `.test.ts`
 - Modify: `frontend/src/App.vue` — handle `@discard`
 
-- [ ] ScanPopup: when `result==='lap'` && `timing_record_id`, show Discard; confirm dialog Keep/Discard; emit `discard` on confirm.
-- [ ] App.vue: call `timingRecordsApi.voidRecord`, clear scan, optional toast.
-- [ ] Vitest pass. Commit.
+- [x] ScanPopup: when `result==='lap'` && `timing_record_id`, show Discard; confirm dialog Keep/Discard; emit `discard` on confirm.
+- [x] App.vue: call `timingRecordsApi.voidRecord`, clear scan, optional toast.
+- [x] Vitest pass. Commit.
 
 ---
 
@@ -98,15 +98,15 @@ Response JSON: `record`, `cascaded_ids`, `lap_count`, `placement` (compute via S
 - Modify: `frontend/src/views/LiveTiming.vue` (+ test if exists)
 - Modify: `docs/production-reader.md` §6
 
-- [ ] When `pinAuth.isAuthenticated`, Actions column: Discard (active) / Restore (voided) with confirm.
-- [ ] Voided rows visually marked.
-- [ ] Docs table updated to point at UI.
-- [ ] Commit.
+- [x] When `pinAuth.isAuthenticated`, Actions column: Discard (active) / Restore (voided) with confirm.
+- [x] Voided rows visually marked.
+- [x] Docs table updated to point at UI.
+- [x] Commit.
 
 ---
 
 ### Task 6: Verification
 
-- [ ] `go test ./internal/services/ ./internal/handlers/ ./internal/services/scan/ -count=1`
-- [ ] `cd frontend && npm test -- --run ScanPopup LiveTiming` (or full unit suite if fast)
-- [ ] Fix failures. Final commit if needed.
+- [x] `go test ./internal/services/ ./internal/handlers/ ./internal/services/scan/ -count=1`
+- [x] `cd frontend && npm test -- --run ScanPopup LiveTiming` (or full unit suite if fast)
+- [x] Fix failures. Final commit if needed.

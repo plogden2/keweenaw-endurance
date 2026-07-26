@@ -68,6 +68,12 @@ Responses:
 ### POST `/api/timing-records/{id}/karaoke-bonus`
 `201` bonus; `409` if already exists for that lap.
 
+### POST `/api/timing/records/{id}/void` (PIN / timerWrite)
+Soft-voids a timing record (`voided_at` set). Voiding an `rfid_lap` cascades to its linked `karaoke_bonus`. Idempotent if already voided. Returns `{ record, cascaded_ids, lap_count, placement }`.
+
+### POST `/api/timing/records/{id}/restore` (PIN / timerWrite)
+Clears `voided_at`. Restoring karaoke while the source RFID lap is still voided → `409`. Idempotent if already active. Same response shape as void.
+
 ### POST `/api/races/{id}/start` | `/api/races/{id}/finish` (PIN)
 Manual status transitions; auto-start also occurs at `start_time`.
 

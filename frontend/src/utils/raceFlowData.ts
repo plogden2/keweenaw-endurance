@@ -585,16 +585,18 @@ export function buildParticipantFlows(
   unitSystem: UnitSystem = 'imperial',
   registeredParticipants?: FlowParticipantInput[],
 ): ParticipantFlow[] {
-  const raceStartMs = resolveRaceStartMs(records, raceStartTime)
+  // Soft-voided timing rows must not appear on race-flow charts.
+  const activeRecords = records.filter((record) => !record.voided_at)
+  const raceStartMs = resolveRaceStartMs(activeRecords, raceStartTime)
   if (raceStartMs === null) {
     return []
   }
 
   if (raceType === 'lap_based') {
-    return buildLapFlows(records, raceStartMs, registeredParticipants)
+    return buildLapFlows(activeRecords, raceStartMs, registeredParticipants)
   }
 
-  return buildDistanceFlows(records, raceStartMs, unitSystem)
+  return buildDistanceFlows(activeRecords, raceStartMs, unitSystem)
 }
 
 export function getFlowYAxisLabel(

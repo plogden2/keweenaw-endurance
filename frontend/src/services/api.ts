@@ -448,10 +448,26 @@ export const scansApi = {
     apiClient.post<ScanResult>(`/api/events/${eventId}/scans`, payload),
 }
 
+export interface VoidRestoreTimingResponse {
+  record: TimingRecord
+  cascaded_ids: string[]
+  lap_count: number
+  placement: number
+  placement_category?: number
+}
+
 export const timingRecordsApi = {
   karaokeBonus: (timingRecordId: string) =>
     apiClient.post<KaraokeBonusResponse>(
       `/api/timing-records/${timingRecordId}/karaoke-bonus`,
+    ),
+  voidRecord: (timingRecordId: string) =>
+    apiClient.post<VoidRestoreTimingResponse>(
+      `/api/timing/records/${timingRecordId}/void`,
+    ),
+  restoreRecord: (timingRecordId: string) =>
+    apiClient.post<VoidRestoreTimingResponse>(
+      `/api/timing/records/${timingRecordId}/restore`,
     ),
 }
 
