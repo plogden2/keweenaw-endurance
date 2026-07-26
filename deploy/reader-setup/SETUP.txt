@@ -1,0 +1,42 @@
+Keweenaw Endurance — Finish-line reader (minimal setup)
+=======================================================
+
+Production site: https://www.keweenawendurance.com
+Organizer PIN: 1738  (unless rotated)
+
+1) Hardware
+   - Plug in the Proxmark3 (Device Manager → usually COM3).
+   - First time on this laptop: if Windows does not give a COM port,
+     use Zadig to install WinUSB for the Proxmark (once). Firmware
+     must already be flashed — this pack does not flash devices.
+
+2) This install
+   - Default folder: %LOCALAPPDATA%\KeweenawReader\
+   - Double-click "Keweenaw Reader" on the Desktop, or reader-gui.exe here.
+   - Proxmark CLI should already point at .\proxmark\proxmark3.exe
+
+3) Configure the GUI (once)
+   - Hosted API URL: https://www.keweenawendurance.com
+   - Bridge token and/or Organizer PIN
+   - Device ID (e.g. laptop-finish-1)
+   - Event / Race / Checkpoint IDs for the finish
+   - COM port (usually COM3)
+   - Check "Use Proxmark hardware"
+   - Save config → Test Proxmark → Start bridge
+   - Status should show ONLINE_SYNCED (or online_synced)
+
+4) Website
+   - Open https://www.keweenawendurance.com
+   - Header → PIN → unlock
+   - Header → Station → arm Finish / matching Device ID
+   - Missed finish: type bib in the GUI → Record lap
+
+5) SmartScreen / antivirus
+   - Unsigned setup.exe may show Windows SmartScreen — More info → Run anyway
+     when you trust this USB pack.
+
+6) Uninstall
+   - Run Uninstall.cmd in this folder (removes install + desktop shortcut).
+   - Reader config stays in %LOCALAPPDATA%\KeweenawEndurance\bridge-data\
+
+More detail: docs/reader-laptop-setup.md and docs/production-reader.md in the repo.

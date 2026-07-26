@@ -2,7 +2,6 @@ package rfid
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -22,7 +21,7 @@ func TestCLIProxmarkReader_PollParsesFourPages(t *testing.T) {
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
-			assert.Equal(t, "hf mfu rdbl -b 4; hf mfu rdbl -b 5; hf mfu rdbl -b 6; hf mfu rdbl -b 7", command)
+			assert.Equal(t, "hf mfu rdbl -b 4", command)
 			return combined, nil
 		},
 	})
@@ -30,6 +29,39 @@ func TestCLIProxmarkReader_PollParsesFourPages(t *testing.T) {
 	got, err := reader.Poll()
 	require.NoError(t, err)
 	assert.Equal(t, logicalUUID, got)
+}
+
+func TestCLIProxmarkReader_PollParsesDataLine16Bytes(t *testing.T) {
+	const logicalUUID = "1441674d-a011-471a-a601-722b88b117f5"
+	beep := &recordingBeeper{}
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Beeper:  beep,
+		Runner: func(command string) (string, error) {
+			assert.Equal(t, "hf mfu rdbl -b 4", command)
+			return "Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n", nil
+		},
+	})
+
+	got, err := reader.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, logicalUUID, got)
+	assert.Equal(t, 1, beep.calls)
+}
+
+func TestCLIProxmarkReader_PollBeepsOnlyOnSuccess(t *testing.T) {
+	beep := &recordingBeeper{}
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Beeper:  beep,
+		Runner: func(command string) (string, error) {
+			return "Data : 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n", nil
+		},
+	})
+	got, err := reader.Poll()
+	require.NoError(t, err)
+	assert.Empty(t, got)
+	assert.Equal(t, 0, beep.calls)
 }
 
 func TestCLIProxmarkReader_WriteLogicalUUIDWritesFourPages(t *testing.T) {
@@ -112,8 +144,9 @@ func TestCLIProxmarkReader_PollRunnerError(t *testing.T) {
 		},
 	})
 
-	_, err := reader.Poll()
-	require.Error(t, err)
+	got, err := reader.Poll()
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }
 
 func TestCLIProxmarkReader_PollParseFailure(t *testing.T) {
@@ -212,23 +245,15 @@ func TestCLIProxmarkReader_WritePageCommandFormat(t *testing.T) {
 }
 
 func TestCLIProxmarkReader_PollPageCommandFormat(t *testing.T) {
-	seen := map[int]bool{}
+	var seen string
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
-			var out strings.Builder
-			for _, part := range strings.Split(command, ";") {
-				part = strings.TrimSpace(part)
-				var page int
-				_, err := fmt.Sscanf(part, "hf mfu rdbl -b %d", &page)
-				require.NoError(t, err)
-				seen[page] = true
-				fmt.Fprintf(&out, "[=]   %d | 00 00 00 00\n", page)
-			}
-			return out.String(), nil
+			seen = command
+			return "Data : 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n", nil
 		},
 	})
 	_, err := reader.Poll()
 	require.NoError(t, err)
-	assert.Equal(t, map[int]bool{4: true, 5: true, 6: true, 7: true}, seen)
+	assert.Equal(t, "hf mfu rdbl -b 4", seen)
 }

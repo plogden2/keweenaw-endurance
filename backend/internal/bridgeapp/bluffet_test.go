@@ -22,6 +22,20 @@ func TestApplyBluffetDefaults(t *testing.T) {
 	assert.True(t, cfg.RFIDHardware)
 }
 
+func TestApplyBluffetDefaults_ForcesEventKeepsBluffetRace(t *testing.T) {
+	cfg := Config{
+		EventID:      "old-event",
+		DeviceID:     "other-device",
+		RaceID:       "209769a1-f723-4f70-ae90-466a46338684", // 6 Hour
+		CheckpointID: "stale",
+	}
+	ApplyBluffetDefaults(&cfg)
+	assert.Equal(t, BluffetEventIDFull, cfg.EventID)
+	assert.Equal(t, "laptop-finish-1", cfg.DeviceID)
+	assert.Equal(t, "209769a1-f723-4f70-ae90-466a46338684", cfg.RaceID)
+	assert.Equal(t, "5b7e8d76-8cc4-5e17-9147-9ed99a8df6fa", cfg.CheckpointID)
+}
+
 func TestFetchBluffetDetails_FromHosted(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

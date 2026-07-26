@@ -363,7 +363,11 @@ async function writeTag(racer: Participant) {
   programming.value = true
   programError.value = null
   try {
-    await rfidApi.writeTag({ participant_id: racer.id })
+    await rfidApi.writeTag({
+      participant_id: racer.id,
+      race_id: raceId.value,
+      logical_uuid: racer.tag_uids?.[0] ?? racer.rfid_tag_uid ?? undefined,
+    })
     const { data } = await raceParticipantsApi.listTags(raceId.value, racer.id)
     const tags = (data.data ?? []).map((t) => t.tag_uid)
     const idx = racers.value.findIndex((r) => r.id === racer.id)

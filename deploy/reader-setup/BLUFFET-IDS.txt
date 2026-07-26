@@ -1,0 +1,59 @@
+All You Can East Bluffet — Reader GUI paste sheet
+Test: Sunday morning 2026-07-26
+Site: https://www.keweenawendurance.com
+
+DEFAULT IN GUI (for now): Event + 12 Hour race + finish checkpoint below.
+Use this file only if a field is blank or wrong after launch.
+
+------------------------------------------------
+Copy these into reader-gui (one field at a time)
+------------------------------------------------
+
+Hosted API URL
+https://www.keweenawendurance.com
+
+Organizer PIN
+1738
+
+Device ID
+laptop-finish-1
+
+Event ID
+1441674d-a011-471a-a601-722b88b117f5
+
+COM port (typical)
+COM3
+
+
+=== 12 Hour (default finish) ===
+
+Race ID
+17da3ba1-2e09-4eb1-aeb3-d9dd5b6a394e
+
+Finish checkpoint ID
+81ca12c0-dfec-512e-b605-7e1dfbcb63f5
+
+
+=== 6 Hour ===
+
+Race ID
+209769a1-f723-4f70-ae90-466a46338684
+
+Finish checkpoint ID
+5b7e8d76-8cc4-5e17-9147-9ed99a8df6fa
+
+
+=== 90-Minute Kids ===
+
+Race ID
+0e45ee85-800c-4e1f-a95b-4b92462e790a
+
+Finish checkpoint ID
+31b14fd1-a863-57e1-b90f-45f1593cdd49
+
+
+------------------------------------------------
+Notes
+- Bridge token: from Secret Manager keweenaw-bridge-token (or use PIN).
+- After Start bridge: website → PIN unlock → Station → arm Finish / laptop-finish-1.
+- GUI “Bluffet race” dropdown can fill race + checkpoint; this file is the backup paste list.

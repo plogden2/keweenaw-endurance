@@ -1,5 +1,7 @@
 # Production reader laptop — race-day instructions
 
+**New laptop / USB install:** use [reader-laptop-setup.md](./reader-laptop-setup.md) and `dist/reader-setup/KeweenawReader-Setup.exe` (build with `scripts/pack-reader-setup.ps1`). That path does not need the full repo or ProxSpace on the race machine.
+
 Short setup and ops guide for the finish-line laptop against live production.
 
 **Production site:** https://www.keweenawendurance.com  
@@ -27,6 +29,10 @@ Short setup and ops guide for the finish-line laptop against live production.
 
 ## 1. One-time hardware setup
 
+**Preferred (USB / clean laptop):** run `KeweenawReader-Setup.exe` from `dist/reader-setup/` (see [reader-laptop-setup.md](./reader-laptop-setup.md)). Then skip the ProxSpace/repo build steps below.
+
+**Dev machine / from this repo:**
+
 1. Plug in the Proxmark3 (usually **COM3** on Windows).
 2. Confirm ProxSpace / `pm3` works. This repo’s wrapper is:
 
@@ -43,6 +49,12 @@ Optional headless binary:
 ```powershell
 cd C:\Users\gener\Documents\keweenaw-endurance\backend
 go build -o device-bridge.exe ./cmd/device-bridge
+```
+
+Rebuild the USB installer after GUI or Proxmark updates:
+
+```powershell
+powershell -File scripts\pack-reader-setup.ps1
 ```
 
 ---
@@ -97,6 +109,8 @@ curl.exe http://127.0.0.1:8091/status
 ```
 
 Expect `"mode":"online_synced"` and `"connected":true`.
+
+**Taps:** Keep the bridge/GUI running so it holds one Proxmark session open. A brief wave should register quickly; the **laptop beeps** immediately on a successful chip read. The website still plays the Mario Kart sound when a lap is scored.
 
 ---
 

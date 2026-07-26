@@ -44,28 +44,37 @@ func SeedBluffetDetails() BluffetDetails {
 	}
 }
 
-// ApplyBluffetDefaults fills empty operator fields for All You Can East Bluffet race day.
+// ApplyBluffetDefaults sets All You Can East Bluffet race-day fields.
+// For the current test window these are forced as defaults (12 Hour finish)
+// so a laptop opens ready without pasting IDs; race dropdown can still switch
+// distances after launch. Secrets (bridge token) are never overwritten.
 func ApplyBluffetDefaults(cfg *Config) {
 	if cfg == nil {
 		return
 	}
 	seed := SeedBluffetDetails()
 	firstLaunch := strings.TrimSpace(cfg.EventID) == ""
-	if cfg.HostedAPIURL == "" {
-		cfg.HostedAPIURL = "https://www.keweenawendurance.com"
-	}
+	cfg.HostedAPIURL = "https://www.keweenawendurance.com"
 	if cfg.OrganizerPIN == "" {
 		cfg.OrganizerPIN = DefaultOrganizerPIN
 	}
-	if cfg.DeviceID == "" {
-		cfg.DeviceID = "laptop-finish-1"
-	}
-	if cfg.EventID == "" {
-		cfg.EventID = seed.EventID
-	}
-	if cfg.RaceID == "" && len(seed.Races) > 0 {
-		cfg.RaceID = seed.Races[0].RaceID
-		cfg.CheckpointID = seed.Races[0].FinishCheckpointID
+	cfg.DeviceID = "laptop-finish-1"
+	cfg.EventID = seed.EventID
+	if len(seed.Races) > 0 {
+		// Keep a previously chosen Bluffet distance; otherwise default to 12 Hour.
+		matched := false
+		for _, r := range seed.Races {
+			if r.RaceID == cfg.RaceID || strings.HasSuffix(r.RaceID, cfg.RaceID) || strings.HasSuffix(cfg.RaceID, r.RaceID) {
+				cfg.RaceID = r.RaceID
+				cfg.CheckpointID = r.FinishCheckpointID
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			cfg.RaceID = seed.Races[0].RaceID
+			cfg.CheckpointID = seed.Races[0].FinishCheckpointID
+		}
 	}
 	if cfg.ProxmarkPort == "" {
 		cfg.ProxmarkPort = "COM3"

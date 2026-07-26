@@ -49,10 +49,14 @@ type configFile struct {
 }
 
 // DefaultConfig returns race-day defaults (no secrets).
+// Event/race/checkpoint default to All You Can East Bluffet 12 Hour finish.
 func DefaultConfig() Config {
-	return Config{
+	seed := SeedBluffetDetails()
+	cfg := Config{
 		HostedAPIURL:    "https://www.keweenawendurance.com",
+		OrganizerPIN:    DefaultOrganizerPIN,
 		DeviceID:        services.DefaultBridgeDeviceID,
+		EventID:         seed.EventID,
 		DataDir:         "./bridge-data",
 		LocalAddr:       "127.0.0.1:8091",
 		PartitionSignal: filepath.Join(os.TempDir(), "keweenaw-bridge-partition.signal"),
@@ -61,6 +65,11 @@ func DefaultConfig() Config {
 		PollInterval:    500 * time.Millisecond,
 		PollMS:          500,
 	}
+	if len(seed.Races) > 0 {
+		cfg.RaceID = seed.Races[0].RaceID
+		cfg.CheckpointID = seed.Races[0].FinishCheckpointID
+	}
+	return cfg
 }
 
 // PreferredGUIDataDir is the portable per-user data directory for the GUI.

@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,6 +76,23 @@ func TestHardwareProxmark3RewriteSameUUID(t *testing.T) {
 	got2, err := reader.Poll()
 	require.NoError(t, err)
 	assert.Equal(t, logicalUUID, strings.ToLower(got2))
+}
+
+func TestHardwareProxmark3SessionReuseIsFast(t *testing.T) {
+	reader := requireHardwareReader(t)
+	defer reader.Close()
+
+	// Warm up: open persistent session (may be slow once).
+	_, _ = reader.Poll()
+
+	start := time.Now()
+	_, err := reader.Poll()
+	elapsed := time.Since(start)
+	require.NoError(t, err)
+	t.Logf("second poll elapsed=%s", elapsed)
+	if elapsed > 1500*time.Millisecond {
+		t.Fatalf("persistent session poll too slow: %s (expected << spawn-per-poll)", elapsed)
+	}
 }
 
 func requireHardwareReader(t *testing.T) *CLIProxmarkReader {

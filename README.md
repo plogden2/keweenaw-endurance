@@ -26,6 +26,8 @@ For the Proxmark3 / finish-line scanner feature (demo seed, inject taps, live CS
 
 **[specs/002-rfid-race-scanner/quickstart.md](specs/002-rfid-race-scanner/quickstart.md)**
 
+**Race-day laptop (minimal):** [docs/reader-laptop-setup.md](docs/reader-laptop-setup.md) — pack USB installer with `scripts/pack-reader-setup.ps1`.
+
 ### Run backend tests
 
 ```bash

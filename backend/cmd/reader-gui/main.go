@@ -24,13 +24,21 @@ func main() {
 		}
 	}
 	if exe, err := os.Executable(); err == nil {
-		scriptsPM3 := filepath.Clean(filepath.Join(filepath.Dir(exe), "..", "scripts", "pm3.cmd"))
+		exeDir := filepath.Dir(exe)
+		// Installer layout: {install}\reader-gui.exe + {install}\proxmark\proxmark3.exe
+		installPM3 := filepath.Clean(filepath.Join(exeDir, "proxmark", "proxmark3.exe"))
+		if cfg.ProxmarkCLI == "" || cfg.ProxmarkCLI == "pm3" {
+			if _, err := os.Stat(installPM3); err == nil {
+				cfg.ProxmarkCLI = installPM3
+			}
+		}
+		scriptsPM3 := filepath.Clean(filepath.Join(exeDir, "..", "scripts", "pm3.cmd"))
 		if cfg.ProxmarkCLI == "" || cfg.ProxmarkCLI == "pm3" {
 			if _, err := os.Stat(scriptsPM3); err == nil {
 				cfg.ProxmarkCLI = scriptsPM3
 			}
 		}
-		alt := filepath.Clean(filepath.Join(filepath.Dir(exe), "..", "..", "scripts", "pm3.cmd"))
+		alt := filepath.Clean(filepath.Join(exeDir, "..", "..", "scripts", "pm3.cmd"))
 		if cfg.ProxmarkCLI == "" || cfg.ProxmarkCLI == "pm3" {
 			if _, err := os.Stat(alt); err == nil {
 				cfg.ProxmarkCLI = alt

@@ -23,26 +23,36 @@ const (
 )
 
 // CLICommandRunner executes the Proxmark3 CLI with the given pm3 subcommand string.
-// Tests inject a fake runner to avoid requiring real hardware.
+// Tests inject a fake runner to avoid requiring real hardware. When set, the
+// reader uses one-shot process mode instead of a persistent session.
 type CLICommandRunner func(command string) (stdout string, err error)
 
 // CLIProxmarkConfig configures the pm3 CLI bridge.
 type CLIProxmarkConfig struct {
-	CLIPath string
-	Port    string
-	Enabled bool
-	Runner  CLICommandRunner
+	CLIPath        string
+	Port           string
+	Enabled        bool
+	Runner         CLICommandRunner
+	SessionFactory PM3SessionFactory
+	Beeper         Beeper
 }
 
 // CLIProxmarkReader reads and writes logical UUIDs via the Proxmark3 CLI.
 // A mutex serializes all CLI invocations so Poll and WriteTag cannot race on
-// the serial port (each pm3 process needs exclusive COM access).
+// the serial port. Production mode keeps one interactive session open.
 type CLIProxmarkReader struct {
-	cliPath string
-	port    string
-	enabled bool
-	runner  CLICommandRunner
-	mu      sync.Mutex
+	cliPath        string
+	port           string
+	enabled        bool
+	runner         CLICommandRunner // one-shot (tests); nil ⇒ persistent session
+	sessionFactory PM3SessionFactory
+	beeper         Beeper
+
+	mu         sync.Mutex
+	session    PM3Session
+	nextRetry  time.Time
+	backoff    time.Duration
+	useSession bool
 }
 
 func NewCLIProxmarkReader(cfg CLIProxmarkConfig) *CLIProxmarkReader {
@@ -50,20 +60,32 @@ func NewCLIProxmarkReader(cfg CLIProxmarkConfig) *CLIProxmarkReader {
 	if cliPath == "" {
 		cliPath = "pm3"
 	}
-	runner := cfg.Runner
-	if runner == nil {
-		runner = defaultCLICommandRunner(cliPath, cfg.Port)
+	beeper := cfg.Beeper
+	if beeper == nil {
+		beeper = defaultBeeper()
 	}
-	return &CLIProxmarkReader{
+	r := &CLIProxmarkReader{
 		cliPath: cliPath,
 		port:    cfg.Port,
 		enabled: cfg.Enabled,
-		runner:  runner,
+		beeper:  beeper,
+		backoff: proxmarkReconnectMinBackoff,
 	}
+	if cfg.Runner != nil {
+		r.runner = cfg.Runner
+		r.useSession = false
+	} else {
+		factory := cfg.SessionFactory
+		if factory == nil {
+			factory = defaultSessionFactory(cliPath, cfg.Port)
+		}
+		r.sessionFactory = factory
+		r.useSession = true
+	}
+	return r
 }
 
 func defaultCLICommandRunner(cliPath, port string) CLICommandRunner {
-	mingwBin := proxmarkMingwBin(cliPath)
 	return func(command string) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), proxmarkCLIExecTimeout)
 		defer cancel()
@@ -75,9 +97,7 @@ func defaultCLICommandRunner(cliPath, port string) CLICommandRunner {
 		args = append(args, "-f", "--incognito", "-c", command)
 
 		cmd := exec.CommandContext(ctx, cliPath, args...)
-		if mingwBin != "" {
-			cmd.Env = withPrependedPath(os.Environ(), mingwBin)
-		}
+		cmd.Env = proxmarkCommandEnv(cliPath)
 		out, err := cmd.CombinedOutput()
 		if ctx.Err() == context.DeadlineExceeded {
 			return string(out), fmt.Errorf("proxmark3 cli %q: timed out after %s", command, proxmarkCLIExecTimeout)
@@ -89,23 +109,120 @@ func defaultCLICommandRunner(cliPath, port string) CLICommandRunner {
 	}
 }
 
-// proxmarkMingwBin returns the mingw64 bin dir needed for ProxSpace-built
-// Windows clients to resolve DLLs when spawned from Go.
-func proxmarkMingwBin(cliPath string) string {
+// resolveProxmarkExecutable maps wrapper scripts (pm3.cmd) to proxmark3.exe so
+// interactive stdin sessions work. Batch files do not forward Go pipes reliably.
+func resolveProxmarkExecutable(cliPath string) string {
+	if v := strings.TrimSpace(os.Getenv("PROXMARK3_EXE")); v != "" {
+		if st, err := os.Stat(v); err == nil && !st.IsDir() {
+			return v
+		}
+	}
+	lower := strings.ToLower(cliPath)
+	if strings.HasSuffix(lower, ".exe") || (!strings.HasSuffix(lower, ".cmd") && !strings.HasSuffix(lower, ".bat")) {
+		return cliPath
+	}
+	if exe := parsePM3ExeFromWrapper(cliPath); exe != "" {
+		return exe
+	}
+	if la := os.Getenv("LOCALAPPDATA"); la != "" {
+		candidate := filepath.Join(la, "KeweenawReader", "proxmark", "proxmark3.exe")
+		if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+			return candidate
+		}
+	}
+	return cliPath
+}
+
+func parsePM3ExeFromWrapper(cmdPath string) string {
+	data, err := os.ReadFile(cmdPath)
+	if err != nil {
+		return ""
+	}
+	vars := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		trim := strings.TrimSpace(line)
+		upper := strings.ToUpper(trim)
+		if !strings.HasPrefix(upper, "SET ") {
+			continue
+		}
+		assign := strings.TrimSpace(trim[4:])
+		assign = strings.Trim(assign, `"'`)
+		key, val, ok := strings.Cut(assign, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		val = expandCmdVars(strings.TrimSpace(val), vars)
+		vars[strings.ToUpper(key)] = val
+	}
+	if exe := vars["PM3_EXE"]; exe != "" {
+		if st, err := os.Stat(exe); err == nil && !st.IsDir() {
+			return exe
+		}
+	}
+	return ""
+}
+
+func expandCmdVars(s string, vars map[string]string) string {
+	out := s
+	for k, v := range vars {
+		out = strings.ReplaceAll(out, "%"+k+"%", v)
+		out = strings.ReplaceAll(out, "%"+strings.ToLower(k)+"%", v)
+	}
+	return out
+}
+
+// proxmarkRuntimeBin returns a directory to prepend to PATH so a Proxmark
+// Windows client can resolve MinGW/Qt DLLs when spawned from Go.
+// Prefers PROXMARK3_MINGW_BIN, then ProxSpace mingw64\bin, then the CLI's
+// own directory when a slim side-by-side runtime is installed.
+func proxmarkRuntimeBin(cliPath string) string {
 	if runtime.GOOS != "windows" {
 		return ""
 	}
 	if mingw := os.Getenv("PROXMARK3_MINGW_BIN"); mingw != "" {
 		return mingw
 	}
-	if !strings.Contains(strings.ToLower(cliPath), "proxspace") {
-		return ""
+	if strings.Contains(strings.ToLower(cliPath), "proxspace") {
+		candidate := filepath.Clean(filepath.Join(filepath.Dir(cliPath), "..", "..", "..", "msys2", "mingw64", "bin"))
+		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+			return candidate
+		}
 	}
-	candidate := filepath.Clean(filepath.Join(filepath.Dir(cliPath), "..", "..", "..", "msys2", "mingw64", "bin"))
-	if st, err := os.Stat(candidate); err == nil && st.IsDir() {
-		return candidate
+	cliDir := filepath.Dir(cliPath)
+	if proxmarkSideBySideRuntime(cliDir) {
+		return cliDir
 	}
 	return ""
+}
+
+// proxmarkMingwBin is kept for callers/tests; same as proxmarkRuntimeBin.
+func proxmarkMingwBin(cliPath string) string {
+	return proxmarkRuntimeBin(cliPath)
+}
+
+func proxmarkSideBySideRuntime(cliDir string) bool {
+	if st, err := os.Stat(filepath.Join(cliDir, "platforms")); err == nil && st.IsDir() {
+		return true
+	}
+	for _, name := range []string{"libgcc_s_seh-1.dll", "Qt5Core.dll", "libwinpthread-1.dll"} {
+		if _, err := os.Stat(filepath.Join(cliDir, name)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func proxmarkCommandEnv(cliPath string) []string {
+	env := os.Environ()
+	if bin := proxmarkRuntimeBin(cliPath); bin != "" {
+		env = withPrependedPath(env, bin)
+	}
+	cliDir := filepath.Dir(cliPath)
+	if st, err := os.Stat(filepath.Join(cliDir, "platforms")); err == nil && st.IsDir() {
+		env = withEnvVar(env, "QT_PLUGIN_PATH", cliDir)
+	}
+	return env
 }
 
 func withPrependedPath(environ []string, dir string) []string {
@@ -126,6 +243,24 @@ func withPrependedPath(environ []string, dir string) []string {
 	return out
 }
 
+func withEnvVar(environ []string, key, value string) []string {
+	prefix := strings.ToUpper(key) + "="
+	out := make([]string, 0, len(environ)+1)
+	replaced := false
+	for _, e := range environ {
+		if strings.HasPrefix(strings.ToUpper(e), prefix) {
+			out = append(out, key+"="+value)
+			replaced = true
+			continue
+		}
+		out = append(out, e)
+	}
+	if !replaced {
+		out = append(out, key+"="+value)
+	}
+	return out
+}
+
 func (r *CLIProxmarkReader) IsAvailable() bool {
 	return r != nil && r.enabled
 }
@@ -140,7 +275,6 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// One pm3 process for all four pages — each spawn is expensive on Windows/COM.
 	parts := make([]string, 0, proxmarkLogicalUUIDPages)
 	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
 		page := proxmarkUserMemoryStartPage + i
@@ -148,7 +282,9 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 		hexData := fmt.Sprintf("%x", raw[off:off+proxmarkPageSize])
 		parts = append(parts, fmt.Sprintf("hf mfu wrbl -b %d -d %s", page, hexData))
 	}
-	stdout, writeErr := r.runner(strings.Join(parts, "; "))
+	ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionWriteTimeout)
+	defer cancel()
+	stdout, writeErr := r.runLocked(ctx, strings.Join(parts, "; "))
 	if writeErr != nil {
 		// Proxmark CLI often exits -10 (0xfffffff6) even when the device ran the
 		// script; confirm by reading user memory before failing the operator.
@@ -168,26 +304,18 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 // verifyLogicalUUIDLocked reads pages 4–7 and checks they decode to logicalUUID.
 // Caller must hold r.mu.
 func (r *CLIProxmarkReader) verifyLogicalUUIDLocked(logicalUUID string) error {
-	parts := make([]string, 0, proxmarkLogicalUUIDPages)
-	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
-		page := proxmarkUserMemoryStartPage + i
-		parts = append(parts, fmt.Sprintf("hf mfu rdbl -b %d", page))
-	}
-	stdout, err := r.runner(strings.Join(parts, "; "))
+	ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionPollTimeout)
+	defer cancel()
+	stdout, err := r.runLocked(ctx, "hf mfu rdbl -b 4")
 	if err != nil && !pm3DeviceResponded(stdout) {
 		return err
 	}
-	raw := make([]byte, 0, 16)
-	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
-		page := proxmarkUserMemoryStartPage + i
-		pageBytes, parseErr := parseReadPageOutput(stdout, page)
-		if parseErr != nil {
-			return parseErr
-		}
-		if len(pageBytes) == 0 {
-			return fmt.Errorf("readback page %d empty", page)
-		}
-		raw = append(raw, pageBytes...)
+	raw, parseErr := parseLogicalUUIDBytes(stdout)
+	if parseErr != nil {
+		return parseErr
+	}
+	if len(raw) == 0 {
+		return fmt.Errorf("readback empty")
 	}
 	got, err := DecodeLogicalUUID(raw)
 	if err != nil {
@@ -204,38 +332,34 @@ func (r *CLIProxmarkReader) Poll() (string, error) {
 		return "", ErrHardwareUnavailable
 	}
 	// Skip this tick if a write holds the port — writes must not wait behind a
-	// full multi-page poll (Playwright write-tag timeout is otherwise too tight).
+	// poll (Playwright write-tag timeout is otherwise too tight).
 	if !r.mu.TryLock() {
 		return "", nil
 	}
 	defer r.mu.Unlock()
 
-	parts := make([]string, 0, proxmarkLogicalUUIDPages)
-	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
-		page := proxmarkUserMemoryStartPage + i
-		parts = append(parts, fmt.Sprintf("hf mfu rdbl -b %d", page))
-	}
-	stdout, err := r.runner(strings.Join(parts, "; "))
+	ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionPollTimeout)
+	defer cancel()
+	stdout, err := r.runLocked(ctx, "hf mfu rdbl -b 4")
 	if err != nil {
-		return "", fmt.Errorf("read pages: %w", err)
-	}
-
-	raw := make([]byte, 0, 16)
-	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
-		page := proxmarkUserMemoryStartPage + i
-		pageBytes, err := parseReadPageOutput(stdout, page)
-		if err != nil {
-			return "", fmt.Errorf("read page %d: %w", page, err)
-		}
-		if len(pageBytes) == 0 {
-			return "", nil
-		}
-		raw = append(raw, pageBytes...)
-	}
-	if isZeroBlock(raw) {
+		// Continuous poll loop: never fail the tick hard — empty means "try again".
+		_ = stdout
 		return "", nil
 	}
-	return DecodeLogicalUUID(raw)
+
+	raw, parseErr := parseLogicalUUIDBytes(stdout)
+	if parseErr != nil {
+		return "", parseErr
+	}
+	if len(raw) == 0 || isZeroBlock(raw) {
+		return "", nil
+	}
+	uid, err := DecodeLogicalUUID(raw)
+	if err != nil {
+		return "", err
+	}
+	r.beeper.Beep()
+	return uid, nil
 }
 
 // DetectISO14443A probes for an ISO14443-A tag (NTAG / Ultralight / Classic).
@@ -249,7 +373,9 @@ func (r *CLIProxmarkReader) DetectISO14443A() (present bool, stdout string, err 
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	stdout, runErr := r.runner("hf 14a reader")
+	ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionWriteTimeout)
+	defer cancel()
+	stdout, runErr := r.runLocked(ctx, "hf 14a reader")
 	lower := strings.ToLower(stdout)
 	// Require "uid:" (with colon) — bare "uid" false-positives on paths containing "uuid".
 	present = strings.Contains(lower, "uid:") ||
@@ -261,6 +387,98 @@ func (r *CLIProxmarkReader) DetectISO14443A() (present bool, stdout string, err 
 		return false, stdout, runErr
 	}
 	return false, stdout, nil
+}
+
+// Close tears down any persistent Proxmark session.
+func (r *CLIProxmarkReader) Close() error {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.closeSessionLocked()
+}
+
+// runLocked executes a pm3 command. Caller must hold r.mu.
+func (r *CLIProxmarkReader) runLocked(ctx context.Context, command string) (string, error) {
+	if !r.useSession {
+		return r.runner(command)
+	}
+	if err := r.ensureSessionLocked(ctx); err != nil {
+		return "", err
+	}
+	stdout, err := r.session.Run(ctx, command)
+	if err != nil {
+		_ = r.closeSessionLocked()
+		r.scheduleRetryLocked()
+		return stdout, err
+	}
+	r.backoff = proxmarkReconnectMinBackoff
+	return stdout, nil
+}
+
+func (r *CLIProxmarkReader) ensureSessionLocked(ctx context.Context) error {
+	if r.session != nil {
+		return nil
+	}
+	now := time.Now()
+	if now.Before(r.nextRetry) {
+		return fmt.Errorf("proxmark session backoff until %s", r.nextRetry.Format(time.RFC3339))
+	}
+	sess, err := r.sessionFactory(ctx)
+	if err != nil {
+		r.scheduleRetryLocked()
+		return err
+	}
+	r.session = sess
+	return nil
+}
+
+func (r *CLIProxmarkReader) closeSessionLocked() error {
+	if r.session == nil {
+		return nil
+	}
+	err := r.session.Close()
+	r.session = nil
+	return err
+}
+
+func (r *CLIProxmarkReader) scheduleRetryLocked() {
+	if r.backoff <= 0 {
+		r.backoff = proxmarkReconnectMinBackoff
+	}
+	r.nextRetry = time.Now().Add(r.backoff)
+	r.backoff *= 2
+	if r.backoff > proxmarkReconnectMaxBackoff {
+		r.backoff = proxmarkReconnectMaxBackoff
+	}
+}
+
+// parseLogicalUUIDBytes extracts 16 user-memory bytes from a single
+// `hf mfu rdbl -b 4` transcript (Data : line or four page rows).
+func parseLogicalUUIDBytes(stdout string) ([]byte, error) {
+	if strings.TrimSpace(stdout) == "" {
+		return nil, nil
+	}
+	if raw, err := parseReadBlockOutput(stdout); err == nil && len(raw) >= 16 {
+		return raw[:16], nil
+	}
+	raw := make([]byte, 0, 16)
+	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
+		page := proxmarkUserMemoryStartPage + i
+		pageBytes, err := parseReadPageOutput(stdout, page)
+		if err != nil {
+			return nil, fmt.Errorf("read page %d: %w", page, err)
+		}
+		if len(pageBytes) == 0 {
+			return nil, nil
+		}
+		raw = append(raw, pageBytes...)
+	}
+	if len(raw) != 16 {
+		return nil, fmt.Errorf("parse read: got %d bytes, need 16", len(raw))
+	}
+	return raw, nil
 }
 
 func pm3DeviceResponded(stdout string) bool {

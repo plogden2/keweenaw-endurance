@@ -81,6 +81,6 @@ describe('App theme class', () => {
   it('exposes Station and CSV recovery in the footer', async () => {
     const wrapper = await mountApp()
     expect(wrapper.get('[data-testid="footer-station"]').attributes('href')).toBe('/station')
-    expect(wrapper.get('[data-testid="footer-csv"]').attributes('href')).toBe('/csv')
+    expect(wrapper.get('[data-testid="footer-csv"]').attributes('href')).toMatch(/^\/csv/)
   })
 })

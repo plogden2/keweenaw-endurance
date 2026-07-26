@@ -53,6 +53,11 @@ export function isBridgeSnapshotUnknown(snapshot: BridgeStatusSnapshot = lastBri
 }
 
 export function shouldRouteWriteTagLocal(snapshot: BridgeStatusSnapshot = lastBridgeSnapshot): boolean {
+  // Prefer the on-laptop bridge whenever it is reachable — writes need COM/USB
+  // and hosted 500s hide the Proxmark error text.
+  if (snapshot.local?.connected) {
+    return true
+  }
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return true
   }
@@ -195,18 +200,30 @@ export const timingApi = {
 
 export interface WriteTagPayload {
   participant_id: string
+  race_id?: string
+  logical_uuid?: string
 }
 
 async function writeTagLocal(
   payload: WriteTagPayload,
 ): Promise<AxiosResponse<Participant>> {
+  const body: Record<string, string> = {
+    participant_id: payload.participant_id,
+  }
+  if (payload.race_id) body.race_id = payload.race_id
+  if (payload.logical_uuid) body.logical_uuid = payload.logical_uuid
   const res = await fetch(`${bridgeLocalUrl}/write-tag`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
-    throw new Error(`Local bridge write-tag failed (${res.status})`)
+    const detail = (await res.text().catch(() => '')).trim()
+    throw new Error(
+      detail
+        ? `Local bridge write-tag failed (${res.status}): ${detail}`
+        : `Local bridge write-tag failed (${res.status})`,
+    )
   }
   const data = (await res.json()) as Participant
   return { data } as AxiosResponse<Participant>

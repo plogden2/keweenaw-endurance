@@ -441,10 +441,11 @@ function buildLapFlows(
     status: ParticipantStatus
   }>,
 ): ParticipantFlow[] {
+  // Include scored laps before gun start (leaderboard counts them). Elapsed is
+  // clamped to >= 0 in pushLapPoint so the axis never goes negative.
   const finishRecords = records
     .filter((record) => record.checkpoint?.checkpoint_type === 'finish' && record.participant)
     .filter((record) => isScoredLapRecord(record))
-    .filter((record) => new Date(record.timestamp).getTime() >= raceStartMs)
     .sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     )
