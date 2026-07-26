@@ -924,6 +924,52 @@ describe('RaceFlowChart.vue', () => {
     vi.useRealTimers()
   })
 
+  it('updates live progress in place instead of destroying Chart.js every tick', async () => {
+    // iOS Safari kills the live page when every RaceFlowChart destroy()+new Chart()
+    // on the 30s elapsed-time tick (EventLive keeps multiple charts mounted).
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-06-01T12:00:00.000Z'))
+
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: sampleRecords },
+    })
+
+    const wrapper = mount(RaceFlowChart, {
+      props: {
+        raceId: 'race-1',
+        raceStatus: 'active',
+        raceStartTime: '2024-06-01T10:30:00.000Z',
+        raceType: 'time_based',
+      },
+    })
+    await flushPromises()
+
+    const chartMock = Chart as unknown as Mock
+    const constructsAfterMount = chartMock.mock.calls.length
+    const chartInstance = chartMock.mock.results.at(-1)?.value as {
+      update: Mock
+      destroy: Mock
+      options: { plugins: { currentTimeLine: { xMinutes: number | null } } }
+      data: { datasets: Array<{ data: Array<{ x: number }> }> }
+    }
+    expect(constructsAfterMount).toBeGreaterThan(0)
+    chartInstance.update.mockClear()
+    chartInstance.destroy.mockClear()
+
+    // Timer tick advances wall clock by LIVE_REFRESH_MS (30s) → 12:00:30 → 90.5 min elapsed.
+    await vi.advanceTimersByTimeAsync(30_000)
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(chartMock.mock.calls.length).toBe(constructsAfterMount)
+    expect(chartInstance.destroy).not.toHaveBeenCalled()
+    expect(chartInstance.update).toHaveBeenCalled()
+    expect(chartInstance.options.plugins.currentTimeLine.xMinutes).toBe(90.5)
+
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
   it('caps x-axis and extrapolations to duration_minutes for active races', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2024-06-03T12:00:00.000Z'))

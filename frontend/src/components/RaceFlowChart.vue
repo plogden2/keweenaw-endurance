@@ -938,6 +938,49 @@ function updateLineHighlight(): void {
   chart.update('none')
 }
 
+function resolveVisibleMaxElapsedMinutes(showCurrentTime: boolean): number {
+  return visibleFlows.value.reduce((max, flow) => {
+    const extrapolation = showCurrentTime
+      ? buildExtrapolationPoint(flow, currentElapsedMinutes.value!)
+      : null
+    const lastElapsed = extrapolation?.elapsedMinutes ?? flow.points.at(-1)?.elapsedMinutes ?? 0
+    return Math.max(max, lastElapsed)
+  }, 0)
+}
+
+/** Move the live "now" line / extrapolations without destroy()+new Chart() (iOS Safari OOM). */
+function updateLiveProgress(): void {
+  const chart = chartInstance.value
+  if (!chart || !hasData.value) {
+    return
+  }
+
+  const showCurrentTime = currentElapsedMinutes.value != null
+  const maxElapsedMinutes = resolveVisibleMaxElapsedMinutes(showCurrentTime)
+  const xAxisMax = resolveRaceFlowXAxisMax(
+    props.durationMinutes,
+    maxElapsedMinutes,
+    currentElapsedMinutes.value,
+    showCurrentTime,
+  )
+
+  chart.data.datasets = getOrderedVisibleFlows().map((flow) => buildDataset(flow))
+
+  const xScale = chart.options.scales?.x
+  if (xScale && typeof xScale === 'object') {
+    ;(xScale as { max?: number }).max = xAxisMax
+  }
+
+  const plugins = chart.options.plugins as { currentTimeLine?: { xMinutes: number | null } } | undefined
+  if (plugins?.currentTimeLine) {
+    plugins.currentTimeLine.xMinutes = currentElapsedMinutes.value
+  } else if (plugins) {
+    plugins.currentTimeLine = { xMinutes: currentElapsedMinutes.value }
+  }
+
+  chart.update('none')
+}
+
 function renderChart(): void {
   destroyChart()
   if (!canvasRef.value || !hasData.value) {
@@ -945,13 +988,7 @@ function renderChart(): void {
   }
 
   const showCurrentTime = currentElapsedMinutes.value != null
-  const maxElapsedMinutes = visibleFlows.value.reduce((max, flow) => {
-    const extrapolation = showCurrentTime
-      ? buildExtrapolationPoint(flow, currentElapsedMinutes.value!)
-      : null
-    const lastElapsed = extrapolation?.elapsedMinutes ?? flow.points.at(-1)?.elapsedMinutes ?? 0
-    return Math.max(max, lastElapsed)
-  }, 0)
+  const maxElapsedMinutes = resolveVisibleMaxElapsedMinutes(showCurrentTime)
 
   const orderedFlows = getOrderedVisibleFlows()
   const xAxisMax = resolveRaceFlowXAxisMax(
@@ -1096,7 +1133,6 @@ watch(
   [
     visibleFlows,
     loading,
-    currentElapsedMinutes,
     chartRaceType,
     () => props.durationMinutes,
     () => unitsStore.unitSystem,
@@ -1108,6 +1144,23 @@ watch(
     }
   },
 )
+
+watch(currentElapsedMinutes, () => {
+  if (loading.value) {
+    return
+  }
+  if (chartInstance.value) {
+    updateLiveProgress()
+    return
+  }
+  void nextTick().then(() => {
+    if (!loading.value && !chartInstance.value) {
+      renderChart()
+    } else if (chartInstance.value) {
+      updateLiveProgress()
+    }
+  })
+})
 
 watch(hoveredParticipantId, () => {
   if (!loading.value && chartInstance.value) {

@@ -442,18 +442,22 @@ describe('EventLive.vue', () => {
   describe('sticky highlight v-model wiring', () => {
     it('binds highlightParticipantId as v-model on race flow charts', async () => {
       const wrapper = await mountLive()
-      const charts = wrapper.findAllComponents({ name: 'RaceFlowChart' })
-      const chart = charts[0]
+      // Only the active tab mounts a chart (v-if) so iOS does not keep 5 Chart.js instances alive.
+      const chart = wrapper.findComponent({ name: 'RaceFlowChart' })
 
       await chart.vm.$emit('update:highlightParticipantId', 'racer-1')
       await flushPromises()
       expect(chart.props('highlightParticipantId')).toBe('racer-1')
-      expect(charts[1]?.props('highlightParticipantId')).toBe('racer-1')
 
-      await chart.vm.$emit('update:highlightParticipantId', undefined)
+      await wrapper.find('[data-testid="race-tab-6h"]').trigger('click')
+      await nextTick()
       await flushPromises()
-      expect(chart.props('highlightParticipantId')).toBeUndefined()
-      expect(charts[1]?.props('highlightParticipantId')).toBeUndefined()
+      const chart6h = wrapper.findComponent({ name: 'RaceFlowChart' })
+      expect(chart6h.props('highlightParticipantId')).toBe('racer-1')
+
+      await chart6h.vm.$emit('update:highlightParticipantId', undefined)
+      await flushPromises()
+      expect(chart6h.props('highlightParticipantId')).toBeUndefined()
     })
 
     it('clears focusParticipantId when highlightParticipantId is cleared', async () => {

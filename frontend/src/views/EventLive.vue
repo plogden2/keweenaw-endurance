@@ -130,7 +130,7 @@
         </span>
       </div>
 
-      <div v-show="activeTab === '12h'" data-testid="race-panel-12h">
+      <div v-if="activeTab === '12h'" data-testid="race-panel-12h">
         <section class="panel">
           <h2>{{ race12?.name || '12 Hour' }}</h2>
           <template v-if="displayCountdown(race12) > 0">
@@ -196,7 +196,7 @@
         </section>
       </div>
 
-      <div v-show="activeTab === '6h'" data-testid="race-panel-6h">
+      <div v-if="activeTab === '6h'" data-testid="race-panel-6h">
         <section class="panel">
           <h2>{{ race6?.name || '6 Hour' }}</h2>
           <template v-if="displayCountdown(race6) > 0">
@@ -255,7 +255,7 @@
         </section>
       </div>
 
-      <div v-show="activeTab === '90m'" data-testid="race-panel-90m">
+      <div v-if="activeTab === '90m'" data-testid="race-panel-90m">
         <section class="panel">
           <h2>{{ race90?.name || '90 Minute' }}</h2>
           <template v-if="displayCountdown(race90) > 0">
@@ -314,7 +314,7 @@
         </section>
       </div>
 
-      <div v-show="activeTab === 'overlap'" data-testid="overlap-chart">
+      <div v-if="activeTab === 'overlap'" data-testid="overlap-chart">
         <section class="panel">
           <h2>Overlapping races — 12 Hour + 6 Hour</h2>
           <p class="muted">Combined flow chart for concurrent races.</p>
