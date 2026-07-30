@@ -56,18 +56,20 @@ func TestCLIProxmarkReader_PersistentSessionPollAndReconnect(t *testing.T) {
 		s := &fakeSession{}
 		if len(sessions) == 0 {
 			s.outputs = []string{
+				"Thresholds set.",
 				"Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n",
 			}
-			s.errs = []error{nil}
+			s.errs = []error{nil, nil}
 		} else if len(sessions) == 1 {
 			// Dead session on first Run after recreate path exercised below.
-			s.outputs = []string{""}
-			s.errs = []error{errors.New("EOF")}
+			s.outputs = []string{"Thresholds set.", ""}
+			s.errs = []error{nil, errors.New("EOF")}
 		} else {
 			s.outputs = []string{
+				"Thresholds set.",
 				"Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n",
 			}
-			s.errs = []error{nil}
+			s.errs = []error{nil, nil}
 		}
 		sessions = append(sessions, s)
 		return s, nil
@@ -84,7 +86,7 @@ func TestCLIProxmarkReader_PersistentSessionPollAndReconnect(t *testing.T) {
 	assert.Equal(t, logicalUUID, got)
 	assert.Equal(t, 1, beep.calls)
 	require.Len(t, sessions, 1)
-	assert.Equal(t, []string{"hf mfu rdbl -b 4"}, sessions[0].commands)
+	assert.Equal(t, []string{"hw sethfthresh -t 1", "hf mfu rdbl -b 4"}, sessions[0].commands)
 
 	// Force session death on next poll.
 	reader.mu.Lock()
@@ -127,8 +129,11 @@ func TestCLIProxmarkReader_KeepsSessionOnCardMiss(t *testing.T) {
 	var sessions []*fakeSession
 	factory := func(context.Context) (PM3Session, error) {
 		s := &fakeSession{
-			outputs: []string{"[#] can't select card\n[usb] pm3 -->\n"},
-			errs:    []error{errors.New("exit status 1")},
+			outputs: []string{
+				"Thresholds set.",
+				"[#] can't select card\n[usb] pm3 -->\n",
+			},
+			errs: []error{nil, errors.New("exit status 1")},
 		}
 		sessions = append(sessions, s)
 		return s, nil
@@ -151,5 +156,5 @@ func TestCLIProxmarkReader_KeepsSessionOnCardMiss(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got)
 	require.Len(t, sessions, 1)
-	assert.Equal(t, 2, sessions[0].runCalls)
+	assert.Equal(t, 3, sessions[0].runCalls)
 }
