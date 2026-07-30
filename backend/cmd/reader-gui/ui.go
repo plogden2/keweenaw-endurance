@@ -15,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/keweenaw-endurance/backend/internal/bridge"
 	"github.com/keweenaw-endurance/backend/internal/bridgeapp"
+	"github.com/keweenaw-endurance/backend/internal/rfid"
 )
 
 const allRacesLabel = "All races (event finish)"
@@ -27,25 +28,27 @@ type readerUI struct {
 	bridge  *bridgeapp.App
 	cancel  context.CancelFunc
 
-	mu       sync.Mutex
-	events   []bridgeapp.CatalogEvent
-	races    []bridgeapp.CatalogRace
+	mu          sync.Mutex
+	events      []bridgeapp.CatalogEvent
+	races       []bridgeapp.CatalogRace
 	checkpoints []bridgeapp.CatalogCheckpoint
 
-	hostedURL    *widget.Entry
-	bridgeToken  *widget.Entry
-	organizerPIN *widget.Entry
-	deviceID     *widget.Entry
-	eventSelect  *widget.Select
-	raceSelect   *widget.Select
+	hostedURL        *widget.Entry
+	bridgeToken      *widget.Entry
+	organizerPIN     *widget.Entry
+	deviceID         *widget.Entry
+	eventSelect      *widget.Select
+	raceSelect       *widget.Select
 	checkpointSelect *widget.Select
-	dataDir      *widget.Entry
-	proxmarkCLI  *widget.Entry
-	proxmarkPort *widget.SelectEntry
-	hwCheck        *widget.Check
-	mockCheck      *widget.Check
-	writeOnlyCheck *widget.Check
-	autofillMsg    *widget.Label
+	dataDir          *widget.Entry
+	proxmarkCLI      *widget.Entry
+	proxmarkPort     *widget.SelectEntry
+	hwCheck          *widget.Check
+	hfGainSlider     *widget.Slider
+	hfGainLabel      *widget.Label
+	mockCheck        *widget.Check
+	writeOnlyCheck   *widget.Check
+	autofillMsg      *widget.Label
 
 	statusMode   *widget.Label
 	statusDetail *widget.Label
@@ -121,6 +124,25 @@ func (ui *readerUI) build() {
 
 	ui.hwCheck = widget.NewCheck("Use Proxmark hardware", nil)
 	ui.hwCheck.SetChecked(ui.cfg.RFIDHardware)
+
+	hfGain := ui.cfg.HFGain
+	if hfGain == 0 {
+		hfGain = rfid.HFGainDefault
+	}
+	ui.hfGainSlider = widget.NewSlider(rfid.HFGainMin, rfid.HFGainMax)
+	ui.hfGainSlider.Step = 1
+	ui.hfGainSlider.SetValue(float64(hfGain))
+	ui.hfGainLabel = widget.NewLabel(hfGainLabelText(hfGain))
+	ui.hfGainSlider.OnChanged = func(value float64) {
+		gain := int(value)
+		ui.cfg.HFGain = gain
+		ui.hfGainLabel.SetText(hfGainLabelText(gain))
+		if ui.bridge != nil && ui.bridge.Running() {
+			ui.bridge.SetHFGain(gain)
+		}
+		_ = bridgeapp.SaveConfig(ui.cfgPath, ui.readForm())
+	}
+
 	ui.mockCheck = widget.NewCheck("Mock reader (no hardware)", nil)
 	ui.mockCheck.SetChecked(ui.cfg.BridgeMock)
 	ui.writeOnlyCheck = widget.NewCheck("Write-only mode (show taps, do not record)", func(on bool) {
@@ -349,6 +371,7 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 		ui.autofillMsg,
 		configForm,
 		ui.hwCheck,
+		container.NewBorder(nil, nil, ui.hfGainLabel, nil, ui.hfGainSlider),
 		ui.mockCheck,
 		ui.writeOnlyCheck,
 		controls,
@@ -405,6 +428,12 @@ func (ui *readerUI) runAutofill() {
 		ui.proxmarkCLI.SetText(cfg.ProxmarkCLI)
 		ui.proxmarkPort.SetText(cfg.ProxmarkPort)
 		ui.hwCheck.SetChecked(cfg.RFIDHardware)
+		hfGain := cfg.HFGain
+		if hfGain == 0 {
+			hfGain = rfid.HFGainDefault
+		}
+		ui.hfGainSlider.SetValue(float64(hfGain))
+		ui.hfGainLabel.SetText(hfGainLabelText(hfGain))
 		ui.mockCheck.SetChecked(cfg.BridgeMock)
 		ui.writeOnlyCheck.SetChecked(cfg.WriteOnly)
 
@@ -504,6 +533,7 @@ func (ui *readerUI) readForm() bridgeapp.Config {
 	cfg.ProxmarkCLI = strings.TrimSpace(ui.proxmarkCLI.Text)
 	cfg.ProxmarkPort = strings.TrimSpace(ui.proxmarkPort.Text)
 	cfg.RFIDHardware = ui.hwCheck.Checked
+	cfg.HFGain = int(ui.hfGainSlider.Value)
 	cfg.BridgeMock = ui.mockCheck.Checked
 	cfg.WriteOnly = ui.writeOnlyCheck.Checked
 	// Event/race/checkpoint kept in ui.cfg via select handlers.
@@ -653,6 +683,13 @@ func (ui *readerUI) statusLoop() {
 			ui.statusError.SetText(errText)
 		})
 	}
+}
+
+func hfGainLabelText(gain int) string {
+	if gain == rfid.HFGainMax {
+		return fmt.Sprintf("HF gain: %d (max sensitivity)", gain)
+	}
+	return fmt.Sprintf("HF gain: %d", gain)
 }
 
 func formatLastTap(st bridgeapp.Status) string {
