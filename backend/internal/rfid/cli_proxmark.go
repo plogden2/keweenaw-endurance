@@ -3,6 +3,7 @@ package rfid
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -395,15 +396,21 @@ func (r *CLIProxmarkReader) SetHFGain(g int) {
 	defer r.mu.Unlock()
 	r.hfGain = ClampHFGain(g)
 	r.threshApplied = false
-	if !r.useSession && r.runner != nil {
-		_ = r.ensureThreshLocked(context.Background())
-	} else if r.session != nil {
-		_ = r.ensureThreshLocked(context.Background())
+	if (!r.useSession && r.runner != nil) || r.session != nil {
+		r.applyThreshLocked(context.Background())
 	}
 }
 
 func hfThreshCommand(gain int) string {
 	return fmt.Sprintf("hw sethfthresh -t %d", HFThreshFromGain(gain))
+}
+
+// applyThreshLocked runs ensureThreshLocked and logs failures without aborting
+// the caller's primary command. Caller must hold r.mu.
+func (r *CLIProxmarkReader) applyThreshLocked(ctx context.Context) {
+	if err := r.ensureThreshLocked(ctx); err != nil {
+		log.Printf("proxmark hf thresh apply failed (gain=%d): %v", r.hfGain, err)
+	}
 }
 
 // ensureThreshLocked applies hw sethfthresh once per connection/session.
@@ -479,7 +486,7 @@ func (r *CLIProxmarkReader) runLocked(ctx context.Context, command string) (stri
 		if err := r.ensureSessionLocked(ctx); err != nil {
 			return "", err
 		}
-		_ = r.ensureThreshLocked(ctx)
+		r.applyThreshLocked(ctx)
 		stdout, err := r.session.Run(ctx, command)
 		if err != nil {
 			// Card-select / empty-antenna failures still print a prompt. Keep the
@@ -494,7 +501,7 @@ func (r *CLIProxmarkReader) runLocked(ctx context.Context, command string) (stri
 		r.backoff = proxmarkReconnectMinBackoff
 		return stdout, nil
 	}
-	_ = r.ensureThreshLocked(ctx)
+	r.applyThreshLocked(ctx)
 	return r.runner(command)
 }
 
