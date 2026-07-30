@@ -3,6 +3,7 @@ package rfid
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,6 +34,7 @@ type CLIProxmarkConfig struct {
 	CLIPath        string
 	Port           string
 	Enabled        bool
+	HFGain         int
 	Runner         CLICommandRunner
 	SessionFactory PM3SessionFactory
 	Beeper         Beeper
@@ -45,6 +47,8 @@ type CLIProxmarkReader struct {
 	cliPath        string
 	port           string
 	enabled        bool
+	hfGain         int
+	threshApplied  bool
 	runner         CLICommandRunner // one-shot (tests); nil ⇒ persistent session
 	sessionFactory PM3SessionFactory
 	beeper         Beeper
@@ -70,6 +74,7 @@ func NewCLIProxmarkReader(cfg CLIProxmarkConfig) *CLIProxmarkReader {
 		cliPath: cliPath,
 		port:    cfg.Port,
 		enabled: cfg.Enabled,
+		hfGain:  ClampHFGain(cfg.HFGain),
 		beeper:  beeper,
 		backoff: proxmarkReconnectMinBackoff,
 	}
@@ -381,6 +386,55 @@ func (r *CLIProxmarkReader) Poll() (string, error) {
 	return uid, nil
 }
 
+// SetHFGain sets the HF antenna gain (1–63, default 63) and reapplies the
+// Proxmark threshold when a session or one-shot runner is active.
+func (r *CLIProxmarkReader) SetHFGain(g int) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hfGain = ClampHFGain(g)
+	r.threshApplied = false
+	if (!r.useSession && r.runner != nil) || r.session != nil {
+		r.applyThreshLocked(context.Background())
+	}
+}
+
+func hfThreshCommand(gain int) string {
+	return fmt.Sprintf("hw sethfthresh -t %d", HFThreshFromGain(gain))
+}
+
+// applyThreshLocked runs ensureThreshLocked and logs failures without aborting
+// the caller's primary command. Caller must hold r.mu.
+func (r *CLIProxmarkReader) applyThreshLocked(ctx context.Context) {
+	if err := r.ensureThreshLocked(ctx); err != nil {
+		log.Printf("proxmark hf thresh apply failed (gain=%d): %v", r.hfGain, err)
+	}
+}
+
+// ensureThreshLocked applies hw sethfthresh once per connection/session.
+// Caller must hold r.mu. On failure, threshApplied stays false for retry.
+func (r *CLIProxmarkReader) ensureThreshLocked(ctx context.Context) error {
+	if r.threshApplied {
+		return nil
+	}
+	cmd := hfThreshCommand(r.hfGain)
+	var err error
+	if !r.useSession {
+		_, err = r.runner(cmd)
+	} else if r.session != nil {
+		_, err = r.session.Run(ctx, cmd)
+	} else {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	r.threshApplied = true
+	return nil
+}
+
 // SetBeepEnabled toggles the laptop beep on successful Poll (write-only disables it).
 func (r *CLIProxmarkReader) SetBeepEnabled(enabled bool) {
 	if r == nil {
@@ -428,25 +482,27 @@ func (r *CLIProxmarkReader) Close() error {
 
 // runLocked executes a pm3 command. Caller must hold r.mu.
 func (r *CLIProxmarkReader) runLocked(ctx context.Context, command string) (string, error) {
-	if !r.useSession {
-		return r.runner(command)
-	}
-	if err := r.ensureSessionLocked(ctx); err != nil {
-		return "", err
-	}
-	stdout, err := r.session.Run(ctx, command)
-	if err != nil {
-		// Card-select / empty-antenna failures still print a prompt. Keep the
-		// session warm so continuous Poll does not thrash COM reconnect backoff.
-		if pm3DeviceResponded(stdout) {
+	if r.useSession {
+		if err := r.ensureSessionLocked(ctx); err != nil {
+			return "", err
+		}
+		r.applyThreshLocked(ctx)
+		stdout, err := r.session.Run(ctx, command)
+		if err != nil {
+			// Card-select / empty-antenna failures still print a prompt. Keep the
+			// session warm so continuous Poll does not thrash COM reconnect backoff.
+			if pm3DeviceResponded(stdout) {
+				return stdout, err
+			}
+			_ = r.closeSessionLocked()
+			r.scheduleRetryLocked()
 			return stdout, err
 		}
-		_ = r.closeSessionLocked()
-		r.scheduleRetryLocked()
-		return stdout, err
+		r.backoff = proxmarkReconnectMinBackoff
+		return stdout, nil
 	}
-	r.backoff = proxmarkReconnectMinBackoff
-	return stdout, nil
+	r.applyThreshLocked(ctx)
+	return r.runner(command)
 }
 
 func (r *CLIProxmarkReader) ensureSessionLocked(ctx context.Context) error {
@@ -463,6 +519,7 @@ func (r *CLIProxmarkReader) ensureSessionLocked(ctx context.Context) error {
 		return err
 	}
 	r.session = sess
+	r.threshApplied = false
 	return nil
 }
 
@@ -472,6 +529,7 @@ func (r *CLIProxmarkReader) closeSessionLocked() error {
 	}
 	err := r.session.Close()
 	r.session = nil
+	r.threshApplied = false
 	return err
 }
 

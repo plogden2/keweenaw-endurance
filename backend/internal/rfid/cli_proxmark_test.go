@@ -21,6 +21,9 @@ func TestCLIProxmarkReader_PollParsesFourPages(t *testing.T) {
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
 			assert.Equal(t, "hf mfu rdbl -b 4", command)
 			return combined, nil
 		},
@@ -38,6 +41,9 @@ func TestCLIProxmarkReader_PollParsesDataLine16Bytes(t *testing.T) {
 		Enabled: true,
 		Beeper:  beep,
 		Runner: func(command string) (string, error) {
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
 			assert.Equal(t, "hf mfu rdbl -b 4", command)
 			return "Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n", nil
 		},
@@ -72,16 +78,20 @@ func TestCLIProxmarkReader_WriteLogicalUUIDWritesFourPages(t *testing.T) {
 		Enabled: true,
 		Runner: func(command string) (string, error) {
 			commands = append(commands, command)
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
 			return "ok", nil
 		},
 	})
 
 	err := reader.WriteLogicalUUID(logicalUUID)
 	require.NoError(t, err)
-	require.Len(t, commands, 1)
+	require.Len(t, commands, 2)
+	assert.Equal(t, "hw sethfthresh -t 1", commands[0])
 	assert.Equal(t,
 		"hf mfu wrbl -b 4 -d 1441674d; hf mfu wrbl -b 5 -d a011471a; hf mfu wrbl -b 6 -d a601722b; hf mfu wrbl -b 7 -d 88b117f5",
-		commands[0],
+		commands[1],
 	)
 }
 
@@ -189,6 +199,9 @@ func TestCLIProxmarkReader_DetectISO14443A(t *testing.T) {
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
 			assert.Equal(t, "hf 14a reader", command)
 			return "[+] UID: 04 12 34 56 78 9A 80\n[+] ATQA: 00 44\n[+] SAK: 00\n", nil
 		},
@@ -221,6 +234,9 @@ func TestCLIProxmarkReader_WritePageCommandFormat(t *testing.T) {
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
 			assert.NotContains(t, command, "--blk")
 			assert.Contains(t, command, "-b ")
 			for _, part := range strings.Split(command, ";") {
@@ -245,15 +261,71 @@ func TestCLIProxmarkReader_WritePageCommandFormat(t *testing.T) {
 }
 
 func TestCLIProxmarkReader_PollPageCommandFormat(t *testing.T) {
-	var seen string
+	var cmds []string
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
-			seen = command
+			cmds = append(cmds, command)
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
 			return "Data : 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n", nil
 		},
 	})
 	_, err := reader.Poll()
 	require.NoError(t, err)
-	assert.Equal(t, "hf mfu rdbl -b 4", seen)
+	require.GreaterOrEqual(t, len(cmds), 2)
+	assert.Equal(t, "hw sethfthresh -t 1", cmds[0])
+	assert.Equal(t, "hf mfu rdbl -b 4", cmds[1])
+}
+
+func TestCLIProxmarkReader_AppliesHFThreshBeforePoll(t *testing.T) {
+	var cmds []string
+	r := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		HFGain:  63,
+		Runner: func(command string) (string, error) {
+			cmds = append(cmds, command)
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
+			return "Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n", nil
+		},
+	})
+	_, err := r.Poll()
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(cmds), 2)
+	assert.Equal(t, "hw sethfthresh -t 1", cmds[0])
+	assert.Equal(t, "hf mfu rdbl -b 4", cmds[1])
+}
+
+func TestCLIProxmarkReader_SetHFGainReapplies(t *testing.T) {
+	var cmds []string
+	r := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		HFGain:  63,
+		Runner: func(command string) (string, error) {
+			cmds = append(cmds, command)
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
+			return "Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n", nil
+		},
+	})
+	_, err := r.Poll()
+	require.NoError(t, err)
+
+	r.SetHFGain(50)
+	_, err = r.Poll()
+	require.NoError(t, err)
+
+	var threshCmds []string
+	for _, c := range cmds {
+		if strings.HasPrefix(c, "hw sethfthresh") {
+			threshCmds = append(threshCmds, c)
+		}
+	}
+	require.Len(t, threshCmds, 2)
+	assert.Equal(t, "hw sethfthresh -t 1", threshCmds[0])
+	assert.Equal(t, "hw sethfthresh -t 14", threshCmds[1])
 }

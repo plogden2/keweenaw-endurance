@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/keweenaw-endurance/backend/internal/rfid"
 	"github.com/keweenaw-endurance/backend/internal/services"
 )
 
@@ -27,6 +29,7 @@ type Config struct {
 	RFIDHardware    bool          `json:"rfid_hardware"`
 	BridgeMock      bool          `json:"bridge_mock"`
 	WriteOnly       bool          `json:"write_only"`
+	HFGain          int           `json:"hf_gain"`
 	PollInterval    time.Duration `json:"-"`
 	PollMS          int           `json:"poll_ms"`
 }
@@ -47,6 +50,7 @@ type configFile struct {
 	RFIDHardware    bool   `json:"rfid_hardware"`
 	BridgeMock      bool   `json:"bridge_mock"`
 	WriteOnly       bool   `json:"write_only"`
+	HFGain          int    `json:"hf_gain"`
 	PollMS          int    `json:"poll_ms"`
 }
 
@@ -65,6 +69,7 @@ func DefaultConfig() Config {
 		PartitionSignal: filepath.Join(os.TempDir(), "keweenaw-bridge-partition.signal"),
 		ProxmarkCLI:     "pm3",
 		ProxmarkPort:    "COM3",
+		HFGain:          rfid.HFGainDefault,
 		PollInterval:    500 * time.Millisecond,
 		PollMS:          500,
 	}
@@ -143,6 +148,7 @@ func SaveConfig(path string, cfg Config) error {
 		RFIDHardware:    cfg.RFIDHardware,
 		BridgeMock:      cfg.BridgeMock,
 		WriteOnly:       cfg.WriteOnly,
+		HFGain:          cfg.HFGain,
 		PollMS:          cfg.PollMS,
 	}
 	raw, err := json.MarshalIndent(file, "", "  ")
@@ -208,6 +214,11 @@ func ApplyEnv(cfg *Config) {
 			cfg.PollMS = int(ms / time.Millisecond)
 		}
 	}
+	if v := strings.TrimSpace(os.Getenv("PROXMARK3_HF_GAIN")); v != "" {
+		if gain, err := strconv.Atoi(v); err == nil {
+			cfg.HFGain = gain
+		}
+	}
 }
 
 func configFromFile(file configFile) Config {
@@ -227,6 +238,7 @@ func configFromFile(file configFile) Config {
 		RFIDHardware:    file.RFIDHardware,
 		BridgeMock:      file.BridgeMock,
 		WriteOnly:       file.WriteOnly,
+		HFGain:          file.HFGain,
 		PollMS:          file.PollMS,
 	}
 	return cfg
@@ -273,6 +285,7 @@ func mergeConfig(base, overlay Config) Config {
 	out.RFIDHardware = overlay.RFIDHardware
 	out.BridgeMock = overlay.BridgeMock
 	out.WriteOnly = overlay.WriteOnly
+	out.HFGain = overlay.HFGain
 	if overlay.PollMS > 0 {
 		out.PollMS = overlay.PollMS
 	}
@@ -319,4 +332,5 @@ func normalizeConfig(cfg *Config) {
 		}
 	}
 	cfg.PollInterval = time.Duration(cfg.PollMS) * time.Millisecond
+	cfg.HFGain = rfid.ClampHFGain(cfg.HFGain)
 }
