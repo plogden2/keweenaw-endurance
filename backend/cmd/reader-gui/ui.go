@@ -50,12 +50,13 @@ type readerUI struct {
 	writeOnlyCheck   *widget.Check
 	autofillMsg      *widget.Label
 
-	statusMode   *widget.Label
-	statusDetail *widget.Label
-	statusTap    *widget.Label
-	statusError  *widget.Label
-	startBtn     *widget.Button
-	stopBtn      *widget.Button
+	statusMode     *widget.Label
+	statusDetail   *widget.Label
+	statusTap      *widget.Label
+	statusCooldown *widget.Label
+	statusError    *widget.Label
+	startBtn       *widget.Button
+	stopBtn        *widget.Button
 
 	bibEntry         *widget.Entry
 	manualRaceSelect *widget.Select
@@ -162,6 +163,8 @@ func (ui *readerUI) build() {
 	ui.statusDetail.Wrapping = fyne.TextWrapWord
 	ui.statusTap = widget.NewLabel("Last tap: —")
 	ui.statusTap.Wrapping = fyne.TextWrapWord
+	ui.statusCooldown = widget.NewLabel("Successful scan cooldown: 1s (same chip)")
+	ui.statusCooldown.Wrapping = fyne.TextWrapWord
 	ui.statusError = widget.NewLabel("")
 	ui.statusError.Wrapping = fyne.TextWrapWord
 
@@ -351,6 +354,7 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 		ui.statusMode,
 		ui.statusDetail,
 		ui.statusTap,
+		ui.statusCooldown,
 		ui.statusError,
 	)
 

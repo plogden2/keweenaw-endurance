@@ -1,6 +1,7 @@
 package rfid
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -24,7 +25,38 @@ func TestCLIProxmarkReader_PollParsesFourPages(t *testing.T) {
 			if strings.HasPrefix(command, "hw sethfthresh") {
 				return "Thresholds set.", nil
 			}
-			assert.Equal(t, "hf mfu rdbl -b 4", command)
+			assert.Equal(t, proxmarkReadLogicalUUIDCmd, command)
+			return combined, nil
+		},
+	})
+
+	got, err := reader.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, logicalUUID, got)
+}
+
+func TestCLIProxmarkReader_PollParsesChainedRRGTables(t *testing.T) {
+	// Real RRG client: one table per rdbl, header contains the word "Data".
+	const logicalUUID = "23657b2d-aa08-5fe8-8553-e9e3affb4678"
+	combined := strings.Join([]string{
+		"[=] Session log C:/Users/gener/Documents/keweenaw-endurance/backend/.proxmark3/logs/log_20260730214312.txt\n",
+		"[=] Block#  | Data        | Ascii\n",
+		"[=] -----------------------------\n",
+		"[=] 04/0x04 | 23 65 7B 2D | #e{-\n",
+		"[=] Block#  | Data        | Ascii\n",
+		"[=] 05/0x05 | AA 08 5F E8 | .._.\n",
+		"[=] Block#  | Data        | Ascii\n",
+		"[=] 06/0x06 | 85 53 E9 E3 | .S..\n",
+		"[=] Block#  | Data        | Ascii\n",
+		"[=] 07/0x07 | AF FB 46 78 | ..Fx\n",
+	}, "")
+
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Runner: func(command string) (string, error) {
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
 			return combined, nil
 		},
 	})
@@ -44,7 +76,7 @@ func TestCLIProxmarkReader_PollParsesDataLine16Bytes(t *testing.T) {
 			if strings.HasPrefix(command, "hw sethfthresh") {
 				return "Thresholds set.", nil
 			}
-			assert.Equal(t, "hf mfu rdbl -b 4", command)
+			assert.Equal(t, proxmarkReadLogicalUUIDCmd, command)
 			return "Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n", nil
 		},
 	})
@@ -52,10 +84,11 @@ func TestCLIProxmarkReader_PollParsesDataLine16Bytes(t *testing.T) {
 	got, err := reader.Poll()
 	require.NoError(t, err)
 	assert.Equal(t, logicalUUID, got)
-	assert.Equal(t, 1, beep.calls)
+	// Tap tone moved to bridgeapp.emitRead (write-tag scores without Poll).
+	assert.Equal(t, 0, beep.calls)
 }
 
-func TestCLIProxmarkReader_PollBeepsOnlyOnSuccess(t *testing.T) {
+func TestCLIProxmarkReader_PollEmptyDoesNotBeep(t *testing.T) {
 	beep := &recordingBeeper{}
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
@@ -88,7 +121,7 @@ func TestCLIProxmarkReader_WriteLogicalUUIDWritesFourPages(t *testing.T) {
 	err := reader.WriteLogicalUUID(logicalUUID)
 	require.NoError(t, err)
 	require.Len(t, commands, 2)
-	assert.Equal(t, "hw sethfthresh -t 1", commands[0])
+	assert.Equal(t, "hw sethfthresh -t 3", commands[0])
 	assert.Equal(t,
 		"hf mfu wrbl -b 4 -d 1441674d; hf mfu wrbl -b 5 -d a011471a; hf mfu wrbl -b 6 -d a601722b; hf mfu wrbl -b 7 -d 88b117f5",
 		commands[1],
@@ -167,9 +200,9 @@ func TestCLIProxmarkReader_PollParseFailure(t *testing.T) {
 		},
 	})
 
-	_, err := reader.Poll()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no hex payload")
+	got, err := reader.Poll()
+	require.NoError(t, err)
+	assert.Empty(t, got) // soft-fail empty tick so the poll loop keeps running
 }
 
 func TestParseReadBlockOutput_DataLineFormat(t *testing.T) {
@@ -275,8 +308,8 @@ func TestCLIProxmarkReader_PollPageCommandFormat(t *testing.T) {
 	_, err := reader.Poll()
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(cmds), 2)
-	assert.Equal(t, "hw sethfthresh -t 1", cmds[0])
-	assert.Equal(t, "hf mfu rdbl -b 4", cmds[1])
+	assert.Equal(t, "hw sethfthresh -t 3", cmds[0])
+	assert.Equal(t, proxmarkReadLogicalUUIDCmd, cmds[1])
 }
 
 func TestCLIProxmarkReader_AppliesHFThreshBeforePoll(t *testing.T) {
@@ -295,8 +328,8 @@ func TestCLIProxmarkReader_AppliesHFThreshBeforePoll(t *testing.T) {
 	_, err := r.Poll()
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(cmds), 2)
-	assert.Equal(t, "hw sethfthresh -t 1", cmds[0])
-	assert.Equal(t, "hf mfu rdbl -b 4", cmds[1])
+	assert.Equal(t, "hw sethfthresh -t 3", cmds[0])
+	assert.Equal(t, proxmarkReadLogicalUUIDCmd, cmds[1])
 }
 
 func TestCLIProxmarkReader_SetHFGainReapplies(t *testing.T) {
@@ -326,6 +359,44 @@ func TestCLIProxmarkReader_SetHFGainReapplies(t *testing.T) {
 		}
 	}
 	require.Len(t, threshCmds, 2)
-	assert.Equal(t, "hw sethfthresh -t 1", threshCmds[0])
+	assert.Equal(t, "hw sethfthresh -t 3", threshCmds[0])
 	assert.Equal(t, "hw sethfthresh -t 14", threshCmds[1])
+}
+
+func TestCLIProxmarkReader_ArmScanUsesWaitForCard(t *testing.T) {
+	const logicalUUID = "23657b2d-aa08-5fe8-8553-e9e3affb4678"
+	var gotCmd string
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		HFGain:  57,
+		Runner: func(command string) (string, error) {
+			gotCmd = command
+			return strings.Join([]string{
+				"[=] 04/0x04 | 23 65 7B 2D | #e{-\n",
+				"[=] 05/0x05 | AA 08 5F E8 | .._.\n",
+				"[=] 06/0x06 | 85 53 E9 E3 | .S..\n",
+				"[=] 07/0x07 | AF FB 46 78 | ..Fx\n",
+			}, ""), nil
+		},
+	})
+
+	got, err := reader.ArmScan(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, logicalUUID, got)
+	assert.Contains(t, gotCmd, "hf 14a reader -w --skip")
+	assert.Contains(t, gotCmd, proxmarkReadLogicalUUIDCmd)
+	assert.Contains(t, gotCmd, "hw sethfthresh")
+}
+
+func TestParseRaw14aRead16(t *testing.T) {
+	stdout := strings.Join([]string{
+		"[+]  UID: 04 26 98 02 47 20 91",
+		"[+] 23 65 7B 2D AA 08 5F E8 85 53 E9 E3 AF FB 46 78 [ 4B A1 ]",
+		"KEWEENAW_TAP_END",
+	}, "\n")
+	raw, err := parseLogicalUUIDBytes(stdout)
+	require.NoError(t, err)
+	uid, err := DecodeLogicalUUID(raw)
+	require.NoError(t, err)
+	assert.Equal(t, "23657b2d-aa08-5fe8-8553-e9e3affb4678", uid)
 }

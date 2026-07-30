@@ -84,9 +84,9 @@ func TestCLIProxmarkReader_PersistentSessionPollAndReconnect(t *testing.T) {
 	got, err := reader.Poll()
 	require.NoError(t, err)
 	assert.Equal(t, logicalUUID, got)
-	assert.Equal(t, 1, beep.calls)
+	assert.Equal(t, 0, beep.calls) // tone is in bridgeapp.emitRead
 	require.Len(t, sessions, 1)
-	assert.Equal(t, []string{"hw sethfthresh -t 1", "hf mfu rdbl -b 4"}, sessions[0].commands)
+	assert.Equal(t, []string{"hw sethfthresh -t 3", proxmarkReadLogicalUUIDCmd}, sessions[0].commands)
 
 	// Force session death on next poll.
 	reader.mu.Lock()
@@ -114,7 +114,7 @@ func TestCLIProxmarkReader_PersistentSessionPollAndReconnect(t *testing.T) {
 	got, err = reader.Poll()
 	require.NoError(t, err)
 	assert.Equal(t, logicalUUID, got)
-	assert.Equal(t, 2, beep.calls)
+	assert.Equal(t, 0, beep.calls)
 }
 
 func TestPM3PromptPattern(t *testing.T) {

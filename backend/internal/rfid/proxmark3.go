@@ -1,6 +1,7 @@
 package rfid
 
 import (
+	"context"
 	"errors"
 	"os"
 	"strings"
@@ -38,6 +39,20 @@ func (p *Proxmark3) WriteLogicalUUID(logicalUUID string) error {
 func (p *Proxmark3) Poll() (string, error) {
 	if p == nil || p.reader == nil || !p.reader.IsAvailable() {
 		return "", ErrHardwareUnavailable
+	}
+	return p.reader.Poll()
+}
+
+// ArmScan blocks until a tag is seen (when supported), then returns its logical UUID.
+// Falls back to Poll for mock/no-op readers.
+func (p *Proxmark3) ArmScan(ctx context.Context) (string, error) {
+	if p == nil || p.reader == nil || !p.reader.IsAvailable() {
+		return "", ErrHardwareUnavailable
+	}
+	if arm, ok := p.reader.(interface {
+		ArmScan(context.Context) (string, error)
+	}); ok {
+		return arm.ArmScan(ctx)
 	}
 	return p.reader.Poll()
 }

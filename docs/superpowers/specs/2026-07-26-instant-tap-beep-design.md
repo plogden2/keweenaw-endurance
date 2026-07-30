@@ -30,7 +30,7 @@ Finish-line taps require holding a tag on the Proxmark antenna for seconds. Root
 | Parse | Prefer 16-byte `Data : …` line; fallback to four labelled 4-byte page rows; require exactly 16 bytes |
 | Proxmark beep | **Not available** on deployed RRG client (`hw help` has no beep). Use **laptop MessageBeep** on successful Poll instead |
 | Browser sound | Unchanged Mario Kart on `result === 'lap'` |
-| Online same-UUID debounce | Keep **2s** (faster polls would otherwise spam while tag rests on mat) |
+| Online same-UUID debounce | **1s** cooldown after a successful scan (same chip) |
 | Offline debounce | Keep **60s** |
 | Session start | `proxmark3 -p <port> -f --incognito` (no `-c`); wait for `(?:\[.*\]\s*)?pm3 -->` |
 | Crash/reconnect | On EOF/exit/timeout: close, clear session, lazy reconnect next op with backoff 1s→15s cap; never sleep while holding mutex |

@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -207,6 +208,7 @@ func (a *App) Start(parent context.Context) error {
 			a.runCancel = nil
 			a.mu.Unlock()
 		}()
+		rfid.PrewarmTapBeep()
 		go a.runLocalHTTP(ctx)
 		go a.runPollLoop(ctx)
 		a.runBridgeLoop(ctx)
@@ -492,6 +494,7 @@ func (a *App) runLocalHTTP(ctx context.Context) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/status", a.handleStatus)
 	mux.HandleFunc("/write-tag", a.handleWriteTag)
+	mux.HandleFunc("/beep", a.handleBeep)
 
 	srv := &http.Server{
 		Addr:    a.cfg.LocalAddr,
@@ -504,7 +507,7 @@ func (a *App) runLocalHTTP(ctx context.Context) {
 		_ = srv.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("local bridge HTTP listening on http://%s (status, write-tag)", a.cfg.LocalAddr)
+	log.Printf("local bridge HTTP listening on http://%s (status, write-tag, beep)", a.cfg.LocalAddr)
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Printf("local HTTP stopped: %v", err)
 		a.setLastError(err)
@@ -518,6 +521,17 @@ func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(a.snapshotStatusMap())
+}
+
+// handleBeep plays the tap tone for audio diagnostics (always on, even write-only).
+func (a *App) handleBeep(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	rfid.PlayTapBeep()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
 
 type writeTagRequest struct {
@@ -588,11 +602,17 @@ func (a *App) writeChip(logicalUUID string) error {
 	a.mu.Unlock()
 	// Score the UUID we just programmed. Do not re-Poll: Windows one-shot CLI
 	// reads after wrbl are flaky and the dress rehearsal only waits on feedback.
-	a.emitRead(normalized)
+	a.emitRead(normalized, true)
 	return nil
 }
 
 func (a *App) runPollLoop(ctx context.Context) {
+	// Hardware finish line: arm Proxmark continuous wait-for-card (hf 14a reader -w)
+	// instead of spawn-per-tick one-shot polls that miss sub-second waves.
+	if a.cfg.RFIDHardware && !a.cfg.BridgeMock {
+		a.runContinuousArm(ctx)
+		return
+	}
 	ticker := time.NewTicker(a.cfg.PollInterval)
 	defer ticker.Stop()
 
@@ -606,25 +626,72 @@ func (a *App) runPollLoop(ctx context.Context) {
 	}
 }
 
+func (a *App) runContinuousArm(ctx context.Context) {
+	log.Printf("rfid: continuous arm scan (hf 14a reader -w)")
+	for {
+		if err := ctx.Err(); err != nil {
+			return
+		}
+		logicalUUID, err := a.pm3.ArmScan(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return
+			}
+			log.Printf("rfid arm scan: %v", err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+			continue
+		}
+		if logicalUUID == "" {
+			continue
+		}
+		// Arm path already beeped when the raw READ line arrived.
+		a.emitRead(strings.ToLower(strings.TrimSpace(logicalUUID)), false)
+	}
+}
+
 func (a *App) pollOnce() {
 	logicalUUID, err := a.pm3.Poll()
 	if err != nil || logicalUUID == "" {
 		return
 	}
-	a.emitRead(strings.ToLower(strings.TrimSpace(logicalUUID)))
+	a.emitRead(strings.ToLower(strings.TrimSpace(logicalUUID)), true)
 }
 
-func (a *App) emitRead(logicalUUID string) {
+// ReadSuccessCooldown is how long the finish reader ignores the same UUID
+// after a successful scan (online). Prevents double-fires while a chip rests
+// on the mat without feeling sluggish between racers.
+const ReadSuccessCooldown = time.Second
+
+// readDebounce returns how long to suppress duplicate UUID taps.
+// BRIDGE_READ_DEBOUNCE_MS overrides (0 = accept every successful read).
+// Default: 1s online / 60s offline (offline avoids flooding the pending queue).
+func (a *App) readDebounce() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("BRIDGE_READ_DEBOUNCE_MS")); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms >= 0 {
+			return time.Duration(ms) * time.Millisecond
+		}
+	}
+	if a.partitioned() || !a.online {
+		return 60 * time.Second
+	}
+	return ReadSuccessCooldown
+}
+
+func (a *App) emitRead(logicalUUID string, playBeep bool) {
 	if logicalUUID == "" {
 		return
 	}
 
 	a.mu.Lock()
 	a.chipMemory = logicalUUID
-	debounce := 2 * time.Second
-	if a.partitioned() || !a.online {
-		debounce = 60 * time.Second
-	}
+	debounce := a.readDebounce()
 	if logicalUUID == a.lastRead && time.Since(a.lastReadAt) < debounce {
 		a.mu.Unlock()
 		return
@@ -652,6 +719,11 @@ func (a *App) emitRead(logicalUUID string) {
 	online := a.online
 	conn := a.conn
 	a.mu.Unlock()
+
+	// write-tag / mock poll: beep here. Continuous Lua arm beeps earlier (raw READ).
+	if playBeep && !writeOnly {
+		rfid.PlayTapBeep()
+	}
 
 	if writeOnly {
 		a.publishStatus()

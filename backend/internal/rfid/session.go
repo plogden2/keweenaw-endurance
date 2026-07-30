@@ -91,11 +91,15 @@ func openProcessSession(ctx context.Context, cliPath, port string) (PM3Session, 
 
 func (s *processSession) Run(ctx context.Context, command string) (string, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.closed {
+		s.mu.Unlock()
 		return "", fmt.Errorf("proxmark session closed")
 	}
-	if _, err := io.WriteString(s.stdin, command+"\n"); err != nil {
+	stdin := s.stdin
+	s.mu.Unlock()
+	// Do not hold s.mu across readUntilPrompt — Close must be able to kill the
+	// child while ArmScan is blocked in hf 14a reader -w.
+	if _, err := io.WriteString(stdin, command+"\n"); err != nil {
 		return "", fmt.Errorf("proxmark session write: %w", err)
 	}
 	return s.readUntilPrompt(ctx)
@@ -138,16 +142,23 @@ func (s *processSession) readUntilPrompt(ctx context.Context) (string, error) {
 
 func (s *processSession) Close() error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.closed {
+		s.mu.Unlock()
 		return nil
 	}
 	s.closed = true
-	_ = s.stdin.Close()
-	if s.cmd.Process != nil {
-		_ = s.cmd.Process.Kill()
+	stdin := s.stdin
+	cmd := s.cmd
+	s.mu.Unlock()
+	if stdin != nil {
+		_ = stdin.Close()
 	}
-	_ = s.cmd.Wait()
+	if cmd != nil && cmd.Process != nil {
+		_ = cmd.Process.Kill()
+	}
+	if cmd != nil {
+		_ = cmd.Wait()
+	}
 	return nil
 }
 

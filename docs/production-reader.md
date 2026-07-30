@@ -38,6 +38,8 @@ Short setup and ops guide for the finish-line laptop against live production.
 
    `scripts\pm3.cmd` → ProxSpace client on COM3
 
+   Finish reads use a continuous Proxmark arm. Same-chip cooldown after a successful scan is **1 second**.
+
 3. Build the reader GUI once (64-bit MinGW required — ProxSpace provides it):
 
 ```powershell
@@ -71,7 +73,7 @@ powershell -File scripts\pack-reader-setup.ps1
    - **COM port:** usually `COM3`
    - **Proxmark CLI:** `C:\Users\gener\Documents\keweenaw-endurance\scripts\pm3.cmd`
    - Check **Use Proxmark hardware**
-   - **HF gain:** defaults to **63** (max sensitivity); maps to Proxmark `hw sethfthresh` — lower if false triggers / noise
+   - **HF gain:** defaults to **63** (max sensitivity); maps to Proxmark `hw sethfthresh` (floored at 3 — raw thresh 1/2 break anticollision on this client). Lower the slider if false triggers / noise
 3. **Save config** → **Test Proxmark** → **Start bridge**
 4. Confirm status shows **ONLINE_SYNCED** (or `online_synced`).
 

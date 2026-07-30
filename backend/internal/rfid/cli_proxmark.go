@@ -2,6 +2,7 @@ package rfid
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -22,6 +23,11 @@ const (
 	proxmarkPageSize            = 4
 	proxmarkLogicalUUIDPages    = 4 // 16 bytes
 	proxmarkCLIExecTimeout      = 15 * time.Second
+	// Current RRG pm3 returns one 4-byte page per `hf mfu rdbl`; chain four reads.
+	proxmarkReadLogicalUUIDCmd = "hf mfu rdbl -b 4; hf mfu rdbl -b 5; hf mfu rdbl -b 6; hf mfu rdbl -b 7"
+	// Continuous arm: block in the Proxmark client until a tag enters the field,
+	// then read logical UUID pages. Keeps RF scanning without spawn-per-poll.
+	proxmarkArmScanCmd = "hf 14a reader -w --skip; " + proxmarkReadLogicalUUIDCmd
 )
 
 // CLICommandRunner executes the Proxmark3 CLI with the given pm3 subcommand string.
@@ -59,6 +65,13 @@ type CLIProxmarkReader struct {
 	nextRetry  time.Time
 	backoff    time.Duration
 	useSession bool
+	// injectedRunner is true when tests supply CLIProxmarkConfig.Runner.
+	injectedRunner bool
+	writing        bool
+	armCancel      context.CancelFunc
+	armDone        chan struct{}
+	luaArm         *luaArmProcess
+	lastTapBeep    time.Time
 }
 
 func NewCLIProxmarkReader(cfg CLIProxmarkConfig) *CLIProxmarkReader {
@@ -81,6 +94,7 @@ func NewCLIProxmarkReader(cfg CLIProxmarkConfig) *CLIProxmarkReader {
 	r.beepEnabled.Store(true)
 	if cfg.Runner != nil {
 		r.runner = cfg.Runner
+		r.injectedRunner = true
 		r.useSession = false
 	} else if cfg.SessionFactory != nil {
 		r.sessionFactory = cfg.SessionFactory
@@ -88,6 +102,7 @@ func NewCLIProxmarkReader(cfg CLIProxmarkConfig) *CLIProxmarkReader {
 	} else if preferOneShotCLI() {
 		// Windows Proxmark clients using linenoise often never emit "pm3 -->"
 		// when stdin/stdout are pipes, so persistent sessions hang on startup.
+		// Continuous finish-line reads use ArmScan (hf 14a reader -w) instead.
 		r.runner = defaultCLICommandRunner(cliPath, cfg.Port)
 		r.useSession = false
 	} else {
@@ -111,24 +126,36 @@ func defaultCLICommandRunner(cliPath, port string) CLICommandRunner {
 	return func(command string) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), proxmarkCLIExecTimeout)
 		defer cancel()
-
-		args := []string{}
-		if port != "" {
-			args = append(args, "-p", port)
-		}
-		args = append(args, "-f", "--incognito", "-c", command)
-
-		cmd := exec.CommandContext(ctx, cliPath, args...)
-		cmd.Env = proxmarkCommandEnv(cliPath)
-		out, err := cmd.CombinedOutput()
-		if ctx.Err() == context.DeadlineExceeded {
-			return string(out), fmt.Errorf("proxmark3 cli %q: timed out after %s", command, proxmarkCLIExecTimeout)
-		}
-		if err != nil {
-			return string(out), fmt.Errorf("proxmark3 cli %q: %w: %s", command, err, strings.TrimSpace(string(out)))
-		}
-		return string(out), nil
+		return execProxmarkCLI(ctx, cliPath, port, command)
 	}
+}
+
+// execProxmarkCLI runs proxmark3.exe -c <command>. ctx cancel kills the process
+// (used by ArmScan wait-for-card so writes can reclaim COM).
+func execProxmarkCLI(ctx context.Context, cliPath, port, command string) (string, error) {
+	args := []string{}
+	if port != "" {
+		args = append(args, "-p", port)
+	}
+	args = append(args, "-f", "--incognito", "-c", command)
+
+	// Run proxmark3.exe directly — not pm3.cmd. CommandContext kill on
+	// timeout only signals the top-level process; killing cmd.exe leaves
+	// orphaned proxmark3.exe holding COM3 and blocks all later polls.
+	exe := resolveProxmarkExecutable(cliPath)
+	cmd := exec.CommandContext(ctx, exe, args...)
+	cmd.Env = proxmarkCommandEnv(cliPath)
+	out, err := cmd.CombinedOutput()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return string(out), fmt.Errorf("proxmark3 cli %q: timed out after %s", command, proxmarkCLIExecTimeout)
+	}
+	if ctx.Err() != nil {
+		return string(out), ctx.Err()
+	}
+	if err != nil {
+		return string(out), fmt.Errorf("proxmark3 cli %q: %w: %s", command, err, strings.TrimSpace(string(out)))
+	}
+	return string(out), nil
 }
 
 // resolveProxmarkExecutable maps wrapper scripts (pm3.cmd) to proxmark3.exe so
@@ -295,8 +322,13 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 	if err != nil {
 		return err
 	}
+	r.cancelArmAndWait()
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.writing = true
+	defer func() {
+		r.writing = false
+		r.mu.Unlock()
+	}()
 	parts := make([]string, 0, proxmarkLogicalUUIDPages)
 	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
 		page := proxmarkUserMemoryStartPage + i
@@ -328,7 +360,7 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 func (r *CLIProxmarkReader) verifyLogicalUUIDLocked(logicalUUID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionPollTimeout)
 	defer cancel()
-	stdout, err := r.runLocked(ctx, "hf mfu rdbl -b 4")
+	stdout, err := r.runLocked(ctx, proxmarkReadLogicalUUIDCmd)
 	if err != nil && !pm3DeviceResponded(stdout) {
 		return err
 	}
@@ -362,16 +394,109 @@ func (r *CLIProxmarkReader) Poll() (string, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionPollTimeout)
 	defer cancel()
-	stdout, err := r.runLocked(ctx, "hf mfu rdbl -b 4")
+	stdout, err := r.runLocked(ctx, proxmarkReadLogicalUUIDCmd)
 	if err != nil {
 		// Continuous poll loop: never fail the tick hard — empty means "try again".
 		_ = stdout
 		return "", nil
 	}
 
+	return parsePollUUID(stdout)
+}
+
+// ArmScan blocks until a tag enters the HF field (or ctx is cancelled), then
+// reads logical UUID pages. Used by the finish-line bridge instead of
+// spawn-per-poll one-shot ticks.
+func (r *CLIProxmarkReader) ArmScan(ctx context.Context) (string, error) {
+	if !r.IsAvailable() {
+		return "", ErrHardwareUnavailable
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	armCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+
+	r.mu.Lock()
+	for r.writing {
+		r.mu.Unlock()
+		select {
+		case <-armCtx.Done():
+			cancel()
+			return "", armCtx.Err()
+		case <-time.After(20 * time.Millisecond):
+		}
+		r.mu.Lock()
+	}
+	if r.armCancel != nil {
+		r.armCancel()
+	}
+	r.armCancel = cancel
+	r.armDone = done
+	gain := r.hfGain
+	useSession := r.useSession
+	injected := r.injectedRunner
+	r.mu.Unlock()
+
+	defer func() {
+		cancel()
+		close(done)
+		r.mu.Lock()
+		if r.armDone == done {
+			r.armDone = nil
+			r.armCancel = nil
+		}
+		r.mu.Unlock()
+	}()
+
+	if !useSession && !injected && r.preferLuaArm() {
+		return r.armScanLua(armCtx)
+	}
+
+	cmd := hfThreshCommand(gain) + "; " + proxmarkArmScanCmd
+	var stdout string
+	var err error
+	switch {
+	case useSession:
+		// Keep reader mu free while -w blocks so Write can cancelArmAndWait.
+		r.mu.Lock()
+		ensErr := r.ensureSessionLocked(armCtx)
+		var sess PM3Session
+		if ensErr == nil {
+			sess = r.session
+		}
+		r.mu.Unlock()
+		if ensErr != nil {
+			err = ensErr
+			break
+		}
+		stdout, err = sess.Run(armCtx, cmd)
+		if err != nil && !pm3DeviceResponded(stdout) {
+			r.mu.Lock()
+			_ = r.closeSessionLocked()
+			r.scheduleRetryLocked()
+			r.mu.Unlock()
+		}
+	case injected:
+		stdout, err = r.runner(cmd)
+	default:
+		stdout, err = execProxmarkCLI(armCtx, r.cliPath, r.port, cmd)
+	}
+	if armCtx.Err() != nil {
+		return "", armCtx.Err()
+	}
+	if err != nil && !pm3DeviceResponded(stdout) {
+		return "", err
+	}
+	return parsePollUUID(stdout)
+}
+
+func parsePollUUID(stdout string) (string, error) {
 	raw, parseErr := parseLogicalUUIDBytes(stdout)
 	if parseErr != nil {
-		return "", parseErr
+		// Partial/one-page dumps from older clients: treat as empty tick, not hard error.
+		return "", nil
 	}
 	if len(raw) == 0 || isZeroBlock(raw) {
 		return "", nil
@@ -380,10 +505,38 @@ func (r *CLIProxmarkReader) Poll() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if r.beepEnabled.Load() {
-		r.beeper.Beep()
-	}
+	// Beep is intentionally not here: bridgeapp.emitRead plays the tone on
+	// accepted taps. write-tag scores via emitRead without Polling, so a Poll-only
+	// beep would miss the dress-rehearsal / program-and-score path.
 	return uid, nil
+}
+
+func (r *CLIProxmarkReader) cancelArmAndWait() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	cancel := r.armCancel
+	done := r.armDone
+	arm := r.luaArm
+	r.luaArm = nil
+	if cancel != nil {
+		cancel()
+	}
+	if r.useSession {
+		_ = r.closeSessionLocked()
+	}
+	r.mu.Unlock()
+	if arm != nil {
+		_ = arm.Close()
+	}
+	if done == nil {
+		return
+	}
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+	}
 }
 
 // SetHFGain sets the HF antenna gain (1–63, default 63) and reapplies the
@@ -393,11 +546,17 @@ func (r *CLIProxmarkReader) SetHFGain(g int) {
 		return
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.hfGain = ClampHFGain(g)
 	r.threshApplied = false
+	// Lua arm bakes thresh into the script — restart so the new gain applies.
+	arm := r.luaArm
+	r.luaArm = nil
 	if (!r.useSession && r.runner != nil) || r.session != nil {
 		r.applyThreshLocked(context.Background())
+	}
+	r.mu.Unlock()
+	if arm != nil {
+		_ = arm.Close()
 	}
 }
 
@@ -470,11 +629,12 @@ func (r *CLIProxmarkReader) DetectISO14443A() (present bool, stdout string, err 
 	return false, stdout, nil
 }
 
-// Close tears down any persistent Proxmark session.
+// Close tears down any persistent Proxmark session and cancels an armed scan.
 func (r *CLIProxmarkReader) Close() error {
 	if r == nil {
 		return nil
 	}
+	r.cancelArmAndWait()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.closeSessionLocked()
@@ -544,14 +704,19 @@ func (r *CLIProxmarkReader) scheduleRetryLocked() {
 	}
 }
 
-// parseLogicalUUIDBytes extracts 16 user-memory bytes from a single
-// `hf mfu rdbl -b 4` transcript (Data : line or four page rows).
+// parseLogicalUUIDBytes extracts 16 user-memory bytes from pm3 read output:
+// a Type-2 raw READ line, a legacy `Data :` line with 16 bytes, or four
+// labeled page rows (4–7). It must not scrape hex from the whole transcript
+// (log paths / page labels otherwise fabricate garbage UUIDs like bebebe04-…).
 func parseLogicalUUIDBytes(stdout string) ([]byte, error) {
 	if strings.TrimSpace(stdout) == "" {
 		return nil, nil
 	}
-	if raw, err := parseReadBlockOutput(stdout); err == nil && len(raw) >= 16 {
-		return raw[:16], nil
+	if raw, ok := parseRaw14aRead16(stdout); ok {
+		return raw, nil
+	}
+	if raw, ok := parseSingleDataLine16(stdout); ok {
+		return raw, nil
 	}
 	raw := make([]byte, 0, 16)
 	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
@@ -569,6 +734,41 @@ func parseLogicalUUIDBytes(stdout string) ([]byte, error) {
 		return nil, fmt.Errorf("parse read: got %d bytes, need 16", len(raw))
 	}
 	return raw, nil
+}
+
+// raw14aReadPattern matches `hf 14a raw` Type-2 READ responses:
+//
+//	[+] 23 65 7B 2D AA 08 5F E8 85 53 E9 E3 AF FB 46 78 [ 4B A1 ]
+var raw14aReadPattern = regexp.MustCompile(`(?m)^\[\+\]\s*((?:[0-9A-Fa-f]{2}\s+){15}[0-9A-Fa-f]{2})\s*(?:\[|$)`)
+
+func parseRaw14aRead16(stdout string) ([]byte, bool) {
+	m := raw14aReadPattern.FindStringSubmatch(stdout)
+	if m == nil {
+		return nil, false
+	}
+	raw, ok := extractHexBytes(m[1])
+	if !ok || len(raw) < 16 {
+		return nil, false
+	}
+	return raw[:16], true
+}
+
+// parseSingleDataLine16 accepts only an unlabeled `Data : aa bb …` line with
+// ≥16 bytes. Table headers like `Block# | Data | Ascii` are ignored.
+func parseSingleDataLine16(stdout string) ([]byte, bool) {
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.Contains(line, "|") {
+			continue
+		}
+		lower := strings.ToLower(line)
+		if !strings.Contains(lower, "data") {
+			continue
+		}
+		if raw, ok := extractHexBytes(line); ok && len(raw) >= 16 {
+			return raw[:16], true
+		}
+	}
+	return nil, false
 }
 
 func pm3DeviceResponded(stdout string) bool {

@@ -16,3 +16,11 @@ func (asciiBeeper) Beep() {
 func defaultBeeper() Beeper {
 	return asciiBeeper{}
 }
+
+// PlayTapBeep is the non-Windows tap feedback (terminal bell).
+func PlayTapBeep() {
+	fmt.Fprint(os.Stderr, "\a")
+}
+
+// PrewarmTapBeep is a no-op outside Windows.
+func PrewarmTapBeep() {}
