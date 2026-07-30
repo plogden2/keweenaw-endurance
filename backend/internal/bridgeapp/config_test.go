@@ -1,10 +1,12 @@
 package bridgeapp
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/keweenaw-endurance/backend/internal/rfid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -68,6 +70,70 @@ func TestConfig_ApplyEnvOverridesFile(t *testing.T) {
 	assert.Equal(t, "evt-env", cfg.EventID)
 	assert.True(t, cfg.RFIDHardware)
 	assert.Equal(t, "COM7", cfg.ProxmarkPort)
+}
+
+func TestDefaultConfig_HFGain(t *testing.T) {
+	assert.Equal(t, rfid.HFGainDefault, DefaultConfig().HFGain)
+}
+
+func TestConfig_HFGainSaveLoadRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "reader-gui-config.json")
+
+	cfg := DefaultConfig()
+	cfg.DataDir = dir
+	cfg.HFGain = 40
+	require.NoError(t, SaveConfig(path, cfg))
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"hf_gain": 40`)
+
+	loaded, err := LoadConfigFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, 40, loaded.HFGain)
+}
+
+func TestConfig_ApplyEnvHFGainOverride(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "reader-gui-config.json")
+	require.NoError(t, SaveConfig(path, Config{
+		HostedAPIURL: "http://file.example",
+		DeviceID:     "from-file",
+		EventID:      "evt-file",
+		DataDir:      dir,
+		HFGain:       55,
+	}))
+
+	t.Setenv("PROXMARK3_HF_GAIN", "40")
+
+	cfg, err := LoadConfig(path)
+	require.NoError(t, err)
+	assert.Equal(t, 40, cfg.HFGain)
+}
+
+func TestConfig_HFGainNormalizeClampsInvalid(t *testing.T) {
+	t.Run("missing zero", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.HFGain = 0
+		normalizeConfig(&cfg)
+		assert.Equal(t, rfid.HFGainDefault, cfg.HFGain)
+	})
+
+	t.Run("out of range", func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.HFGain = 99
+		normalizeConfig(&cfg)
+		assert.Equal(t, rfid.HFGainDefault, cfg.HFGain)
+	})
+
+	t.Run("invalid env ignored", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "missing.json")
+		t.Setenv("PROXMARK3_HF_GAIN", "not-a-number")
+		cfg, err := LoadConfig(path)
+		require.NoError(t, err)
+		assert.Equal(t, rfid.HFGainDefault, cfg.HFGain)
+	})
 }
 
 func TestConfig_LoadMissingFileUsesDefaults(t *testing.T) {

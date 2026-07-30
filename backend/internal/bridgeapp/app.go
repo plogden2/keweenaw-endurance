@@ -120,6 +120,7 @@ func New(cfg Config) (*App, error) {
 		mode:   bridge.ModeOffline,
 	}
 	app.applyWriteOnlyToReader(cfg.WriteOnly)
+	app.applyHFGainToReader(cfg.HFGain)
 	return app, nil
 }
 
@@ -149,6 +150,25 @@ func (a *App) SetWriteOnly(enabled bool) {
 		if err := a.flushPending(conn); err != nil {
 			log.Printf("flush after leaving write-only: %v", err)
 		}
+	}
+}
+
+// SetHFGain updates the Proxmark HF antenna gain (1–63) without restarting.
+func (a *App) SetHFGain(gain int) {
+	if a == nil {
+		return
+	}
+	gain = rfid.ClampHFGain(gain)
+	a.mu.Lock()
+	a.cfg.HFGain = gain
+	a.mu.Unlock()
+	a.applyHFGainToReader(gain)
+	a.publishStatus()
+}
+
+func (a *App) applyHFGainToReader(gain int) {
+	if cli, ok := a.reader.(*rfid.CLIProxmarkReader); ok {
+		cli.SetHFGain(gain)
 	}
 }
 
@@ -408,6 +428,7 @@ func openReader(cfg Config) rfid.Reader {
 			CLIPath: cli,
 			Port:    cfg.ProxmarkPort,
 			Enabled: true,
+			HFGain:  cfg.HFGain,
 		})
 	}
 	return rfid.NewMockReader()
