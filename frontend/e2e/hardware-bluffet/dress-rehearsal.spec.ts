@@ -61,6 +61,12 @@ const KIDS_START_OFFSET_MS = 20 * 60_000
 const OUTAGE_START_OFFSET_MS = 14 * 60_000
 const OUTAGE_DURATION_MS = 5 * 60_000
 const RACE_END_OFFSET_MS = 30 * 60_000
+/** Compressed seed durations (must match 03-bluffet-2026-hardware.sql). */
+const TWELVE_HOUR_DURATION_MS = 30 * 60_000
+const SIX_HOUR_DURATION_MS = 15 * 60_000
+const KIDS_DURATION_MS = 5 * 60_000
+/** Leave enough wall time for write→score before a race auto-finishes. */
+const LAP_WRITE_BUDGET_MS = 75_000
 const FINALIZE_SETTLE_MS = 30_000
 const TICK_MS = 2_000
 
@@ -508,12 +514,25 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
       let outageServerLeakReported = false
 
       const raceEndAt = tZero.getTime() + RACE_END_OFFSET_MS
+      const raceEndByRaceId = new Map<string, number>([
+        [BLUFFET.races.twelveHour.id, tZero.getTime() + TWELVE_HOUR_DURATION_MS],
+        [BLUFFET.races.sixHour.id, tZero.getTime() + SIX_HOUR_DURATION_MS],
+        [BLUFFET.races.kids.id, tZero.getTime() + KIDS_START_OFFSET_MS + KIDS_DURATION_MS],
+      ])
 
       while (Date.now() < raceEndAt) {
         // Fresh clock every tick. Chaos/timeline MUST run before the lap engine —
         // each write→read can take 10–60s; draining all due racers first starved
         // outage/crash windows on the prod-like bridge path.
         let now = Date.now()
+
+        // Drop racers whose compressed race window has ended so we don't enqueue
+        // offline laps that hosted will reject as test_read after AutoFinish.
+        for (const [id, racer] of racerById) {
+          if (!lapState.nextDue.has(id)) continue
+          const endAt = raceEndByRaceId.get(racer.raceId) ?? raceEndAt
+          if (now >= endAt) removeRacer(lapState, id)
+        }
 
         // --- T+2:00 late signup #3, joins rotation immediately ---
         if (!signup3Done && now >= tZero.getTime() + LATE_SIGNUP_3_OFFSET_MS) {
@@ -732,10 +751,26 @@ test.describe('Hardware East Bluffet dress rehearsal', () => {
         // --- lap engine: at most one write→read per tick so chaos stays on schedule ---
         now = Date.now()
         const inOutage = outageStarted && !outageEnded
+        // Don't start a write that can't finish before the global race end — hosted
+        // AutoFinish turns late taps into test_read (no lap increment / flaky UI).
+        if (now + LAP_WRITE_BUDGET_MS >= raceEndAt) {
+          writeStatusNow()
+          await sleep(TICK_MS)
+          continue
+        }
         const due = dueRacers(lapState, now)
         if (due.length > 0) {
           const id = due[0]
           const racer = racerById.get(id)
+          const racerRaceEnd = racer
+            ? (raceEndByRaceId.get(racer.raceId) ?? raceEndAt)
+            : raceEndAt
+          if (now + LAP_WRITE_BUDGET_MS >= racerRaceEnd) {
+            removeRacer(lapState, id)
+            writeStatusNow()
+            await sleep(TICK_MS)
+            continue
+          }
           // Late signups may not have a tag association yet. During partition the
           // local bridge cannot mint one via hosted lookup — defer until online.
           if (inOutage && !racer?.logicalTagUuid) {

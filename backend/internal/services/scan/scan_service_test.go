@@ -214,6 +214,57 @@ func TestProcessScan_Cooldown(t *testing.T) {
 	assert.Equal(t, 2, third.LapCount)
 }
 
+func TestProcessScan_BridgeFlushBypassesCooldown(t *testing.T) {
+	fx := seedActiveLapFixture(t, "active")
+	svc := NewScanService(fx.db, nil)
+
+	base := time.Now().UTC().Truncate(time.Second)
+	first, err := svc.ProcessScan(fx.event.ID.UUID(), fx.tagUID, "laptop-finish-1", base)
+	require.NoError(t, err)
+	assert.Equal(t, ResultLap, first.Result)
+
+	// Offline flush of a second tap 30s later must still score (source_lap_id).
+	second, err := svc.ProcessScan(fx.event.ID.UUID(), fx.tagUID, "laptop-finish-1", base.Add(30*time.Second), ScanOptions{
+		BridgeRecordID: uuid.New().String(),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, ResultLap, second.Result)
+	assert.Equal(t, 2, second.LapCount)
+}
+
+func TestProcessScan_BridgeFlushScoresAfterRaceFinishedInWindow(t *testing.T) {
+	fx := seedActiveLapFixture(t, "finished")
+	svc := NewScanService(fx.db, nil)
+
+	// Fixture race started 1h ago with 720min duration — tap "now" is in-window.
+	now := time.Now().UTC().Truncate(time.Second)
+	result, err := svc.ProcessScan(fx.event.ID.UUID(), fx.tagUID, "laptop-finish-1", now, ScanOptions{
+		BridgeRecordID: uuid.New().String(),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, ResultLap, result.Result)
+	assert.Equal(t, 1, result.LapCount)
+}
+
+func TestProcessScan_BridgeFlushTestReadOutsideRaceWindow(t *testing.T) {
+	fx := seedActiveLapFixture(t, "finished")
+	fx.race.DurationMinutes = 15
+	fx.race.StartTime = time.Now().UTC().Add(-30 * time.Minute)
+	require.NoError(t, fx.db.Save(fx.race).Error)
+
+	svc := NewScanService(fx.db, nil)
+	// Tap timestamp after race end → still test_read even for bridge flush.
+	result, err := svc.ProcessScan(
+		fx.event.ID.UUID(),
+		fx.tagUID,
+		"laptop-finish-1",
+		time.Now().UTC(),
+		ScanOptions{BridgeRecordID: uuid.New().String()},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, ResultTestRead, result.Result)
+}
+
 func TestProcessScan_VoidLatestLapClearsCooldown(t *testing.T) {
 	fx := seedActiveLapFixture(t, "active")
 	svc := NewScanService(fx.db, nil)

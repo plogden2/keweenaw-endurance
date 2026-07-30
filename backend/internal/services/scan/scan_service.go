@@ -106,15 +106,21 @@ func (s *ScanService) ProcessScan(eventID uuid.UUID, tagUID, deviceID string, lo
 	race := participant.Race
 	raceID := race.ID
 	part := *participant
+	bridgeReplay := strings.TrimSpace(opt.BridgeRecordID) != ""
 
+	// Live taps only score while the race is active. Offline bridge flush
+	// replays (source_lap_id set) may arrive after AutoFinish — still score
+	// when the original tap timestamp falls inside the race window.
 	if race.Status != "active" {
-		s.notifyChange(eventID)
-		return withScanDisplay(&ScanResult{
-			Result:      ResultTestRead,
-			Participant: &part,
-			RaceID:      &raceID,
-			RaceStatus:  race.Status,
-		}), nil
+		if !bridgeReplay || !timestampInRaceWindow(race, localTimestamp) {
+			s.notifyChange(eventID)
+			return withScanDisplay(&ScanResult{
+				Result:      ResultTestRead,
+				Participant: &part,
+				RaceID:      &raceID,
+				RaceStatus:  race.Status,
+			}), nil
+		}
 	}
 
 	station := s.loadStation(eventID, deviceID)
@@ -127,15 +133,20 @@ func (s *ScanService) ProcessScan(eventID uuid.UUID, tagUID, deviceID string, lo
 		return s.processCheckpointMode(station, participant, &race, deviceID, localTimestamp)
 	}
 
-	if retry := s.cooldownRemaining(participant.ID.UUID(), localTimestamp); retry > 0 {
-		s.notifyChange(eventID)
-		return withScanDisplay(&ScanResult{
-			Result:            ResultCooldown,
-			Participant:       &part,
-			RaceID:            &raceID,
-			RaceStatus:        race.Status,
-			RetryAfterSeconds: retry,
-		}), nil
+	// Cooldown is for live double-taps. Bridge flush uses source_lap_id for
+	// idempotency; skipping cooldown avoids dropping valid offline laps that
+	// land within 60s of a pre-outage lap (or of each other after A→B→A).
+	if !bridgeReplay {
+		if retry := s.cooldownRemaining(participant.ID.UUID(), localTimestamp); retry > 0 {
+			s.notifyChange(eventID)
+			return withScanDisplay(&ScanResult{
+				Result:            ResultCooldown,
+				Participant:       &part,
+				RaceID:            &raceID,
+				RaceStatus:        race.Status,
+				RetryAfterSeconds: retry,
+			}), nil
+		}
 	}
 
 	finish, err := s.finishCheckpoint(race.ID.UUID())
@@ -250,6 +261,18 @@ func (s *ScanService) participantInEvent(p *models.Participant, eventID uuid.UUI
 		return false
 	}
 	return race.EventID.UUID() == eventID
+}
+
+// timestampInRaceWindow reports whether at falls in
+// [start_time, start_time+duration] for a timed lap race.
+func timestampInRaceWindow(race models.Race, at time.Time) bool {
+	if race.StartTime.IsZero() || race.DurationMinutes <= 0 {
+		return false
+	}
+	start := race.StartTime.UTC()
+	end := start.Add(time.Duration(race.DurationMinutes) * time.Minute)
+	ts := at.UTC()
+	return !ts.Before(start) && !ts.After(end)
 }
 
 func (s *ScanService) cooldownRemaining(participantID uuid.UUID, at time.Time) int {
