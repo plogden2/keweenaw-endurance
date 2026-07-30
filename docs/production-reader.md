@@ -71,6 +71,7 @@ powershell -File scripts\pack-reader-setup.ps1
    - **COM port:** usually `COM3`
    - **Proxmark CLI:** `C:\Users\gener\Documents\keweenaw-endurance\scripts\pm3.cmd`
    - Check **Use Proxmark hardware**
+   - **HF gain:** defaults to **63** (max sensitivity); maps to Proxmark `hw sethfthresh` — lower if false triggers / noise
 3. **Save config** → **Test Proxmark** → **Start bridge**
 4. Confirm status shows **ONLINE_SYNCED** (or `online_synced`).
 
