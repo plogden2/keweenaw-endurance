@@ -2,8 +2,8 @@
   <div class="pin-unlock">
     <h1 class="page-title">Organizer PIN</h1>
     <p class="lead">
-      Unlocks management: racers, station config, race create/delete, CSV. Live
-      leaderboard stays public without PIN.
+      Unlocks management: racers, station config, race create, edit start/status,
+      delete, CSV. Live leaderboard stays public without PIN.
     </p>
 
     <form
@@ -59,7 +59,7 @@
     <div v-else class="mgmt">
       <p class="meta-bar">
         <span class="badge online">Management unlocked</span>
-        <span class="muted">PIN session active — race create/delete lives here</span>
+        <span class="muted">PIN session active — race create/edit/delete lives here</span>
         <button type="button" class="btn secondary" @click="pinAuth.logout()">
           Lock
         </button>
@@ -74,7 +74,8 @@
           Races{{ managementEventName ? ` — ${managementEventName}` : '' }}
         </h2>
         <p class="muted intro">
-          Create or delete races under this event. Delete asks for confirmation.
+          Create, edit start/status, or delete races under this event. Delete asks
+          for confirmation.
         </p>
         <p v-if="mgmtError" class="err" role="alert">{{ mgmtError }}</p>
         <div v-if="racesLoading" class="muted">Loading races…</div>
@@ -89,6 +90,9 @@
               <strong>{{ race.name }}</strong>
               <div class="race-meta">
                 {{ formatRaceMeta(race) }}
+              </div>
+              <div class="race-status" data-testid="race-status">
+                Status: {{ race.status }}
               </div>
               <div class="race-ops">
                 <router-link
@@ -107,14 +111,25 @@
                 </router-link>
               </div>
             </div>
-            <button
-              type="button"
-              class="btn secondary"
-              data-testid="delete-race"
-              @click="pendingDelete = race"
-            >
-              Delete
-            </button>
+            <div class="race-actions">
+              <button
+                v-if="race.status !== 'finished'"
+                type="button"
+                class="btn secondary"
+                data-testid="edit-race"
+                @click="openEdit(race)"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                class="btn secondary"
+                data-testid="delete-race"
+                @click="pendingDelete = race"
+              >
+                Delete
+              </button>
+            </div>
           </div>
           <p v-if="!racesStore.races.length" class="muted">No races yet.</p>
         </div>
@@ -169,6 +184,54 @@
           </button>
         </div>
       </form>
+
+      <div
+        v-if="pendingEdit"
+        class="confirm-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-race-title"
+      >
+        <div class="confirm-panel panel">
+          <h2 id="edit-race-title">Edit race</h2>
+          <p class="muted">{{ pendingEdit.name }}</p>
+          <label
+            >Start time
+            <input
+              v-model="editForm.startTime"
+              data-testid="edit-race-start-time"
+              type="time"
+              required
+            />
+          </label>
+          <label
+            >Status
+            <select v-model="editForm.status" data-testid="edit-race-status" required>
+              <option value="scheduled">scheduled</option>
+              <option value="active">active</option>
+            </select>
+          </label>
+          <div class="row">
+            <button
+              type="button"
+              class="btn secondary"
+              data-testid="edit-race-cancel"
+              @click="pendingEdit = null"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="btn"
+              data-testid="edit-race-save"
+              :disabled="saving"
+              @click="onConfirmEdit"
+            >
+              {{ saving ? 'Saving…' : 'Save' }}
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div
         v-if="pendingDelete"
@@ -236,7 +299,12 @@ import { usePinAuthStore } from '@/stores/pinAuth'
 import { useRacesStore } from '@/stores/races'
 import { useStationStore } from '@/stores/station'
 import { BLUFFET_EVENT_NAME } from '@/themes/bluffetConstants'
-import type { Race } from '@/types/models'
+import type { Race, RaceStatus } from '@/types/models'
+import {
+  formatTimeHHMM,
+  isoToTimeInputValue,
+  wallTimeToRFC3339,
+} from '@/utils/datetime'
 import { getErrorMessage } from '@/utils/error'
 
 const pinAuth = usePinAuthStore()
@@ -254,12 +322,22 @@ const managementEventDate = ref<string>('2026-08-01')
 const racesLoading = ref(false)
 const creating = ref(false)
 const deleting = ref(false)
+const saving = ref(false)
 const pendingDelete = ref<Race | null>(null)
+const pendingEdit = ref<Race | null>(null)
 
 const createForm = ref({
   name: '',
   duration: '720',
   startTime: '08:00',
+})
+
+const editForm = ref<{
+  startTime: string
+  status: 'scheduled' | 'active'
+}>({
+  startTime: '08:00',
+  status: 'scheduled',
 })
 
 const pinDisplay = computed(() => (pin.value ? '•'.repeat(pin.value.length) : '••••'))
@@ -344,27 +422,25 @@ function durationLabel(minutes: number | undefined): string {
 function formatRaceMeta(race: Race): string {
   const parts: string[] = []
   if (race.start_time) {
-    const d = new Date(race.start_time)
-    if (!Number.isNaN(d.getTime())) {
-      const partsFmt = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/Detroit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).formatToParts(d)
-      const hour = partsFmt.find((p) => p.type === 'hour')?.value ?? ''
-      const minute = partsFmt.find((p) => p.type === 'minute')?.value ?? ''
-      parts.push(`Starts ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`)
-    }
+    const hhmm = formatTimeHHMM(race.start_time)
+    if (hhmm !== '—') parts.push(`Starts ${hhmm}`)
   }
   const dur = durationLabel(race.duration_minutes)
   if (dur) parts.push(dur)
   return parts.join(' · ') || race.race_type
 }
 
-/** Combine event date + HH:MM as America/Detroit wall time (EDT offset for seed season). */
-function toStartRFC3339(eventDate: string, timeHHMM: string): string {
-  return `${eventDate}T${timeHHMM}:00-04:00`
+function openEdit(race: Race) {
+  if (race.status === 'finished') return
+  pendingEdit.value = race
+  const status: 'scheduled' | 'active' =
+    race.status === 'active' ? 'active' : 'scheduled'
+  editForm.value = {
+    startTime: race.start_time
+      ? isoToTimeInputValue(race.start_time) || '08:00'
+      : '08:00',
+    status,
+  }
 }
 
 async function onCreateRace() {
@@ -380,7 +456,7 @@ async function onCreateRace() {
       name: createForm.value.name.trim(),
       race_type: 'lap_based',
       duration_minutes: Number(createForm.value.duration),
-      start_time: toStartRFC3339(
+      start_time: wallTimeToRFC3339(
         managementEventDate.value,
         createForm.value.startTime,
       ),
@@ -392,6 +468,30 @@ async function onCreateRace() {
     mgmtError.value = getErrorMessage(err, 'Failed to create race')
   } finally {
     creating.value = false
+  }
+}
+
+async function onConfirmEdit() {
+  if (!pendingEdit.value) return
+  saving.value = true
+  mgmtError.value = null
+  try {
+    const payload: { start_time?: string; status?: RaceStatus } = {
+      status: editForm.value.status,
+    }
+    if (editForm.value.startTime) {
+      payload.start_time = wallTimeToRFC3339(
+        managementEventDate.value,
+        editForm.value.startTime,
+      )
+    }
+    await racesStore.updateRace(pendingEdit.value.id, payload)
+    pendingEdit.value = null
+    await loadRaces()
+  } catch (err) {
+    mgmtError.value = getErrorMessage(err, 'Failed to update race')
+  } finally {
+    saving.value = false
   }
 }
 
@@ -627,11 +727,24 @@ label {
   font-size: 0.9rem;
 }
 
+.race-status {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.15rem;
+}
+
 .race-ops {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.5rem;
+}
+
+.race-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .confirm-overlay {

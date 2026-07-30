@@ -166,6 +166,7 @@ import type {
   Participant,
   TimingRecord,
 } from '@/types/models'
+import { formatDateTime } from '@/utils/datetime'
 import { getErrorMessage } from '@/utils/error'
 import { formatShortId } from '@/utils/id'
 
@@ -194,11 +195,7 @@ const liveRecordsNewestFirst = computed(() =>
 )
 
 function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString()
-  } catch {
-    return iso
-  }
+  return formatDateTime(iso)
 }
 
 async function loadRace(): Promise<void> {

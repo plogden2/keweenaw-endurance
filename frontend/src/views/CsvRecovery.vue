@@ -176,6 +176,7 @@ import { csvApi, type CSVImportSummary, type LiveCSVStatus } from '@/services/ap
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
 import { useReaderStation } from '@/composables/useReaderStation'
+import { formatDateTime } from '@/utils/datetime'
 import { getErrorMessage } from '@/utils/error'
 
 const pinAuth = usePinAuthStore()
@@ -209,11 +210,7 @@ const statusLabel = computed(() => {
 
 const formattedUpdated = computed(() => {
   if (!status.value?.updated_at) return '—'
-  try {
-    return new Date(status.value.updated_at).toLocaleString()
-  } catch {
-    return status.value.updated_at
-  }
+  return formatDateTime(status.value.updated_at)
 })
 
 const sizeLabel = computed(() => {
