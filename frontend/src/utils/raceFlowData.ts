@@ -56,8 +56,10 @@ export type FlowParticipantInput = {
   team?: { id?: string; name?: string } | null
 }
 
-const FLOW_COLOR_SATURATION = 70
-const FLOW_COLOR_LIGHTNESS = 45
+const FLOW_COLOR_SATURATION = 72
+const FLOW_COLOR_LIGHTNESS = 46
+/** Alternate lightness so neighbors on a crowded wheel stay visually distinct. */
+const FLOW_LIGHTNESS_STEPS = [40, 54, 34, 60]
 
 export function getFlowLineColor(participantId: string): string {
   let hash = 0
@@ -77,11 +79,11 @@ export function assignContrastFlowColors(participantIds: string[]): Map<string, 
   }
 
   sortedIds.forEach((participantId, index) => {
+    // Even hue spacing maximizes angular separation for the current set.
     const hue = Math.round((index * 360) / sortedIds.length)
-    colors.set(
-      participantId,
-      `hsl(${hue}, ${FLOW_COLOR_SATURATION}%, ${FLOW_COLOR_LIGHTNESS}%)`,
-    )
+    const lightness = FLOW_LIGHTNESS_STEPS[index % FLOW_LIGHTNESS_STEPS.length]
+    const saturation = index % 2 === 0 ? 78 : 64
+    colors.set(participantId, `hsl(${hue}, ${saturation}%, ${lightness}%)`)
   })
 
   return colors
@@ -346,7 +348,7 @@ export function resolveRaceFlowAxisMaxMinutes(
   return Math.max(recordedMaxMinutes, currentElapsedMinutes ?? 0)
 }
 
-/** Pixel radius for treating a near-miss click as a line/point hit. */
+/** Pixel radius for treating a near-miss click/hover as a line/point hit. */
 export const PLOT_CLICK_HIT_PX = 16
 
 /**
@@ -373,6 +375,76 @@ export function pickPlotClickDatasetIndex(
   }
 
   return undefined
+}
+
+/** Shortest distance from a point to a line segment (pixel space). */
+export function distanceToSegmentPx(
+  x: number,
+  y: number,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): number {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(x - a.x, y - a.y)
+  }
+
+  const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy)))
+  return Math.hypot(x - (a.x + t * dx), y - (a.y + t * dy))
+}
+
+/** Shortest distance from a point to a polyline (pixel space). */
+export function distanceToPolylinePx(
+  x: number,
+  y: number,
+  points: ReadonlyArray<{ x: number; y: number }>,
+): number {
+  if (points.length === 0) {
+    return Number.POSITIVE_INFINITY
+  }
+  if (points.length === 1) {
+    return Math.hypot(x - points[0].x, y - points[0].y)
+  }
+
+  let minDistance = Number.POSITIVE_INFINITY
+  for (let index = 1; index < points.length; index += 1) {
+    minDistance = Math.min(
+      minDistance,
+      distanceToSegmentPx(x, y, points[index - 1], points[index]),
+    )
+  }
+  return minDistance
+}
+
+/**
+ * Pick the dataset whose plotted polyline passes within `thresholdPx` of (x, y).
+ * Used for hover/click on stepped race-flow lines between sparse tap vertices.
+ */
+export function findNearestPolylineDatasetIndex(
+  polylines: ReadonlyArray<ReadonlyArray<{ x: number; y: number }>>,
+  x: number,
+  y: number,
+  thresholdPx: number = PLOT_CLICK_HIT_PX,
+): number | undefined {
+  let bestIndex: number | undefined
+  let bestDistance = Number.POSITIVE_INFINITY
+
+  polylines.forEach((points, datasetIndex) => {
+    if (points.length === 0) {
+      return
+    }
+    const distance = distanceToPolylinePx(x, y, points)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      bestIndex = datasetIndex
+    }
+  })
+
+  if (bestIndex == null || bestDistance > thresholdPx) {
+    return undefined
+  }
+  return bestIndex
 }
 
 export function resolveRaceFlowXAxisMax(

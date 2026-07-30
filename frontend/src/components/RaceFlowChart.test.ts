@@ -5,8 +5,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { Chart } from 'chart.js'
 import RaceFlowChart from './RaceFlowChart.vue'
 import { timingApi } from '@/services/api'
-import { resolveCategoryColor } from '@/themes/defaultLegend'
-import { buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, expandSteppedLapPoints, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, getParticipantTeamKey, getParticipantTeamLabel, NO_TEAM_KEY, pickPlotClickDatasetIndex, PLOT_CLICK_HIT_PX, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
+import { assignContrastFlowColors, buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, distanceToPolylinePx, expandSteppedLapPoints, findNearestPolylineDatasetIndex, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, getParticipantTeamKey, getParticipantTeamLabel, NO_TEAM_KEY, pickPlotClickDatasetIndex, PLOT_CLICK_HIT_PX, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
 import { convertDistanceFromKm, KM_TO_MILES } from '@/utils/units'
 import { setupPinia } from '@/test/helpers'
 import type { TimingRecord } from '@/types/models'
@@ -682,14 +681,17 @@ describe('raceFlowData', () => {
   })
 
   it('assigns maximally spaced hues for selected participants', () => {
-    const colors = new Map<string, string>()
-    for (const participantId of ['p-alpha', 'p-beta']) {
-      colors.set(participantId, resolveCategoryColor(participantId))
-    }
+    const colors = assignContrastFlowColors(['p-alpha', 'p-beta'])
 
     expect(colors.get('p-alpha')).not.toBe(colors.get('p-beta'))
-    expect(['#1a3f3d', '#2f6b5a', '#9b654e', '#a1b383', '#6b7a76']).toContain(colors.get('p-alpha'))
-    expect(['#1a3f3d', '#2f6b5a', '#9b654e', '#a1b383', '#6b7a76']).toContain(colors.get('p-beta'))
+    expect(colors.get('p-alpha')).toMatch(/^hsl\(\d+, \d+%, \d+%\)$/)
+    expect(colors.get('p-beta')).toMatch(/^hsl\(\d+, \d+%, \d+%\)$/)
+
+    const hueOf = (color: string | undefined) => Number(color?.match(/^hsl\((\d+)/)?.[1])
+    const hueA = hueOf(colors.get('p-alpha'))
+    const hueB = hueOf(colors.get('p-beta'))
+    const separation = Math.min(Math.abs(hueA - hueB), 360 - Math.abs(hueA - hueB))
+    expect(separation).toBe(180)
   })
 
   it('derives team filter keys and labels from participant data', () => {
@@ -747,6 +749,21 @@ describe('raceFlowData', () => {
     ).toBeUndefined()
     expect(pickPlotClickDatasetIndex([], [], null)).toBeUndefined()
     expect(pickPlotClickDatasetIndex([], [{ datasetIndex: 0 }], null)).toBeUndefined()
+  })
+
+  it('finds the nearest polyline within the hit threshold', () => {
+    const horizontal = [
+      { x: 0, y: 50 },
+      { x: 100, y: 50 },
+    ]
+    const diagonal = [
+      { x: 0, y: 0 },
+      { x: 100, y: 100 },
+    ]
+
+    expect(distanceToPolylinePx(20, 54, horizontal)).toBe(4)
+    expect(findNearestPolylineDatasetIndex([horizontal, diagonal], 20, 54)).toBe(0)
+    expect(findNearestPolylineDatasetIndex([horizontal, diagonal], 20, 80)).toBeUndefined()
   })
 
   it('excludes timing records before race start so elapsed never goes negative', () => {
@@ -895,10 +912,8 @@ describe('RaceFlowChart.vue', () => {
 
     expect(colors).toHaveLength(2)
     expect(colors[0]).not.toBe(colors[1])
-    expect(colors).toEqual([
-      resolveCategoryColor('p1'),
-      resolveCategoryColor('p2'),
-    ])
+    const expected = assignContrastFlowColors(['p1', 'p2'])
+    expect(colors).toEqual([expected.get('p1'), expected.get('p2')])
   })
 
   it('draws current time line and dotted extrapolations for active races', async () => {
@@ -1410,10 +1425,24 @@ describe('RaceFlowChart.vue', () => {
       }
     }
 
+    function stubPointerHit(
+      chart: ReturnType<typeof lastChartInstance>,
+      datasetIndex: number,
+      point = { x: 100, y: 80 },
+    ) {
+      chart.getDatasetMeta = vi.fn().mockImplementation((index: number) => ({
+        hidden: false,
+        data: index === datasetIndex ? [point] : [],
+      }))
+      chart.getElementsAtEventForMode.mockReturnValue([{ datasetIndex, index: 0 }])
+      return { native: new MouseEvent('click'), x: point.x, y: point.y }
+    }
+
     it('emits sticky select on near-miss plot click when intersect is empty', async () => {
       const wrapper = await mountWithData()
       const chart = lastChartInstance()
       chart.getDatasetMeta = vi.fn().mockReturnValue({
+        hidden: false,
         data: [{ x: 100, y: 80 }],
       })
       chart.getElementsAtEventForMode.mockImplementation(
@@ -1438,13 +1467,9 @@ describe('RaceFlowChart.vue', () => {
     it('emits sticky select on plot click and keeps highlight after hover clears', async () => {
       const wrapper = await mountWithData()
       const chart = lastChartInstance()
-      chart.getElementsAtEventForMode.mockReturnValue([{ datasetIndex: 0 }])
+      const pointer = stubPointerHit(chart, 0)
 
-      chart.options.onClick?.(
-        { native: new MouseEvent('click') },
-        [{ datasetIndex: 0 }],
-        chart,
-      )
+      chart.options.onClick?.(pointer, [{ datasetIndex: 0 }], chart)
       await flushPromises()
 
       expect(wrapper.emitted('update:highlightParticipantId')?.at(-1)).toEqual(['p1'])
@@ -1452,8 +1477,10 @@ describe('RaceFlowChart.vue', () => {
       await wrapper.setProps({ highlightParticipantId: 'p1' })
       await flushPromises()
 
+      chart.getElementsAtEventForMode.mockReturnValue([])
+      chart.getDatasetMeta = vi.fn().mockReturnValue({ hidden: false, data: [] })
       chart.options.onHover?.(
-        { native: new MouseEvent('mousemove') },
+        { native: new MouseEvent('mousemove'), x: 10, y: 10 },
         [],
         chart,
       )
@@ -1467,12 +1494,9 @@ describe('RaceFlowChart.vue', () => {
       const wrapper = await mountWithData({ highlightParticipantId: 'p1' })
       await flushPromises()
       const chart = lastChartInstance()
+      const pointer = stubPointerHit(chart, 1)
 
-      chart.options.onHover?.(
-        { native: new MouseEvent('mousemove') },
-        [{ datasetIndex: 1 }],
-        chart,
-      )
+      chart.options.onHover?.(pointer, [{ datasetIndex: 1 }], chart)
       await flushPromises()
 
       expect(wrapper.vm.hoveredParticipantId).toBeNull()
@@ -1486,9 +1510,10 @@ describe('RaceFlowChart.vue', () => {
       const wrapper = await mountWithData({ highlightParticipantId: 'p1' })
       const chart = lastChartInstance()
       chart.getElementsAtEventForMode.mockReturnValue([])
+      chart.getDatasetMeta = vi.fn().mockReturnValue({ hidden: false, data: [] })
 
       chart.options.onClick?.(
-        { native: new MouseEvent('click') },
+        { native: new MouseEvent('click'), x: 12, y: 12 },
         [],
         chart,
       )
@@ -1504,13 +1529,9 @@ describe('RaceFlowChart.vue', () => {
         (dataset) => dataset.participantId === 'p1',
       )
       expect(selectedIndex).toBeGreaterThanOrEqual(0)
-      chart.getElementsAtEventForMode.mockReturnValue([{ datasetIndex: selectedIndex }])
+      const pointer = stubPointerHit(chart, selectedIndex)
 
-      chart.options.onClick?.(
-        { native: new MouseEvent('click') },
-        [{ datasetIndex: selectedIndex }],
-        chart,
-      )
+      chart.options.onClick?.(pointer, [{ datasetIndex: selectedIndex }], chart)
       await flushPromises()
 
       expect(wrapper.emitted('update:highlightParticipantId')?.at(-1)).toEqual([undefined])
@@ -1528,16 +1549,15 @@ describe('RaceFlowChart.vue', () => {
     it('sets pointer cursor when hovering a line with no sticky selection', async () => {
       await mountWithData()
       const chart = lastChartInstance()
+      const pointer = stubPointerHit(chart, 0)
 
-      chart.options.onHover?.(
-        { native: new MouseEvent('mousemove') },
-        [{ datasetIndex: 0 }],
-        chart,
-      )
+      chart.options.onHover?.(pointer, [{ datasetIndex: 0 }], chart)
       expect(chart.canvas.style.cursor).toBe('pointer')
 
+      chart.getElementsAtEventForMode.mockReturnValue([])
+      chart.getDatasetMeta = vi.fn().mockReturnValue({ hidden: false, data: [] })
       chart.options.onHover?.(
-        { native: new MouseEvent('mousemove') },
+        { native: new MouseEvent('mousemove'), x: 10, y: 10 },
         [],
         chart,
       )

@@ -558,9 +558,16 @@ func (a *App) writeChip(logicalUUID string) error {
 	if err := a.pm3.WriteLogicalUUID(logicalUUID); err != nil {
 		return err
 	}
+	normalized := strings.ToLower(strings.TrimSpace(logicalUUID))
 	a.mu.Lock()
-	a.chipMemory = logicalUUID
+	a.chipMemory = normalized
+	// Dress rehearsal rewrites the same chip every lap — clear debounce so the
+	// post-write emit always scores.
+	a.lastReadAt = time.Time{}
 	a.mu.Unlock()
+	// Score the UUID we just programmed. Do not re-Poll: Windows one-shot CLI
+	// reads after wrbl are flaky and the dress rehearsal only waits on feedback.
+	a.emitRead(normalized)
 	return nil
 }
 
@@ -583,7 +590,13 @@ func (a *App) pollOnce() {
 	if err != nil || logicalUUID == "" {
 		return
 	}
-	logicalUUID = strings.ToLower(strings.TrimSpace(logicalUUID))
+	a.emitRead(strings.ToLower(strings.TrimSpace(logicalUUID)))
+}
+
+func (a *App) emitRead(logicalUUID string) {
+	if logicalUUID == "" {
+		return
+	}
 
 	a.mu.Lock()
 	a.chipMemory = logicalUUID
@@ -647,7 +660,7 @@ func (a *App) pollOnce() {
 		TS:          time.Now().UTC().Format(time.RFC3339),
 	}
 	a.writeMu.Lock()
-	err = conn.WriteJSON(msg)
+	err := conn.WriteJSON(msg)
 	a.writeMu.Unlock()
 	if err != nil {
 		log.Printf("poll read send failed: %v", err)

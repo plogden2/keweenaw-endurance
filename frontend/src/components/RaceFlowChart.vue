@@ -280,8 +280,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } 
 import { timingApi, raceParticipantsApi } from '@/services/api'
 import { useUnitsStore } from '@/stores/units'
 import type { Participant, ParticipantStatus, RaceStatus, RaceType, TimingRecord } from '@/types/models'
-import { resolveCategoryColor } from '@/themes/defaultLegend'
 import {
+  assignContrastFlowColors,
   buildExtrapolationPoint,
   buildParticipantFlowTooltip,
   buildParticipantFlows,
@@ -290,6 +290,7 @@ import {
   compareGenderKeys,
   compareTeamKeys,
   expandSteppedLapPoints,
+  findNearestPolylineDatasetIndex,
   getCurrentElapsedMinutes,
   getFlowYAxisLabel,
   getParticipantAgeGroupLabel,
@@ -323,6 +324,8 @@ interface FlowLineDataset {
   pointBackgroundColor: string
   pointBorderColor: string
   borderWidth: number
+  /** Higher draws above other datasets (Chart.js); keeps highlight on top without reordering. */
+  order?: number
   tension: number
   stepped?: false | 'after'
   hasExtrapolation: boolean
@@ -550,18 +553,17 @@ const visibleFlows = computed(() =>
   filteredFlows.value.filter((flow) => visibleParticipantIds.value.has(flow.participantId)),
 )
 
-const visibleFlowColors = computed(() => {
-  const colors = new Map<string, string>()
-  for (const participantId of visibleFlows.value.map((flow) => flow.participantId).sort()) {
-    colors.set(participantId, resolveCategoryColor(participantId))
-  }
-  return colors
-})
+// Space hues across filtered racers so lines stay distinct; legend toggles
+// (visibility) do not reshuffle colors.
+const filteredFlowColors = computed(() =>
+  assignContrastFlowColors(filteredFlows.value.map((flow) => flow.participantId)),
+)
 
 function getParticipantColor(participantId: string): string {
   return (
-    visibleFlowColors.value.get(participantId) ??
-    resolveCategoryColor(participantId)
+    filteredFlowColors.value.get(participantId) ??
+    assignContrastFlowColors([participantId]).get(participantId) ??
+    'hsl(0, 72%, 46%)'
   )
 }
 
@@ -892,21 +894,19 @@ function getEffectiveHighlightId(): string | undefined {
 }
 
 function getOrderedVisibleFlows(): (typeof flows.value)[number][] {
-  const highlightId = getEffectiveHighlightId()
-
-  if (!highlightId) {
-    return visibleFlows.value
-  }
-
-  return [
-    ...visibleFlows.value.filter((flow) => flow.participantId !== highlightId),
-    ...visibleFlows.value.filter((flow) => flow.participantId === highlightId),
-  ]
+  // Keep dataset index order stable so Chart.js hover/click hit-testing stays
+  // consistent; draw order is controlled via dataset `order` instead.
+  return visibleFlows.value
 }
 
 function getLineStyle(flow: (typeof flows.value)[number]): Pick<
   FlowLineDataset,
-  'borderColor' | 'backgroundColor' | 'pointBackgroundColor' | 'pointBorderColor' | 'borderWidth'
+  | 'borderColor'
+  | 'backgroundColor'
+  | 'pointBackgroundColor'
+  | 'pointBorderColor'
+  | 'borderWidth'
+  | 'order'
 > {
   const highlightId = getEffectiveHighlightId()
   const isHighlighted = highlightId === flow.participantId
@@ -920,7 +920,57 @@ function getLineStyle(flow: (typeof flows.value)[number]): Pick<
     pointBackgroundColor: color,
     pointBorderColor: color,
     borderWidth: isHighlighted ? 4 : isDimmed ? 1 : 2,
+    order: isHighlighted ? 10 : 0,
   }
+}
+
+function collectDatasetPolylines(chart: Chart): Array<Array<{ x: number; y: number }>> {
+  return chart.data.datasets.map((_, datasetIndex) => {
+    const meta = chart.getDatasetMeta(datasetIndex)
+    if (meta.hidden) {
+      return []
+    }
+    return meta.data.map((point) => ({ x: point.x, y: point.y }))
+  })
+}
+
+function resolveDatasetIndexAtPointer(
+  chart: Chart,
+  event: { x?: number; y?: number },
+): number | undefined {
+  if (typeof event.x !== 'number' || typeof event.y !== 'number') {
+    return undefined
+  }
+
+  const intersectHits = chart.getElementsAtEventForMode(
+    event as unknown as Event,
+    'nearest',
+    { intersect: true },
+    true,
+  )
+  const nearestHits = chart.getElementsAtEventForMode(
+    event as unknown as Event,
+    'nearest',
+    { intersect: false, axis: 'xy' },
+    true,
+  )
+
+  let nearestDistancePx: number | null = null
+  if (nearestHits.length > 0) {
+    const hit = nearestHits[0]
+    const point = chart.getDatasetMeta(hit.datasetIndex).data[hit.index]
+    if (point) {
+      nearestDistancePx = Math.hypot(point.x - event.x, point.y - event.y)
+    }
+  }
+
+  const pointHit = pickPlotClickDatasetIndex(intersectHits, nearestHits, nearestDistancePx)
+  if (pointHit != null) {
+    return pointHit
+  }
+
+  // Stepped lap lines have long segments between sparse taps — also hit the stroke.
+  return findNearestPolylineDatasetIndex(collectDatasetPolylines(chart), event.x, event.y)
 }
 
 function buildDataset(flow: (typeof flows.value)[number]): FlowLineDataset {
@@ -1011,17 +1061,8 @@ function updateLineHighlight(): void {
     Object.assign(flowDataset, getLineStyle(flow))
   }
 
-  // Draw the effective highlight on top so hover/sticky is visible in dense plots.
-  const highlightId = getEffectiveHighlightId()
-  if (highlightId) {
-    const datasets = chart.data.datasets as FlowLineDataset[]
-    const index = datasets.findIndex((dataset) => dataset.participantId === highlightId)
-    if (index >= 0 && index !== datasets.length - 1) {
-      const [highlighted] = datasets.splice(index, 1)
-      datasets.push(highlighted)
-    }
-  }
-
+  // Avoid splicing datasets here — reordering mid-hover clears Chart.js active
+  // elements and breaks subsequent hover/click hit-testing.
   chart.update('none')
 }
 
@@ -1100,48 +1141,28 @@ function renderChart(): void {
       interaction: {
         mode: 'nearest',
         intersect: false,
-        axis: 'x',
+        axis: 'xy',
       },
-      onHover: (_event, elements, chart) => {
-        chart.canvas.style.cursor = elements.length > 0 ? 'pointer' : 'default'
+      onHover: (event, _elements, chart) => {
+        const datasetIndex = resolveDatasetIndexAtPointer(
+          chart,
+          event as { x?: number; y?: number },
+        )
+        chart.canvas.style.cursor = datasetIndex != null ? 'pointer' : 'default'
         if (props.highlightParticipantId) {
           return
         }
-        if (elements.length > 0) {
-          const dataset = chart.data.datasets[elements[0].datasetIndex] as FlowLineDataset
+        if (datasetIndex != null) {
+          const dataset = chart.data.datasets[datasetIndex] as FlowLineDataset
           hoveredParticipantId.value = dataset.participantId ?? null
         } else {
           hoveredParticipantId.value = null
         }
       },
       onClick: (event, _elements, chart) => {
-        const chartEvent = event as { x?: number; y?: number }
-        const intersectHits = chart.getElementsAtEventForMode(
-          event as unknown as Event,
-          'nearest',
-          { intersect: true },
-          true,
-        )
-        const nearestHits = chart.getElementsAtEventForMode(
-          event as unknown as Event,
-          'nearest',
-          { intersect: false, axis: 'xy' },
-          true,
-        )
-
-        let nearestDistancePx: number | null = null
-        if (nearestHits.length > 0 && typeof chartEvent.x === 'number' && typeof chartEvent.y === 'number') {
-          const hit = nearestHits[0]
-          const point = chart.getDatasetMeta(hit.datasetIndex).data[hit.index]
-          if (point) {
-            nearestDistancePx = Math.hypot(point.x - chartEvent.x, point.y - chartEvent.y)
-          }
-        }
-
-        const datasetIndex = pickPlotClickDatasetIndex(
-          intersectHits,
-          nearestHits,
-          nearestDistancePx,
+        const datasetIndex = resolveDatasetIndexAtPointer(
+          chart,
+          event as { x?: number; y?: number },
         )
         if (datasetIndex == null) {
           clearStickyHighlight()

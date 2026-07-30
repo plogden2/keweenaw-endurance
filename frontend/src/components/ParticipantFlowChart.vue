@@ -180,6 +180,17 @@ function renderChart(): void {
     showCurrentTime,
   )
 
+  const pointRadius = chartPoints.map((point, pointIndex) => {
+    if (extrapolation != null && pointIndex === chartPoints.length - 1) {
+      return 0
+    }
+    if (!isLapChart) {
+      return 4
+    }
+    // Hide synthetic step corners; keep real taps (and gun-start) hittable via hitRadius.
+    return rawPoints.some((raw) => raw.x === point.x && raw.y === point.y) ? 4 : 0
+  })
+
   chartInstance.value = new Chart(canvasRef.value, {
     type: 'line',
     data: {
@@ -194,18 +205,14 @@ function renderChart(): void {
           borderWidth: 3,
           tension: 0,
           stepped: false,
+          pointHitRadius: 12,
+          pointRadius,
           ...(extrapolation
             ? {
                 segment: {
                   borderDash: (ctx: { p1DataIndex: number }) =>
                     ctx.p1DataIndex === chartPoints.length - 1 ? [6, 6] : undefined,
                 },
-                pointRadius: chartPoints.map((point, pointIndex) => {
-                  if (pointIndex === chartPoints.length - 1) {
-                    return 0
-                  }
-                  return rawPoints.some((raw) => raw.x === point.x && raw.y === point.y) ? 4 : 0
-                }),
               }
             : {}),
         },
@@ -214,6 +221,11 @@ function renderChart(): void {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: {
+        mode: 'nearest',
+        intersect: false,
+        axis: 'xy',
+      },
       scales: {
         x: {
           type: 'linear',
