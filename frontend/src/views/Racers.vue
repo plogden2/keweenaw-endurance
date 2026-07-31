@@ -265,8 +265,8 @@
               <td colspan="6">
                 <div class="program-inline" data-testid="program-tag-panel">
                   <p class="muted">
-                    Place a tag on the Proxmark3, then write. This programs this racer’s permanent
-                    RFID UUID onto the chip. Replacement tags get the same UUID.
+                    Place a tag on the Proxmark3, then write. This programs this racer’s event bib
+                    UUID onto the chip. Replacement tags get the same bib UUID.
                   </p>
                   <div class="row">
                     <button

@@ -325,6 +325,37 @@ func TestParticipantService_SequentialBibDefault(t *testing.T) {
 	assert.Equal(t, "11", p3.BibNumber)
 }
 
+func TestParticipantService_NextSequentialBibEventScoped(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	raceA, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race A", RaceType: "time_based", DistanceKm: 5,
+	})
+	require.NoError(t, err)
+	raceB, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race B", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	svc := NewParticipantService(db)
+
+	_, err = svc.CreateParticipant(&models.Participant{
+		RaceID: raceA.ID, BibNumber: "40", FirstName: "A", LastName: "One",
+	})
+	require.NoError(t, err)
+
+	// Empty race B must continue from event max, not restart at 1 (would 400).
+	p2, err := svc.CreateParticipant(&models.Participant{
+		RaceID: raceB.ID, FirstName: "B", LastName: "Two",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "41", p2.BibNumber)
+
+	next, err := svc.NextSequentialBib(event.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, "42", next)
+}
+
 func TestParticipantService_SearchByQuery(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)

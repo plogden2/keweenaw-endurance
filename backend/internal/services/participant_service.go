@@ -149,7 +149,7 @@ func (s *ParticipantService) CreateParticipant(input *models.Participant) (*mode
 	}
 
 	if strings.TrimSpace(input.BibNumber) == "" {
-		next, err := s.NextSequentialBib(input.RaceID.UUID())
+		next, err := s.NextSequentialBib(race.EventID.UUID())
 		if err != nil {
 			return nil, err
 		}
@@ -305,11 +305,12 @@ func (s *ParticipantService) DeleteParticipant(id uuid.UUID) error {
 	return nil
 }
 
-// NextSequentialBib returns the next numeric bib for a race (max existing + 1, or "1").
-func (s *ParticipantService) NextSequentialBib(raceID uuid.UUID) (string, error) {
+// NextSequentialBib returns the next numeric bib for an event (max across all races + 1, or "1").
+func (s *ParticipantService) NextSequentialBib(eventID uuid.UUID) (string, error) {
 	var bibs []string
 	if err := s.db.Model(&models.Participant{}).
-		Where("race_id = ?", raceID).
+		Joins("JOIN races ON races.id = participants.race_id").
+		Where("races.event_id = ?", eventID).
 		Pluck("bib_number", &bibs).Error; err != nil {
 		return "", err
 	}
