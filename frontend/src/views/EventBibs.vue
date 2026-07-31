@@ -138,7 +138,7 @@ const loadError = ref<string | null>(null)
 
 const sortedBibs = computed(() =>
   [...bibs.value].sort(
-    (a, b) => Number(b.bib_number) - Number(a.bib_number) || String(b.bib_number).localeCompare(String(a.bib_number)),
+    (a, b) => Number(a.bib_number) - Number(b.bib_number) || String(a.bib_number).localeCompare(String(b.bib_number)),
   ),
 )
 

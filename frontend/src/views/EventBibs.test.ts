@@ -125,7 +125,7 @@ describe('EventBibs.vue', () => {
     expect(eventBibsApi.list).toHaveBeenCalledTimes(2)
   })
 
-  it('sorts bib rows by bib number descending numerically', async () => {
+  it('sorts bib rows by bib number ascending numerically', async () => {
     const wrapper = await mountEventBibs()
 
     const nums = wrapper
@@ -133,7 +133,7 @@ describe('EventBibs.vue', () => {
       .filter((row) => row.attributes('data-testid')?.startsWith('bib-row-'))
       .map((row) => row.find('.bib-num').text())
 
-    expect(nums).toEqual(['100', '10', '2', '1'])
+    expect(nums).toEqual(['1', '2', '10', '100'])
   })
 
   it('program tag calls writeTag with bib_id and logical_uuid', async () => {
@@ -142,8 +142,8 @@ describe('EventBibs.vue', () => {
 
     const programBtns = wrapper.findAll('[data-testid="bib-program-tag"]')
     expect(programBtns.length).toBeGreaterThan(0)
-    // Row order is bib desc: 100, 10, 2, 1 — program bib 2
-    await programBtns[2].trigger('click')
+    // Row order is bib asc: 1, 2, 10, 100 — program bib 2
+    await programBtns[1].trigger('click')
     await flushPromises()
 
     expect(rfidApi.writeTag).toHaveBeenCalledWith({
@@ -156,7 +156,7 @@ describe('EventBibs.vue', () => {
     authenticate()
     const wrapper = await mountEventBibs()
 
-    await wrapper.findAll('[data-testid="bib-program-tag"]')[2].trigger('click')
+    await wrapper.findAll('[data-testid="bib-program-tag"]')[1].trigger('click')
     await flushPromises()
 
     const success = wrapper.find('[data-testid="bib-program-success"]')
@@ -169,7 +169,7 @@ describe('EventBibs.vue', () => {
     ;(rfidApi.writeTag as Mock).mockRejectedValueOnce(new Error('Proxmark unavailable'))
     const wrapper = await mountEventBibs()
 
-    await wrapper.findAll('[data-testid="bib-program-tag"]')[2].trigger('click')
+    await wrapper.findAll('[data-testid="bib-program-tag"]')[1].trigger('click')
     await flushPromises()
 
     const error = wrapper.find('[data-testid="bib-program-error"]')
