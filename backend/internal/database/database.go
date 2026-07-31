@@ -58,6 +58,11 @@ func Initialize(cfg config.DatabaseConfig) (*gorm.DB, error) {
 	return db, nil
 }
 
+// Migrate applies schema in a safe order for bib-associated tags:
+// 1) AutoMigrate core tables + bibs (not associations final shape)
+// 2) If upgrading from participant_id: add nullable bib_id, backfill, drop participant_id, SET NOT NULL
+// 3) Create final associations table (fresh) or ensure indexes (upgrade / existing)
+// 4) Ensure Bib rows for all participants with bib numbers
 func Migrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&models.Event{},
@@ -68,37 +73,121 @@ func Migrate(db *gorm.DB) error {
 		&models.TimingRecord{},
 		&models.Category{},
 		&models.Bib{},
-		&models.RFIDTagAssociation{},
 		&models.ReaderStation{},
 	); err != nil {
 		return err
 	}
-	return migrateTagAssociationsToBibs(db)
+
+	assocExisted, err := tableExists(db, "rfid_tag_associations")
+	if err != nil {
+		return err
+	}
+
+	if err := upgradeTagAssociationsToBibs(db); err != nil {
+		return err
+	}
+
+	if !assocExisted {
+		if err := db.AutoMigrate(&models.RFIDTagAssociation{}); err != nil {
+			return err
+		}
+	} else {
+		// After an in-place upgrade (or on an already-migrated DB), avoid SQLite
+		// AutoMigrate table rebuilds that can drop/omit columns. Ensure indexes;
+		// on Postgres AutoMigrate is safe for constraints/indexes.
+		if err := ensureAssociationIndexes(db); err != nil {
+			return err
+		}
+		if db.Dialector.Name() == "postgres" {
+			if err := db.AutoMigrate(&models.RFIDTagAssociation{}); err != nil {
+				return err
+			}
+		}
+	}
+
+	return ensureBibsForParticipants(db)
 }
 
-// migrateTagAssociationsToBibs backfills Bib rows from participants and
-// repoints rfid_tag_associations from participant_id to bib_id when upgrading.
-func migrateTagAssociationsToBibs(db *gorm.DB) error {
+// upgradeTagAssociationsToBibs follows database/migrations/06-bib-tag-association.sql:
+// add nullable bib_id → backfill → refuse drop if nulls remain → drop participant_id → NOT NULL.
+func upgradeTagAssociationsToBibs(db *gorm.DB) error {
+	exists, err := tableExists(db, "rfid_tag_associations")
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+
 	hasParticipantCol, err := columnExists(db, "rfid_tag_associations", "participant_id")
 	if err != nil {
 		return err
 	}
-	if hasParticipantCol {
-		if err := backfillAssociationsFromParticipants(db); err != nil {
-			return err
-		}
+	if !hasParticipantCol {
+		return nil
 	}
 
-	if err := ensureBibsForParticipants(db); err != nil {
-		return err
-	}
-
-	if hasParticipantCol {
-		if err := dropParticipantIDColumn(db); err != nil {
+	run := func(tx *gorm.DB) error {
+		hasBibCol, err := columnExists(tx, "rfid_tag_associations", "bib_id")
+		if err != nil {
 			return err
 		}
+		if !hasBibCol {
+			if err := addNullableBibIDColumn(tx); err != nil {
+				return fmt.Errorf("add nullable bib_id: %w", err)
+			}
+		}
+
+		if err := backfillAssociationsFromParticipants(tx); err != nil {
+			return err
+		}
+
+		nullCount, err := countNullBibIDs(tx)
+		if err != nil {
+			return err
+		}
+		if nullCount > 0 {
+			return fmt.Errorf(
+				"cannot drop participant_id: %d association(s) still have null bib_id after backfill (empty bib_number or missing participant)",
+				nullCount,
+			)
+		}
+
+		if err := dropParticipantIDColumn(tx); err != nil {
+			return err
+		}
+		if err := setBibIDNotNull(tx); err != nil {
+			return err
+		}
+		return nil
 	}
-	return nil
+
+	if db.Dialector.Name() == "postgres" {
+		return db.Transaction(run)
+	}
+	return run(db)
+}
+
+func tableExists(db *gorm.DB, table string) (bool, error) {
+	switch db.Dialector.Name() {
+	case "postgres":
+		var exists bool
+		err := db.Raw(`
+			SELECT EXISTS (
+				SELECT 1 FROM information_schema.tables
+				WHERE table_schema = 'public' AND table_name = ?
+			)`, table).Scan(&exists).Error
+		return exists, err
+	case "sqlite":
+		var name string
+		err := db.Raw(`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`, table).Scan(&name).Error
+		if err != nil {
+			return false, err
+		}
+		return name == table, nil
+	default:
+		return db.Migrator().HasTable(table), nil
+	}
 }
 
 func columnExists(db *gorm.DB, table, column string) (bool, error) {
@@ -114,7 +203,6 @@ func columnExists(db *gorm.DB, table, column string) (bool, error) {
 	case "sqlite":
 		rows, err := db.Raw(fmt.Sprintf("PRAGMA table_info(%s)", table)).Rows()
 		if err != nil {
-			// Table may not exist yet
 			if strings.Contains(err.Error(), "no such table") {
 				return false, nil
 			}
@@ -139,6 +227,45 @@ func columnExists(db *gorm.DB, table, column string) (bool, error) {
 	}
 }
 
+func ensureAssociationIndexes(db *gorm.DB) error {
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_rfid_tag_associations_tag_uid ON rfid_tag_associations(tag_uid)`).Error; err != nil {
+		return fmt.Errorf("ensure tag_uid unique index: %w", err)
+	}
+	if err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_rfid_tag_associations_bib_id ON rfid_tag_associations(bib_id)`).Error; err != nil {
+		return fmt.Errorf("ensure bib_id index: %w", err)
+	}
+	return nil
+}
+
+func addNullableBibIDColumn(db *gorm.DB) error {
+	switch db.Dialector.Name() {
+	case "postgres":
+		return db.Exec(`ALTER TABLE rfid_tag_associations ADD COLUMN IF NOT EXISTS bib_id UUID REFERENCES bibs(id)`).Error
+	case "sqlite":
+		return db.Exec(`ALTER TABLE rfid_tag_associations ADD COLUMN bib_id TEXT`).Error
+	default:
+		return db.Exec(`ALTER TABLE rfid_tag_associations ADD COLUMN bib_id UUID`).Error
+	}
+}
+
+func setBibIDNotNull(db *gorm.DB) error {
+	switch db.Dialector.Name() {
+	case "postgres":
+		return db.Exec(`ALTER TABLE rfid_tag_associations ALTER COLUMN bib_id SET NOT NULL`).Error
+	case "sqlite":
+		// SQLite cannot ALTER COLUMN to NOT NULL in place; final AutoMigrate covers fresh DBs.
+		return nil
+	default:
+		return nil
+	}
+}
+
+func countNullBibIDs(db *gorm.DB) (int64, error) {
+	var count int64
+	err := db.Raw(`SELECT COUNT(*) FROM rfid_tag_associations WHERE bib_id IS NULL`).Scan(&count).Error
+	return count, err
+}
+
 type assocParticipantRow struct {
 	AssocID   string
 	EventID   string
@@ -158,8 +285,11 @@ func backfillAssociationsFromParticipants(db *gorm.DB) error {
 		return fmt.Errorf("list associations for bib backfill: %w", err)
 	}
 
+	skippedEmpty := 0
 	for _, row := range rows {
 		if strings.TrimSpace(row.BibNumber) == "" {
+			skippedEmpty++
+			log.Printf("bib backfill: skipping association %s — participant has empty bib_number", row.AssocID)
 			continue
 		}
 		eventID, err := uuid.Parse(row.EventID)
@@ -176,6 +306,9 @@ func backfillAssociationsFromParticipants(db *gorm.DB) error {
 		).Error; err != nil {
 			return fmt.Errorf("set bib_id on association %s: %w", row.AssocID, err)
 		}
+	}
+	if skippedEmpty > 0 {
+		log.Printf("bib backfill: skipped %d association(s) with empty bib_number", skippedEmpty)
 	}
 	return nil
 }
@@ -222,7 +355,6 @@ func ensureBib(db *gorm.DB, eventID uuidutil.PublicUUID, bibNumber string) (*mod
 		BibNumber: bibNumber,
 	}
 	if err := db.Create(&bib).Error; err != nil {
-		// Concurrent create: re-fetch
 		var existing models.Bib
 		if findErr := db.Where("event_id = ? AND bib_number = ?", eventID, bibNumber).First(&existing).Error; findErr == nil {
 			return &existing, nil
@@ -237,10 +369,8 @@ func dropParticipantIDColumn(db *gorm.DB) error {
 	case "postgres":
 		return db.Exec(`ALTER TABLE rfid_tag_associations DROP COLUMN IF EXISTS participant_id`).Error
 	case "sqlite":
-		// Fresh AutoMigrate test DBs already have the new shape; orphan column
-		// on upgraded SQLite is acceptable. Prefer drop when SQLite supports it.
 		if err := db.Exec(`ALTER TABLE rfid_tag_associations DROP COLUMN participant_id`).Error; err != nil {
-			log.Printf("sqlite: leaving participant_id column (drop unsupported or failed): %v", err)
+			return fmt.Errorf("sqlite drop participant_id: %w", err)
 		}
 		return nil
 	default:

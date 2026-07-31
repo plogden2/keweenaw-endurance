@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/keweenaw-endurance/backend/internal/config"
+	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -138,13 +139,129 @@ func TestDatabaseErrorHandling(t *testing.T) {
 	})
 }
 
-func TestDatabaseMigrationErrorHandling(t *testing.T) {
-	t.Run("MigrationWithInvalidDatabase", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Log("Migrate with nil DB did not panic; skipping assertion")
-			}
-		}()
-		_ = Migrate(nil)
-	})
+func TestMigrate_UpgradesLegacyParticipantAssociations(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:migrate_upgrade?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	defer func() {
+		sqlDB, _ := db.DB()
+		if sqlDB != nil {
+			sqlDB.Close()
+		}
+	}()
+
+	// Parent tables via AutoMigrate; associations left in legacy participant_id shape.
+	require.NoError(t, db.AutoMigrate(
+		&models.Event{},
+		&models.Race{},
+		&models.Team{},
+		&models.Participant{},
+		&models.TimingCheckpoint{},
+		&models.TimingRecord{},
+		&models.Category{},
+		&models.Bib{},
+		&models.ReaderStation{},
+	))
+	require.NoError(t, db.Exec(`
+		CREATE TABLE rfid_tag_associations (
+			id TEXT PRIMARY KEY,
+			participant_id TEXT NOT NULL,
+			tag_uid TEXT NOT NULL UNIQUE,
+			created_at DATETIME,
+			active INTEGER NOT NULL DEFAULT 1
+		)
+	`).Error)
+
+	event := models.Event{Name: "Legacy Event", EventDate: time.Now().UTC(), Status: "upcoming"}
+	require.NoError(t, db.Create(&event).Error)
+	race := models.Race{EventID: event.ID, Name: "Legacy Race", RaceType: "lap_based", Status: "scheduled"}
+	require.NoError(t, db.Create(&race).Error)
+	part := models.Participant{
+		RaceID: race.ID, BibNumber: "42", FirstName: "Ada", LastName: "Lovelace", Status: "registered",
+	}
+	require.NoError(t, db.Create(&part).Error)
+
+	assocID := "44444444-4444-4444-4444-444444444444"
+	require.NoError(t, db.Exec(`
+		INSERT INTO rfid_tag_associations (id, participant_id, tag_uid, created_at, active)
+		VALUES (?, ?, 'LEGACY-TAG-42', ?, 1)
+	`, assocID, part.ID.String(), time.Now().UTC()).Error)
+
+	require.NoError(t, Migrate(db))
+
+	var bibCount int64
+	require.NoError(t, db.Table("bibs").Where("event_id = ? AND bib_number = ?", event.ID, "42").Count(&bibCount).Error)
+	assert.Equal(t, int64(1), bibCount)
+
+	var bibID string
+	require.NoError(t, db.Raw(`SELECT id FROM bibs WHERE event_id = ? AND bib_number = ?`, event.ID, "42").Scan(&bibID).Error)
+	require.NotEmpty(t, bibID)
+
+	var gotBibID string
+	require.NoError(t, db.Raw(`SELECT bib_id FROM rfid_tag_associations WHERE id = ?`, assocID).Scan(&gotBibID).Error)
+	assert.Equal(t, bibID, gotBibID)
+
+	hasParticipantCol, err := columnExists(db, "rfid_tag_associations", "participant_id")
+	require.NoError(t, err)
+	assert.False(t, hasParticipantCol, "participant_id should be dropped after successful backfill")
+
+	var tagUID string
+	require.NoError(t, db.Raw(`SELECT tag_uid FROM rfid_tag_associations WHERE id = ?`, assocID).Scan(&tagUID).Error)
+	assert.Equal(t, "LEGACY-TAG-42", tagUID)
+}
+
+func TestMigrate_RefusesDropWhenAssociationHasEmptyBibNumber(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:migrate_empty_bib?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	defer func() {
+		sqlDB, _ := db.DB()
+		if sqlDB != nil {
+			sqlDB.Close()
+		}
+	}()
+
+	require.NoError(t, db.AutoMigrate(
+		&models.Event{},
+		&models.Race{},
+		&models.Team{},
+		&models.Participant{},
+		&models.TimingCheckpoint{},
+		&models.TimingRecord{},
+		&models.Category{},
+		&models.Bib{},
+		&models.ReaderStation{},
+	))
+	require.NoError(t, db.Exec(`
+		CREATE TABLE rfid_tag_associations (
+			id TEXT PRIMARY KEY,
+			participant_id TEXT NOT NULL,
+			tag_uid TEXT NOT NULL UNIQUE,
+			created_at DATETIME,
+			active INTEGER NOT NULL DEFAULT 1
+		)
+	`).Error)
+
+	event := models.Event{Name: "Empty Bib Event", EventDate: time.Now().UTC(), Status: "upcoming"}
+	require.NoError(t, db.Create(&event).Error)
+	race := models.Race{EventID: event.ID, Name: "Race", RaceType: "lap_based", Status: "scheduled"}
+	require.NoError(t, db.Create(&race).Error)
+	// Bypass model validation: empty bib_number on the participant row.
+	partID := "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	require.NoError(t, db.Exec(`
+		INSERT INTO participants (id, race_id, bib_number, first_name, last_name, status, created_at)
+		VALUES (?, ?, '   ', 'No', 'Bib', 'registered', ?)
+	`, partID, race.ID.String(), time.Now().UTC()).Error)
+
+	assocID := "dddddddd-dddd-dddd-dddd-dddddddddddd"
+	require.NoError(t, db.Exec(`
+		INSERT INTO rfid_tag_associations (id, participant_id, tag_uid, created_at, active)
+		VALUES (?, ?, 'EMPTY-BIB-TAG', ?, 1)
+	`, assocID, partID, time.Now().UTC()).Error)
+
+	err = Migrate(db)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "null bib_id")
+
+	hasParticipantCol, colErr := columnExists(db, "rfid_tag_associations", "participant_id")
+	require.NoError(t, colErr)
+	assert.True(t, hasParticipantCol, "must not drop participant_id when backfill left null bib_id")
 }

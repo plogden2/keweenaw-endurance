@@ -28,10 +28,15 @@ CREATE INDEX IF NOT EXISTS idx_rfid_tag_associations_tag_uid ON rfid_tag_associa
 CREATE INDEX IF NOT EXISTS idx_rfid_tag_associations_bib_id ON rfid_tag_associations(bib_id);
 
 -- Upgrade path (when participant_id still exists):
--- 1. CREATE TABLE bibs ... (above)
+-- 1. CREATE TABLE bibs ... (above) — AutoMigrate Bib first; do NOT AutoMigrate
+--    RFIDTagAssociation with NOT NULL bib_id until after backfill.
 -- 2. ALTER TABLE rfid_tag_associations ADD COLUMN IF NOT EXISTS bib_id UUID REFERENCES bibs(id);
+--    (nullable — existing association rows must survive)
 -- 3. Backfill: for each association join participant → race → event, ensure Bib,
 --    then UPDATE rfid_tag_associations SET bib_id = ? WHERE id = ?
+--    Skip empty bib_number with log; refuse to drop participant_id if any bib_id is still NULL.
 -- 4. Ensure Bibs for all participants with bib_number (even without tags)
 -- 5. ALTER TABLE rfid_tag_associations DROP COLUMN IF EXISTS participant_id;
 -- 6. ALTER TABLE rfid_tag_associations ALTER COLUMN bib_id SET NOT NULL;
+-- 7. AutoMigrate final RFIDTagAssociation shape (indexes / FK).
+-- Steps 2–6 run in a transaction on Postgres.
