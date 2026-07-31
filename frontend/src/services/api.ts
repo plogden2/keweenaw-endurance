@@ -191,6 +191,12 @@ export const participantsApi = createResourceApi<
 >('/api/participants')
 
 /** Race-scoped participants + tags (US3 contract). */
+export type DeleteParticipantResponse = {
+  action: 'deleted' | 'dns'
+  message?: string
+  participant?: Participant
+}
+
 export const raceParticipantsApi = {
   list: (raceId: string, params?: ListParams & { q?: string }) =>
     apiClient.get<PaginatedResponse<Participant>>(`/api/races/${raceId}/participants`, {
@@ -200,6 +206,8 @@ export const raceParticipantsApi = {
     apiClient.post<Participant>(`/api/races/${raceId}/participants`, data),
   update: (id: string, data: UpdateParticipantPayload) =>
     apiClient.put<Participant>(`/api/participants/${id}`, data),
+  remove: (id: string) =>
+    apiClient.delete<DeleteParticipantResponse>(`/api/participants/${id}`),
   listCategories: (raceId: string, params?: ListParams) =>
     apiClient.get<PaginatedResponse<Category>>(`/api/races/${raceId}/categories`, {
       params: { limit: 100, ...params },
@@ -272,11 +280,20 @@ async function writeTagLocal(
   if (payload.bib_id) body.bib_id = payload.bib_id
   if (payload.race_id) body.race_id = payload.race_id
   if (payload.logical_uuid) body.logical_uuid = payload.logical_uuid
-  const res = await fetch(`${bridgeLocalUrl}/write-tag`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  let res: Response
+  try {
+    res = await fetch(`${bridgeLocalUrl}/write-tag`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(25_000),
+    })
+  } catch (err) {
+    if (err instanceof Error && err.name === 'TimeoutError') {
+      throw new Error('Local bridge write-tag timed out (25s)')
+    }
+    throw err
+  }
   if (!res.ok) {
     const detail = (await res.text().catch(() => '')).trim()
     throw new Error(
@@ -302,7 +319,10 @@ export const rfidApi = {
     if (shouldRouteWriteTagLocal() && localBridgeAcceptsWriteTag(payload)) {
       return writeTagLocal(payload)
     }
-    return apiClient.post<Participant | BibTagWriteResponse>('/api/rfid/write-tag', payload)
+    // Bridge Proxmark write timeout is 20s server-side; keep client slightly above.
+    return apiClient.post<Participant | BibTagWriteResponse>('/api/rfid/write-tag', payload, {
+      timeout: 25_000,
+    })
   },
   manualEntry: (payload: ManualTimingEntryPayload) =>
     apiClient.post<TimingRecord>('/api/rfid/manual-entry', payload),

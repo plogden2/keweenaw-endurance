@@ -14,8 +14,8 @@
 
     <h1 class="page-title">Racers</h1>
     <p class="lead">
-      Search, add, click bib to edit, program tags from the row. PIN required for
-      changes.
+      Search, add, assign bibs at pickup, edit name/category, program tags. PIN
+      required for changes.
     </p>
 
     <div class="panel">
@@ -74,7 +74,7 @@
             </select>
           </label>
           <label>
-            Bib number (optional — default next sequential)
+            Bib number (optional — leave blank if unassigned)
             <input
               v-model="addForm.bib_number"
               type="text"
@@ -124,36 +124,38 @@
         </button>
       </form>
       <p v-if="teamError" class="error" role="alert">{{ teamError }}</p>
-      <table data-testid="teams-list">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Members</th>
-            <th v-if="pinAuth.isAuthenticated">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="team in teams" :key="team.id" data-testid="team-row">
-            <td>{{ team.name }}</td>
-            <td>{{ memberCountForTeam(team.id) }}</td>
-            <td v-if="pinAuth.isAuthenticated">
-              <button
-                type="button"
-                class="btn secondary"
-                data-testid="team-delete"
-                @click="onDeleteTeam(team)"
-              >
-                Delete
-              </button>
-            </td>
-          </tr>
-          <tr v-if="!teams.length">
-            <td :colspan="pinAuth.isAuthenticated ? 3 : 2" class="muted">
-              No teams yet. Create one, then assign racers below.
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-scroll">
+        <table data-testid="teams-list">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Members</th>
+              <th v-if="pinAuth.isAuthenticated">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="team in teams" :key="team.id" data-testid="team-row">
+              <td>{{ team.name }}</td>
+              <td>{{ memberCountForTeam(team.id) }}</td>
+              <td v-if="pinAuth.isAuthenticated">
+                <button
+                  type="button"
+                  class="btn secondary"
+                  data-testid="team-delete"
+                  @click="onDeleteTeam(team)"
+                >
+                  Delete
+                </button>
+              </td>
+            </tr>
+            <tr v-if="!teams.length">
+              <td :colspan="pinAuth.isAuthenticated ? 3 : 2" class="muted">
+                No teams yet. Create one, then assign racers below.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div class="panel">
@@ -170,25 +172,39 @@
       >
         {{ bibNoTagsWarn }}
       </p>
-      <table data-testid="racers-list">
-        <thead>
-          <tr>
-            <th>Bib</th>
-            <th>Name</th>
-            <th>Category</th>
-            <th>Team</th>
-            <th>Tags</th>
-            <th v-if="pinAuth.isAuthenticated">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-for="racer in filteredRacers" :key="racer.id">
-            <tr
-              data-testid="racer-row"
-              :class="{ programming: programmingId === racer.id }"
-            >
+      <div class="table-scroll">
+        <table data-testid="racers-list">
+          <thead>
+            <tr>
+              <th>Bib</th>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Team</th>
+              <th>Tags</th>
+              <th v-if="pinAuth.isAuthenticated">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="racer in filteredRacers" :key="racer.id">
+              <tr
+                data-testid="racer-row"
+                :class="{ programming: programmingId === racer.id }"
+              >
               <td class="bib-cell">
-                <template v-if="pinAuth.isAuthenticated && editingBibId === racer.id">
+                <template v-if="pinAuth.isAuthenticated && !hasBib(racer)">
+                  <input
+                    v-model="unassignedBibDrafts[racer.id]"
+                    type="text"
+                    inputmode="numeric"
+                    class="bib-assign-input"
+                    data-testid="bib-assign-input"
+                    placeholder="Bib #"
+                    :aria-label="`Assign bib for ${racer.first_name} ${racer.last_name}`"
+                    @keydown.enter.prevent="assignBib(racer)"
+                    @keydown.escape="unassignedBibDrafts[racer.id] = ''"
+                  />
+                </template>
+                <template v-else-if="pinAuth.isAuthenticated && editingBibId === racer.id">
                   <span class="bib-edit-wrap">
                     <input
                       v-model="bibDraft"
@@ -236,9 +252,18 @@
                 >
                   {{ racer.bib_number }}
                 </button>
-                <span v-else>{{ racer.bib_number }}</span>
+                <span v-else>{{ racer.bib_number || '—' }}</span>
               </td>
-              <td>{{ racer.first_name }} {{ racer.last_name }}</td>
+              <td>
+                {{ racer.first_name }} {{ racer.last_name }}
+                <span
+                  v-if="racer.status === 'dns'"
+                  class="dns-badge"
+                  data-testid="racer-dns-badge"
+                >
+                  DNS
+                </span>
+              </td>
               <td>{{ categoryLabel(racer) }}</td>
               <td>
                 <select
@@ -260,7 +285,15 @@
                 {{ (racer.tag_uids?.length || 0) }}
                 {{ (racer.tag_uids?.length || 0) === 1 ? 'tag' : 'tags' }}
               </td>
-              <td v-if="pinAuth.isAuthenticated">
+              <td v-if="pinAuth.isAuthenticated" class="actions-cell">
+                <button
+                  type="button"
+                  class="btn secondary"
+                  data-testid="racer-edit"
+                  @click="toggleEdit(racer)"
+                >
+                  Edit
+                </button>
                 <button
                   type="button"
                   class="btn"
@@ -269,6 +302,72 @@
                 >
                   Program tag
                 </button>
+              </td>
+            </tr>
+            <tr v-if="pinAuth.isAuthenticated && editingId === racer.id" class="program-row">
+              <td colspan="6">
+                <div class="program-inline" data-testid="racer-edit-panel">
+                  <div class="grid-2">
+                    <label>
+                      First name
+                      <input
+                        v-model="editForm.first_name"
+                        data-testid="racer-edit-first"
+                        required
+                      />
+                    </label>
+                    <label>
+                      Last name
+                      <input
+                        v-model="editForm.last_name"
+                        data-testid="racer-edit-last"
+                        required
+                      />
+                    </label>
+                    <label>
+                      Category
+                      <select
+                        v-model="editForm.category_id"
+                        data-testid="racer-edit-category"
+                        required
+                      >
+                        <option disabled value="">Select category…</option>
+                        <option v-for="cat in categories" :key="cat.id" :value="cat.id">
+                          {{ cat.name }}
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+                  <p v-if="editError" class="error" role="alert">{{ editError }}</p>
+                  <div class="row">
+                    <button
+                      type="button"
+                      class="btn"
+                      data-testid="racer-edit-save"
+                      :disabled="editSaving"
+                      @click="saveEdit(racer)"
+                    >
+                      {{ editSaving ? 'Saving…' : 'Save' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="btn secondary"
+                      data-testid="racer-edit-cancel"
+                      @click="closeEdit"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      class="btn danger"
+                      data-testid="racer-delete"
+                      :disabled="editSaving"
+                      @click="deleteRacer(racer)"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
               </td>
             </tr>
             <tr v-if="pinAuth.isAuthenticated && programmingId === racer.id" class="program-row">
@@ -315,11 +414,12 @@
               </td>
             </tr>
           </template>
-          <tr v-if="!filteredRacers.length">
-            <td :colspan="pinAuth.isAuthenticated ? 6 : 5" class="muted">No racers match.</td>
-          </tr>
-        </tbody>
-      </table>
+            <tr v-if="!filteredRacers.length">
+              <td :colspan="pinAuth.isAuthenticated ? 6 : 5" class="muted">No racers match.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </template>
@@ -359,10 +459,20 @@ const bibOriginal = ref('')
 const bibDraft = ref('')
 const bibDirty = computed(() => bibDraft.value.trim() !== bibOriginal.value)
 const bibNoTagsWarn = ref<string | null>(null)
+const unassignedBibDrafts = reactive<Record<string, string>>({})
 
 const programmingId = ref<string | null>(null)
 const programming = ref(false)
 const programError = ref<string | null>(null)
+
+const editingId = ref<string | null>(null)
+const editSaving = ref(false)
+const editError = ref<string | null>(null)
+const editForm = reactive({
+  first_name: '',
+  last_name: '',
+  category_id: '',
+})
 
 const addForm = reactive({
   first_name: '',
@@ -380,8 +490,12 @@ const nextBibHint = computed(() => {
     const n = Number.parseInt(String(r.bib_number), 10)
     if (!Number.isNaN(n) && n > max) max = n
   }
-  return `Auto: ${max + 1}`
+  return `Suggested: ${max + 1}`
 })
+
+function hasBib(racer: Participant): boolean {
+  return Boolean(String(racer.bib_number ?? '').trim())
+}
 
 const filteredRacers = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -438,6 +552,110 @@ function startBibEdit(racer: Participant) {
   bibDraft.value = racer.bib_number
 }
 
+async function assignBib(racer: Participant) {
+  if (!pinAuth.isAuthenticated) {
+    await router.push('/pin')
+    return
+  }
+  const next = String(unassignedBibDrafts[racer.id] ?? '').trim()
+  if (!next) return
+  try {
+    const { data } = await raceParticipantsApi.update(racer.id, { bib_number: next })
+    const idx = racers.value.findIndex((r) => r.id === racer.id)
+    if (idx >= 0) {
+      racers.value[idx] = { ...racers.value[idx], ...data, bib_number: data.bib_number ?? next }
+    }
+    delete unassignedBibDrafts[racer.id]
+    if (!(data.tag_uids?.length)) {
+      bibNoTagsWarn.value = `Bib ${data.bib_number ?? next} has no programmed tags yet. Program a tag from this row when ready.`
+    } else {
+      bibNoTagsWarn.value = null
+    }
+    loadError.value = null
+  } catch (err) {
+    loadError.value = getErrorMessage(err, 'Failed to assign bib')
+  }
+}
+
+function toggleEdit(racer: Participant) {
+  if (editingId.value === racer.id) {
+    closeEdit()
+    return
+  }
+  programmingId.value = null
+  editingId.value = racer.id
+  editForm.first_name = racer.first_name
+  editForm.last_name = racer.last_name
+  editForm.category_id = racer.category_id || ''
+  editError.value = null
+}
+
+function closeEdit() {
+  editingId.value = null
+  editError.value = null
+  editSaving.value = false
+}
+
+async function saveEdit(racer: Participant) {
+  if (!pinAuth.isAuthenticated) {
+    await router.push('/pin')
+    return
+  }
+  editSaving.value = true
+  editError.value = null
+  try {
+    const { data } = await raceParticipantsApi.update(racer.id, {
+      first_name: editForm.first_name.trim(),
+      last_name: editForm.last_name.trim(),
+      category_id: editForm.category_id || undefined,
+    })
+    const idx = racers.value.findIndex((r) => r.id === racer.id)
+    if (idx >= 0) {
+      const cat = categories.value.find((c) => c.id === (data.category_id || editForm.category_id))
+      racers.value[idx] = {
+        ...racers.value[idx],
+        ...data,
+        category: cat ?? racers.value[idx].category,
+      }
+    }
+    closeEdit()
+  } catch (err) {
+    editError.value = getErrorMessage(err, 'Failed to update racer')
+  } finally {
+    editSaving.value = false
+  }
+}
+
+async function deleteRacer(racer: Participant) {
+  if (!pinAuth.isAuthenticated) {
+    await router.push('/pin')
+    return
+  }
+  const ok = window.confirm(
+    `Remove ${racer.first_name} ${racer.last_name}? Racers with recorded laps become DNS instead of being deleted.`,
+  )
+  if (!ok) return
+  editSaving.value = true
+  editError.value = null
+  try {
+    const { data } = await raceParticipantsApi.remove(racer.id)
+    if (data.action === 'dns' && data.participant) {
+      const idx = racers.value.findIndex((r) => r.id === racer.id)
+      if (idx >= 0) {
+        racers.value[idx] = { ...racers.value[idx], ...data.participant }
+      }
+      closeEdit()
+    } else {
+      racers.value = racers.value.filter((r) => r.id !== racer.id)
+      closeEdit()
+    }
+  } catch (err) {
+    editError.value = getErrorMessage(err, 'Failed to remove racer')
+  } finally {
+    editSaving.value = false
+  }
+}
+
 function cancelBibEdit() {
   editingBibId.value = null
   bibDraft.value = ''
@@ -480,6 +698,7 @@ async function saveBib(racer: Participant) {
 }
 
 function toggleProgram(id: string) {
+  editingId.value = null
   programmingId.value = programmingId.value === id ? null : id
   programError.value = null
 }
@@ -662,9 +881,12 @@ onUnmounted(() => {
 
 <style scoped>
 .racers-page {
-  max-width: 1100px;
+  width: 100%;
+  max-width: min(1100px, 100%);
   margin: 0 auto;
-  padding: 0 1.5rem 3rem;
+  padding: 0 1rem 3rem;
+  box-sizing: border-box;
+  min-width: 0;
   --line: var(--border);
 }
 
@@ -807,6 +1029,7 @@ select {
 
 table {
   width: 100%;
+  min-width: 36rem;
   border-collapse: collapse;
 }
 
@@ -816,6 +1039,36 @@ td {
   padding: 0.55rem 0.4rem;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
+}
+
+.bib-assign-input {
+  width: 4.5rem;
+  margin: 0;
+  padding: 0.3rem 0.4rem;
+}
+
+.actions-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.dns-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 18%, var(--surface));
+}
+
+.btn.danger {
+  background: var(--signal);
+  border-color: var(--signal);
+  color: #fff;
 }
 
 .bib-display {

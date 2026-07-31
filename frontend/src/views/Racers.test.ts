@@ -17,6 +17,7 @@ vi.mock('@/services/api', async () => {
       list: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      remove: vi.fn(),
       listCategories: vi.fn(),
       listTags: vi.fn(),
       addTag: vi.fn(),
@@ -61,6 +62,17 @@ const sampleRacers = [
       category_type: 'custom',
     },
   },
+  {
+    id: 'p3',
+    race_id: 'race-1',
+    bib_number: '',
+    first_name: 'Sam',
+    last_name: 'Ortiz',
+    category_id: 'c1',
+    tag_uids: [],
+    status: 'registered' as const,
+    category: { id: 'c1', race_id: 'race-1', name: 'Expert Men', category_type: 'custom' },
+  },
 ]
 
 describe('Racers.vue', () => {
@@ -84,7 +96,7 @@ describe('Racers.vue', () => {
       },
     })
     ;(raceParticipantsApi.list as Mock).mockResolvedValue({
-      data: { data: structuredClone(sampleRacers), total: 2 },
+      data: { data: structuredClone(sampleRacers), total: 3 },
     })
     ;(raceTeamsApi.list as Mock).mockResolvedValue({
       data: { data: [{ id: 'team-a', race_id: 'race-1', name: 'East Bluff A' }], total: 1 },
@@ -119,7 +131,7 @@ describe('Racers.vue', () => {
     const wrapper = await mountRacers()
     expect(wrapper.find('[data-testid="racers-search"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="racers-list"]').exists()).toBe(true)
-    expect(wrapper.findAll('[data-testid="racer-row"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="racer-row"]')).toHaveLength(3)
   })
 
   it('hides management actions without PIN', async () => {
@@ -128,7 +140,7 @@ describe('Racers.vue', () => {
     const wrapper = await mountRacers()
 
     expect(wrapper.find('[data-testid="racers-search"]').exists()).toBe(true)
-    expect(wrapper.findAll('[data-testid="racer-row"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="racer-row"]')).toHaveLength(3)
     expect(wrapper.find('[data-testid="add-racer"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="team-create"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="team-delete"]').exists()).toBe(false)
@@ -160,7 +172,7 @@ describe('Racers.vue', () => {
     await search.setValue('zzzz-no-match')
     await nextTick()
     // Before debounce fires, rows still visible
-    expect(wrapper.findAll('[data-testid="racer-row"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="racer-row"]')).toHaveLength(3)
 
     await vi.advanceTimersByTimeAsync(200)
     await nextTick()
@@ -267,5 +279,62 @@ describe('Racers.vue', () => {
     })
     expect(raceParticipantsApi.listTags).toHaveBeenCalledWith('race-1', 'p2')
     expect(wrapper.find('[data-testid="program-tag-list"]').text()).toContain(logicalUuid)
+  })
+
+  it('shows assign-bib input for unassigned racers and saves on Enter', async () => {
+    ;(raceParticipantsApi.update as Mock).mockResolvedValue({
+      data: { ...sampleRacers[2], bib_number: '77', tag_uids: [] },
+    })
+    const wrapper = await mountRacers()
+    const input = wrapper.find('[data-testid="bib-assign-input"]')
+    expect(input.exists()).toBe(true)
+
+    await input.setValue('77')
+    await input.trigger('keydown.enter')
+    await flushPromises()
+
+    expect(raceParticipantsApi.update).toHaveBeenCalledWith('p3', { bib_number: '77' })
+  })
+
+  it('opens edit panel to save name/category and delete racer', async () => {
+    ;(raceParticipantsApi.update as Mock).mockResolvedValue({
+      data: {
+        ...sampleRacers[0],
+        first_name: 'Alexa',
+        last_name: 'Rivera',
+        category_id: 'c2',
+      },
+    })
+    ;(raceParticipantsApi.remove as Mock).mockResolvedValue({
+      data: { action: 'deleted', message: 'participant deleted' },
+    })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    const wrapper = await mountRacers()
+    const row = wrapper.findAll('[data-testid="racer-row"]')[0]
+    await row.find('[data-testid="racer-edit"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.find('[data-testid="racer-edit-panel"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="racer-edit-first"]').setValue('Alexa')
+    await wrapper.find('[data-testid="racer-edit-category"]').setValue('c2')
+    await wrapper.find('[data-testid="racer-edit-save"]').trigger('click')
+    await flushPromises()
+
+    expect(raceParticipantsApi.update).toHaveBeenCalledWith(
+      'p1',
+      expect.objectContaining({
+        first_name: 'Alexa',
+        category_id: 'c2',
+      }),
+    )
+
+    await row.find('[data-testid="racer-edit"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="racer-delete"]').trigger('click')
+    await flushPromises()
+
+    expect(raceParticipantsApi.remove).toHaveBeenCalledWith('p1')
+    expect(wrapper.findAll('[data-testid="racer-row"]')).toHaveLength(2)
   })
 })

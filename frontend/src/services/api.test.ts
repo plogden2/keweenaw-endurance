@@ -323,9 +323,13 @@ describe('RFID scanner APIs', () => {
   it('writes tag with participant_id only', async () => {
     ;(apiClient.post as Mock).mockResolvedValue({ data: { id: 'p-1' } })
     await rfidApi.writeTag({ participant_id: 'p-1' })
-    expect(apiClient.post).toHaveBeenCalledWith('/api/rfid/write-tag', {
-      participant_id: 'p-1',
-    })
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/api/rfid/write-tag',
+      {
+        participant_id: 'p-1',
+      },
+      { timeout: 25_000 },
+    )
   })
 
   it('writes tag with bib_id via hosted API when local bridge cannot accept it', async () => {
@@ -341,9 +345,13 @@ describe('RFID scanner APIs', () => {
       data: { bib_id: 'bib-1', tag_uid: 'uuid-1', tag_uids: ['uuid-1'] },
     })
     await rfidApi.writeTag({ bib_id: 'bib-1' })
-    expect(apiClient.post).toHaveBeenCalledWith('/api/rfid/write-tag', {
-      bib_id: 'bib-1',
-    })
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/api/rfid/write-tag',
+      {
+        bib_id: 'bib-1',
+      },
+      { timeout: 25_000 },
+    )
   })
 
   it('fetches bridge status for a device', async () => {

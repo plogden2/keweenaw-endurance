@@ -57,7 +57,16 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
+            // Mutations must not use NetworkFirst+timeout — a slow write-tag
+            // (>10s Proxmark/bridge) left the UI stuck on "Writing…" while the
+            // real 503 still appeared later in DevTools.
+            urlPattern: ({ request, url }) =>
+              url.pathname.startsWith('/api/') && request.method !== 'GET',
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: ({ request, url }) =>
+              url.pathname.startsWith('/api/') && request.method === 'GET',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',

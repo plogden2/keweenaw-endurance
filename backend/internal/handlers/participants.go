@@ -253,7 +253,8 @@ func (h *Handlers) DeleteParticipant(c *gin.Context) {
 	}
 
 	existing, _ := h.services.Participants.GetParticipant(id)
-	if err := h.services.Participants.DeleteParticipant(id); err != nil {
+	result, err := h.services.Participants.DeleteParticipant(id)
+	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
@@ -261,7 +262,15 @@ func (h *Handlers) DeleteParticipant(c *gin.Context) {
 	if existing != nil {
 		h.refreshLiveCSVForRace(existing.RaceID.UUID())
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "participant deleted"})
+	if result.Action == "dns" {
+		c.JSON(http.StatusOK, gin.H{
+			"action":      "dns",
+			"participant": result.Participant,
+			"message":     "participant marked dns",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"action": "deleted", "message": "participant deleted"})
 }
 
 // GetParticipantTags handles GET /api/races/:id/participants/:participantId/tags

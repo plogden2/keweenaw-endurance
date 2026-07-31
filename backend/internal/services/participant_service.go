@@ -148,13 +148,8 @@ func (s *ParticipantService) CreateParticipant(input *models.Participant) (*mode
 		return nil, err
 	}
 
-	if strings.TrimSpace(input.BibNumber) == "" {
-		next, err := s.NextSequentialBib(race.EventID.UUID())
-		if err != nil {
-			return nil, err
-		}
-		input.BibNumber = next
-	}
+	// Blank bib = unassigned at create (pickup assigns later). Do not auto-sequential.
+	input.BibNumber = strings.TrimSpace(input.BibNumber)
 
 	if err := validateParticipantInput(input); err != nil {
 		return nil, err
@@ -171,8 +166,10 @@ func (s *ParticipantService) CreateParticipant(input *models.Participant) (*mode
 		}
 	}
 
-	if err := s.ensureBibUniqueInEvent(race.EventID.UUID(), input.BibNumber, nil); err != nil {
-		return nil, err
+	if input.BibNumber != "" {
+		if err := s.ensureBibUniqueInEvent(race.EventID.UUID(), input.BibNumber, nil); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := s.ensureRFIDAvailable(input.RFIDTagUID, nil); err != nil {
@@ -193,8 +190,10 @@ func (s *ParticipantService) CreateParticipant(input *models.Participant) (*mode
 		return nil, err
 	}
 
-	if _, err := NewBibService(s.db).EnsureBib(race.EventID.UUID(), participant.BibNumber); err != nil {
-		return nil, err
+	if participant.BibNumber != "" {
+		if _, err := NewBibService(s.db).EnsureBib(race.EventID.UUID(), participant.BibNumber); err != nil {
+			return nil, err
+		}
 	}
 
 	participant.TagUIDs = []string{}
@@ -294,15 +293,41 @@ func (s *ParticipantService) UpdateParticipant(id uuid.UUID, input *models.Parti
 	return participant, nil
 }
 
-func (s *ParticipantService) DeleteParticipant(id uuid.UUID) error {
+// DeleteParticipantResult reports whether the racer was removed or marked DNS.
+type DeleteParticipantResult struct {
+	Action      string // "deleted" | "dns"
+	Participant *models.Participant
+}
+
+func (s *ParticipantService) DeleteParticipant(id uuid.UUID) (*DeleteParticipantResult, error) {
+	participant, err := s.GetParticipant(id)
+	if err != nil {
+		return nil, err
+	}
+
+	var tapCount int64
+	if err := s.db.Model(&models.TimingRecord{}).
+		Where("participant_id = ?", id).
+		Count(&tapCount).Error; err != nil {
+		return nil, err
+	}
+
+	if tapCount > 0 {
+		participant.Status = "dns"
+		if err := s.db.Save(participant).Error; err != nil {
+			return nil, err
+		}
+		return &DeleteParticipantResult{Action: "dns", Participant: participant}, nil
+	}
+
 	result := s.db.Delete(&models.Participant{}, "id = ?", id)
 	if result.Error != nil {
-		return result.Error
+		return nil, result.Error
 	}
 	if result.RowsAffected == 0 {
-		return ErrParticipantNotFound
+		return nil, ErrParticipantNotFound
 	}
-	return nil
+	return &DeleteParticipantResult{Action: "deleted"}, nil
 }
 
 // NextSequentialBib returns the next numeric bib for an event (max across all races + 1, or "1").
@@ -326,6 +351,10 @@ func (s *ParticipantService) NextSequentialBib(eventID uuid.UUID) (string, error
 
 // ensureBibUniqueInEvent rejects another participant in the same event with the same bib.
 func (s *ParticipantService) ensureBibUniqueInEvent(eventID uuid.UUID, bibNumber string, excludeID *uuid.UUID) error {
+	bibNumber = strings.TrimSpace(bibNumber)
+	if bibNumber == "" {
+		return nil
+	}
 	query := s.db.Model(&models.Participant{}).
 		Joins("JOIN races ON races.id = participants.race_id").
 		Where("races.event_id = ? AND participants.bib_number = ?", eventID, bibNumber)
@@ -438,9 +467,7 @@ func validateParticipantInput(participant *models.Participant) error {
 	if participant.RaceID.IsZero() {
 		return fmt.Errorf("%w: race_id is required", ErrInvalidParticipantInput)
 	}
-	if strings.TrimSpace(participant.BibNumber) == "" {
-		return fmt.Errorf("%w: bib_number is required", ErrInvalidParticipantInput)
-	}
+	// bib_number may be empty (unassigned until pickup).
 	if strings.TrimSpace(participant.FirstName) == "" {
 		return fmt.Errorf("%w: first_name is required", ErrInvalidParticipantInput)
 	}

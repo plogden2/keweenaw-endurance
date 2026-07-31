@@ -385,6 +385,81 @@ func TestParticipantService_SearchByQuery(t *testing.T) {
 func TestParticipantService_DeleteNotFound(t *testing.T) {
 	db := setupServiceTestDB(t)
 	svc := NewParticipantService(db)
-	err := svc.DeleteParticipant(uuid.New())
+	_, err := svc.DeleteParticipant(uuid.New())
 	assert.ErrorIs(t, err, ErrParticipantNotFound)
+}
+
+func TestParticipantService_CreateAllowsEmptyBib(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	svc := NewParticipantService(db)
+
+	p1, err := svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "", FirstName: "No", LastName: "Bib",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "", p1.BibNumber)
+
+	p2, err := svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "   ", FirstName: "Also", LastName: "Empty",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "", p2.BibNumber)
+
+	updated, err := svc.UpdateParticipant(p1.ID.UUID(), &models.Participant{BibNumber: "55"})
+	require.NoError(t, err)
+	assert.Equal(t, "55", updated.BibNumber)
+}
+
+func TestParticipantService_DeleteHardWhenNoTaps(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	svc := NewParticipantService(db)
+	p, err := svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "9", FirstName: "Gone", LastName: "Soon",
+	})
+	require.NoError(t, err)
+
+	result, err := svc.DeleteParticipant(p.ID.UUID())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "deleted", result.Action)
+
+	_, err = svc.GetParticipant(p.ID.UUID())
+	assert.ErrorIs(t, err, ErrParticipantNotFound)
+}
+
+func TestParticipantService_DeleteDNSWhenHasTaps(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	svc := NewParticipantService(db)
+	p, err := svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "8", FirstName: "Has", LastName: "Laps",
+	})
+	require.NoError(t, err)
+
+	cp := &models.TimingCheckpoint{
+		RaceID: race.ID, Name: "Finish", CheckpointType: "finish", IsActive: true,
+	}
+	require.NoError(t, db.Create(cp).Error)
+	now := db.NowFunc()
+	require.NoError(t, db.Create(&models.TimingRecord{
+		ParticipantID:  p.ID,
+		CheckpointID:   cp.ID,
+		Timestamp:      now,
+		LocalTimestamp: now,
+		RecordType:     "rfid_lap",
+		SyncStatus:     "synced",
+	}).Error)
+
+	result, err := svc.DeleteParticipant(p.ID.UUID())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "dns", result.Action)
+	require.NotNil(t, result.Participant)
+	assert.Equal(t, "dns", result.Participant.Status)
+
+	fetched, err := svc.GetParticipant(p.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, "dns", fetched.Status)
 }

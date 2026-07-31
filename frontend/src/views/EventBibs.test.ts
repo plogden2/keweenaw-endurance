@@ -177,4 +177,28 @@ describe('EventBibs.vue', () => {
     expect(error.text()).toContain('Proxmark unavailable')
     expect(wrapper.find('[data-testid="bib-program-success"]').exists()).toBe(false)
   })
+
+  it('shows axios 503 body and clears Writing state after write-tag fails', async () => {
+    authenticate()
+    const axiosErr = Object.assign(new Error('Request failed with status code 503'), {
+      isAxiosError: true,
+      response: {
+        status: 503,
+        data: { error: 'bridge unavailable' },
+      },
+    })
+    ;(rfidApi.writeTag as Mock).mockRejectedValueOnce(axiosErr)
+    const wrapper = await mountEventBibs()
+
+    const btn = wrapper.findAll('[data-testid="bib-program-tag"]')[1]
+    await btn.trigger('click')
+    await flushPromises()
+
+    const error = wrapper.find('[data-testid="bib-program-error"]')
+    expect(error.exists()).toBe(true)
+    expect(error.text()).toMatch(/bridge unavailable/i)
+    expect(error.text()).toMatch(/503/)
+    expect(btn.text()).toMatch(/Program/i)
+    expect(btn.text()).not.toMatch(/Writing/i)
+  })
 })
