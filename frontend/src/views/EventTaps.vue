@@ -10,21 +10,32 @@
       </div>
 
       <div v-if="pinAuth.isAuthenticated" class="inline-bib-form">
-        <label class="inline-bib-label">
-          <span class="sr-only">Bib number</span>
-          <input
-            ref="bibInputRef"
-            v-model="bibInput"
-            type="text"
-            class="inline-bib-input"
-            data-testid="inline-bib-input"
-            placeholder="Bib number"
-            autocomplete="off"
-            :disabled="submitting"
-            @keydown.enter.prevent="submitBib"
-            @input="onBibInput"
-          />
-        </label>
+        <div class="inline-bib-row">
+          <label class="inline-bib-label">
+            <span class="sr-only">Bib number</span>
+            <input
+              ref="bibInputRef"
+              v-model="bibInput"
+              type="text"
+              class="inline-bib-input"
+              data-testid="inline-bib-input"
+              placeholder="Bib number"
+              autocomplete="off"
+              :disabled="submitting"
+              @keydown.enter.prevent="submitBib"
+              @input="onBibInput"
+            />
+          </label>
+          <label class="karaoke-toggle">
+            <input
+              v-model="karaokeBonus"
+              type="checkbox"
+              data-testid="inline-karaoke-toggle"
+              :disabled="submitting"
+            />
+            Karaoke
+          </label>
+        </div>
         <p
           v-if="inlineSuccess"
           class="inline-bib-success"
@@ -164,6 +175,7 @@ const actionBusy = ref(false)
 
 const bibInput = ref('')
 const bibInputRef = ref<HTMLInputElement | null>(null)
+const karaokeBonus = ref(false)
 const submitting = ref(false)
 const inlineError = ref<string | null>(null)
 const inlineSuccess = ref<string | null>(null)
@@ -238,13 +250,17 @@ async function submitBib(): Promise<void> {
     }
 
     const match = matches[0]
+    const isKaraoke = karaokeBonus.value
     await eventTapsApi.create(eventId.value, {
       participant_id: match.id,
-      karaoke_bonus: false,
+      karaoke_bonus: isKaraoke,
     })
 
     bibInput.value = ''
-    setEphemeralSuccess(`Recorded #${match.bib_number} ${match.first_name} ${match.last_name}`)
+    const kind = isKaraoke ? 'Karaoke' : 'Lap'
+    setEphemeralSuccess(
+      `${kind} #${match.bib_number} ${match.first_name} ${match.last_name}`,
+    )
     focusBibInput()
     await loadTaps()
   } catch (err) {
@@ -365,8 +381,28 @@ watch(eventId, async () => {
   margin-bottom: 1.25rem;
 }
 
+.inline-bib-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.karaoke-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--ink);
+  font-size: 0.95rem;
+  cursor: pointer;
+  user-select: none;
+}
+
 .inline-bib-label {
   display: block;
+  flex: 1 1 12rem;
+  min-width: 8rem;
+  max-width: 16rem;
 }
 
 .inline-bib-input {

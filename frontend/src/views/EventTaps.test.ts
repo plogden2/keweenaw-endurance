@@ -155,16 +155,30 @@ describe('EventTaps.vue', () => {
     expect(wrapper.find('[data-testid="restore-tap-btn"]').exists()).toBe(true)
   })
 
-  it('records a tap on Enter with exact bib match and karaoke_bonus false', async () => {
+  it('records a tap on Enter with exact bib match and karaoke_bonus false by default', async () => {
     authenticate()
     const wrapper = await mountEventTaps()
 
+    expect(wrapper.find('[data-testid="inline-karaoke-toggle"]').exists()).toBe(true)
     await submitBib(wrapper, '42')
 
     expect(eventParticipantsApi.list).toHaveBeenCalledWith('e1', { q: '42', limit: 20 })
     expect(eventTapsApi.create).toHaveBeenCalledWith('e1', {
       participant_id: 'p1',
       karaoke_bonus: false,
+    })
+  })
+
+  it('records karaoke_bonus true when the karaoke toggle is checked', async () => {
+    authenticate()
+    const wrapper = await mountEventTaps()
+
+    await wrapper.find('[data-testid="inline-karaoke-toggle"]').setValue(true)
+    await submitBib(wrapper, '42')
+
+    expect(eventTapsApi.create).toHaveBeenCalledWith('e1', {
+      participant_id: 'p1',
+      karaoke_bonus: true,
     })
   })
 
