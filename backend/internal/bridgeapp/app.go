@@ -590,6 +590,10 @@ func (a *App) resolveLogicalUUID(req writeTagRequest) (string, error) {
 }
 
 func (a *App) writeChip(logicalUUID string) error {
+	// Drop stray proxmark processes so the write CLI owns COM exclusively.
+	if _, err := KillProxmarkOrphans(os.Getpid()); err != nil {
+		log.Printf("write-tag: kill orphans: %v", err)
+	}
 	if err := a.pm3.WriteLogicalUUID(logicalUUID); err != nil {
 		return err
 	}
@@ -890,7 +894,13 @@ func (a *App) handleWSMessage(conn *websocket.Conn, msg *services.BridgeMessage)
 		if err := a.writeChip(strings.TrimSpace(msg.LogicalUUID)); err != nil {
 			ok = false
 			errMsg = err.Error()
+			a.setLastError(err)
+		} else {
+			a.mu.Lock()
+			a.lastError = ""
+			a.mu.Unlock()
 		}
+		a.publishStatus()
 		return bridge.SendWriteAck(conn, &a.writeMu, msg.RequestID, ok, errMsg)
 	case "scan_result":
 		a.applyScanResultMessage(msg)

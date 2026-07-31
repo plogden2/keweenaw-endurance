@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -270,10 +271,10 @@ func (ui *readerUI) onEventSelected(name string) {
 			break
 		}
 	}
-	ui.cfg.EventID = eventID
+	ui.cfg.EventID = bridgeapp.CanonicalEventID(eventID)
 	ui.mu.Unlock()
 	ui.syncCheckpointVisibility()
-	go ui.reloadRacesForEvent(eventID)
+	go ui.reloadRacesForEvent(ui.cfg.EventID)
 }
 
 // isBluffetEvent reports whether the currently selected event is All You Can
@@ -379,6 +380,7 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 
 	saveBtn := widget.NewButton("Save config", ui.onSave)
 	testBtn := widget.NewButton("Test Proxmark", ui.onTestProxmark)
+	killOrphansBtn := widget.NewButton("Kill orphans", ui.onKillOrphans)
 	reloadBtn := widget.NewButton("Reload catalog", func() { go ui.runAutofill() })
 	refreshPorts := widget.NewButton("Refresh COM ports", func() {
 		ports, err := bridgeapp.ListSerialPorts()
@@ -393,7 +395,7 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 		dialog.ShowInformation("COM ports", strings.Join(ports, ", "), ui.win)
 	})
 
-	controls := container.NewHBox(ui.startBtn, ui.stopBtn, saveBtn, testBtn, reloadBtn, refreshPorts)
+	controls := container.NewHBox(ui.startBtn, ui.stopBtn, saveBtn, testBtn, killOrphansBtn, reloadBtn, refreshPorts)
 
 	statusBox := container.NewVBox(
 		widget.NewSeparator(),
@@ -613,14 +615,60 @@ func (ui *readerUI) onSave() {
 	dialog.ShowInformation("Saved", "Config written to:\n"+path, ui.win)
 }
 
-func (ui *readerUI) onTestProxmark() {
-	cfg := ui.readForm()
-	msg, err := bridgeapp.TestProxmark(cfg)
+func (ui *readerUI) onKillOrphans() {
+	killed, err := bridgeapp.KillProxmarkOrphans(os.Getpid())
 	if err != nil {
 		dialog.ShowError(err, ui.win)
 		return
 	}
-	dialog.ShowInformation("Proxmark", msg, ui.win)
+	msg := fmt.Sprintf("Killed %d orphan proxmark process(es).\nKept any proxmark owned by this Reader window.", killed)
+	if killed == 0 {
+		msg = "No orphan proxmark processes found."
+	}
+	dialog.ShowInformation("Kill orphans", msg, ui.win)
+}
+
+func (ui *readerUI) onTestProxmark() {
+	if ui.bridge != nil && ui.bridge.Running() {
+		dialog.ShowError(fmt.Errorf("Stop the bridge first — COM port is in use"), ui.win)
+		return
+	}
+	cfg := ui.readForm()
+	if cfg.BridgeMock {
+		dialog.ShowError(fmt.Errorf("disable mock reader to test Proxmark hardware"), ui.win)
+		return
+	}
+	if !cfg.RFIDHardware {
+		dialog.ShowError(fmt.Errorf("RFID_HARDWARE is false — enable hardware or use mock"), ui.win)
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	status := widget.NewLabel("Listening… wave a tag near the antenna.\n(Taps beep and show here; nothing is recorded.)")
+	status.Wrapping = fyne.TextWrapWord
+	tapN := 0
+	content := container.NewVBox(status)
+	d := dialog.NewCustom("Test Proxmark", "Done", content, ui.win)
+	d.SetOnClosed(func() { cancel() })
+	d.Resize(fyne.NewSize(420, 160))
+	d.Show()
+
+	go func() {
+		err := bridgeapp.ListenProxmark(ctx, cfg, func(uid string) {
+			tapN++
+			n := tapN
+			fyne.Do(func() {
+				status.SetText(fmt.Sprintf("Tap %d: %s\nListening… wave another tag or press Done.", n, uid))
+				ui.statusTap.SetText("Last tap: " + uid + " · test")
+			})
+		})
+		if err != nil && ctx.Err() == nil {
+			fyne.Do(func() {
+				d.Hide()
+				dialog.ShowError(err, ui.win)
+			})
+		}
+	}()
 }
 
 func (ui *readerUI) onStart() {
