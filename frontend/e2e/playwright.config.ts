@@ -9,6 +9,8 @@ import { defineConfig, devices } from '@playwright/test'
  */
 export default defineConfig({
   testDir: './',
+  // Hardware dress rehearsal has its own config/runner; never pull it into CI e2e.
+  testIgnore: ['**/hardware-bluffet/**'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
