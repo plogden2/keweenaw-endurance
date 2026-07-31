@@ -17,4 +17,5 @@ USER appuser
 
 ENV GO_ENV=test
 
-CMD ["go", "test", "./...", "-v", "-cover"]
+# Exclude Fyne GUI binaries (need Wayland/X11 headers not in this alpine image).
+CMD ["sh", "-c", "go test $(go list ./... | grep -vE '/cmd/reader-gui$|/cmd/reader-setup$') -v -cover"]

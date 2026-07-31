@@ -48,7 +48,9 @@ services:
       - redis-test
     networks:
       - keweenaw-test-network
-    command: go test ./... -v -cover
+    # Exclude Fyne GUI binaries (need Wayland/X11 headers not in alpine test image).
+    command: >-
+      sh -c "go test $$(go list ./... | grep -vE '/cmd/reader-gui$$|/cmd/reader-setup$$') -v -cover"
 
   postgres-test:
     image: postgres:14-alpine

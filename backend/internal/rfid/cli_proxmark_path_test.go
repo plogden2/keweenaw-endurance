@@ -45,6 +45,9 @@ func TestProxmarkRuntimeBinPlatformsDir(t *testing.T) {
 }
 
 func TestResolveProxmarkExecutableFromWrapper(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("pm3.cmd wrappers and backslash PM3_EXE paths are Windows-only")
+	}
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "proxmark3.exe")
 	if err := os.WriteFile(exe, []byte("x"), 0o644); err != nil {

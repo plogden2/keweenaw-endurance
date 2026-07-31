@@ -44,9 +44,9 @@ services:
       - PROXMARK3_ENABLED=true
       - HOSTED_API_URL=
       - DATA_DIR=/app/data
+    # Do not bind-mount ./backend over /app — that shadows the image's ./main binary
+    # (breaks CI e2e and `docker compose up`). Rebuild the image after backend changes.
     volumes:
-      - ./backend:/app
-      - /app/vendor
       - backend_csv_data:/app/data
     depends_on:
       postgres:
