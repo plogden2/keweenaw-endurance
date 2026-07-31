@@ -146,3 +146,10 @@ func TestResultsExcelShortensLongSheetNames(t *testing.T) {
 	require.Len(t, workbook.GetSheetList(), 1)
 	assert.LessOrEqual(t, len([]rune(workbook.GetSheetList()[0])), 31)
 }
+
+func TestUniqueSheetNameDedupesCaseInsensitively(t *testing.T) {
+	used := make(map[string]struct{})
+
+	assert.Equal(t, "12 hour Men", uniqueSheetName("12 hour Men", used))
+	assert.Equal(t, "12 hour men (2)", uniqueSheetName("12 hour men", used))
+}

@@ -217,13 +217,22 @@ func uniqueSheetName(name string, used map[string]struct{}) string {
 	}
 	base := name
 	for suffix := 2; ; suffix++ {
-		if _, exists := used[name]; !exists {
-			used[name] = struct{}{}
+		key := strings.ToLower(name)
+		if _, exists := used[key]; !exists {
+			used[key] = struct{}{}
 			return name
 		}
 		suffixText := fmt.Sprintf(" (%d)", suffix)
-		name = string([]rune(base)[:31-len([]rune(suffixText))]) + suffixText
+		name = truncateSheetName(base, 31-len([]rune(suffixText))) + suffixText
 	}
+}
+
+func truncateSheetName(name string, limit int) string {
+	runes := []rune(name)
+	if len(runes) <= limit {
+		return name
+	}
+	return string(runes[:limit])
 }
 
 func eventSlug(name string) string {
