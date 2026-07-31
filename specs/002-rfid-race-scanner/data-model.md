@@ -7,10 +7,12 @@ Extends existing entities in `backend/internal/models` and Postgres schema.
 ## Entity Relationship (logical)
 
 ```text
-Event 1──* Race 1──* Participant 1──* RFIDTagAssociation
+Event 1──* Bib 1──* RFIDTagAssociation
+Event 1──* Race 1──* Participant
                 │         └──* TimingRecord (rfid_lap | karaoke_bonus | checkpoint_pass)
                 ├──* Category
                 └──* TimingCheckpoint
+Participant.bib_number + Event ──> Bib   (at most one holder per bib in the event)
 Event 1──* ReaderStation (logical config; may be local-only + synced)
 TimingRecord (karaoke_bonus) ──> TimingRecord (source rfid_lap)
 ```
@@ -40,27 +42,38 @@ TimingRecord (karaoke_bonus) ──> TimingRecord (source rfid_lap)
 | category_type / gender_filter | Existing fields; skill bands via name or `custom` |
 | Demo | 12h/6h: Intermediate×Men/Women + Advanced×Men/Women; kids: Men/Women |
 
+### Bib (event inventory)
+| Field | Rules |
+|-------|--------|
+| id | UUID PK — written to RFID chips on new Proxmark3 writes |
+| event_id | FK, required |
+| bib_number | Unique within event (`UNIQUE (event_id, bib_number)`) |
+| created_at | |
+
+**Validation**: Bulk-create ensures a Bib for every integer in a range. Assignment of a participant bib number EnsureBibs the matching event Bib.
+
 ### Participant (Racer)
 | Field | Rules |
 |-------|--------|
-| id | Stable UUID; written to RFID tags |
+| id | Stable UUID; kept for identity and **legacy** chip dual-resolve (not the primary new write payload) |
 | race_id | Enrollment in one race |
-| bib_number | Unique per race; default sequential on create |
+| bib_number | Unique per **event** (validated across all races); default sequential on create |
 | first_name, last_name, gender, … | Existing |
 | rfid_tag_uid | Optional legacy/primary display field; not sole association |
 | category_id | **Required** FK to Category for this feature (seed + UI assign skill×gender / kids gender) |
 | UX term | “Racer” in UI = Participant in API |
+| tag_uids | Optional list exposed via the racer’s current Bib associations |
 
-### RFIDTagAssociation (new)
+### RFIDTagAssociation
 | Field | Rules |
 |-------|--------|
 | id | UUID PK |
-| participant_id | FK, required |
-| tag_uid | Unique globally (or per event); required |
+| bib_id | FK → Bib (replaces former `participant_id`) |
+| tag_uid | Unique globally; required |
 | created_at | |
 | active | Always true in v1 (no revoke UI/API) |
 
-**Validation**: Programming a tag creates/updates association; lookup by tag_uid resolves participant; multiple rows per participant allowed.
+**Validation**: Programming a tag creates/updates association on the bib; lookup by `tag_uid` resolves Bib then Participant by `(event_id, bib_number)`; multiple rows per bib allowed. Legacy chips may still carry a participant UUID and dual-resolve when no association matches.
 
 ### TimingCheckpoint
 | Field | Rules |
@@ -123,13 +136,17 @@ scheduled --(start_time reached | PIN start)--> active --(duration elapsed | PIN
 
 ### Tap handling
 ```text
-tag read → resolve association → load participant+race
+tag read → RFIDTagAssociation → Bib → Participant by (event_id, bib_number)
+  else treat chip UUID as legacy participant.id in this event
+  if bib exists but no participant holds it → unassigned (no lap)
   if race.scheduled → test_read (no timing row of type rfid_lap)
   if race.active + finish mode + cooldown ok → rfid_lap + popup + sound
   if race.active + finish mode + cooldown fail → reject
   if race.active + checkpoint mode → checkpoint_pass / progress; maybe complete lap
   if unknown tag → unknown feedback
 ```
+
+Cooldown remains keyed by `participant_id` (all tags for that racer share one cooldown).
 
 ## Seed: All You Can East Bluffet 2026
 

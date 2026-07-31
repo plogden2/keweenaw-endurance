@@ -43,7 +43,7 @@ Server → client:
 ```json
 { "participant_id": "<uuid>", "bib_id": "<uuid>", "race_id": "<uuid>", "logical_uuid": "<ignored>" }
 ```
-Provide `participant_id` (existing) **or** `bib_id`. When `bib_id` is set, programs the chip with that bib’s UUID and returns `{ "bib_id", "tag_uid", "tag_uids" }` where `tag_uid` is the bib logical UUID. `logical_uuid` is ignored for new writes (bib id wins). Participant writes still return the participant JSON.
+Provide `participant_id` (existing) **or** `bib_id`. New writes always program the chip with the **bib UUID** (EnsureBib for the participant’s current bib when `participant_id` is used). `bib_id` path returns `{ "bib_id", "tag_uid", "tag_uids" }` where `tag_uid` is the bib logical UUID. `logical_uuid` is ignored for new writes (bib id wins). Participant writes still return the participant JSON (including refreshed `tag_uids`).
 
 ### Event bibs inventory
 
