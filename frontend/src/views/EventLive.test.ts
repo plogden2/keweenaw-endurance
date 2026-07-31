@@ -5,7 +5,12 @@ import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import EventLive from '@/views/EventLive.vue'
 import { setupPinia, createTestRouter } from '@/test/helpers'
-import { eventsLiveApi, rfidApi, type LapRecordedEvent } from '@/services/api'
+import {
+  downloadEventResultsExcel,
+  eventsLiveApi,
+  rfidApi,
+  type LapRecordedEvent,
+} from '@/services/api'
 
 const { lastLap, isBusyMock } = vi.hoisted(() => {
   const { ref } = require('vue') as typeof import('vue')
@@ -48,6 +53,7 @@ vi.mock('@/services/api', async () => {
       getLocalBridgeStatus: vi.fn().mockResolvedValue(null),
       syncPending: vi.fn().mockResolvedValue({ data: { synced_count: 0 } }),
     },
+    downloadEventResultsExcel: vi.fn().mockResolvedValue(undefined),
   }
 })
 
@@ -321,6 +327,22 @@ describe('EventLive.vue', () => {
 
     const wrapper = await mountLive()
     expect(wrapper.find('[data-testid="sync-status"]').exists()).toBe(true)
+  })
+
+  it('hides Export Excel without an authenticated PIN session', async () => {
+    const wrapper = await mountLive()
+
+    expect(wrapper.find('[data-testid="export-results-excel"]').exists()).toBe(false)
+  })
+
+  it('exports event results when PIN-unlocked', async () => {
+    const wrapper = await mountReaderLive()
+    const exportButton = wrapper.find('[data-testid="export-results-excel"]')
+
+    expect(exportButton.exists()).toBe(true)
+    await exportButton.trigger('click')
+
+    expect(downloadEventResultsExcel).toHaveBeenCalledWith('evt-1', 'All You Can East Bluffet')
   })
 
   async function mountReaderLive() {

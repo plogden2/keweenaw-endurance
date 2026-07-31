@@ -95,6 +95,16 @@
         >
           Fullscreen rotate
         </button>
+        <button
+          v-if="pinAuth.isAuthenticated"
+          type="button"
+          class="btn secondary"
+          data-testid="export-results-excel"
+          :disabled="exportingResults"
+          @click="exportResultsExcel"
+        >
+          {{ exportingResults ? 'Exporting…' : 'Export Excel' }}
+        </button>
         <div
           v-if="isReaderSession && activeRaceId"
           class="ops-links"
@@ -116,6 +126,7 @@
           </router-link>
         </div>
       </div>
+      <p v-if="exportError" class="status error">{{ exportError }}</p>
 
       <div class="legend" data-testid="category-legend" role="list" aria-label="Category legend">
         <strong>Overall</strong>
@@ -679,6 +690,7 @@ import { useRoute } from 'vue-router'
 import LapCelebrationOverlay from '@/components/LapCelebrationOverlay.vue'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import {
+  downloadEventResultsExcel,
   eventsLiveApi,
   rfidApi,
   type EventLiveRace,
@@ -723,6 +735,8 @@ const { lastLap } = useEventLiveStream(eventId)
 const live = ref<EventLiveResponse | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+const exportError = ref<string | null>(null)
+const exportingResults = ref(false)
 const activeTab = ref<'12h' | '6h' | '90m' | 'overlap'>('12h')
 const leaderboardMode = ref<'individuals' | 'teams'>('individuals')
 const rotatorOpen = ref(false)
@@ -1024,6 +1038,19 @@ async function loadLive() {
   } finally {
     loading.value = false
     await refreshPending()
+  }
+}
+
+async function exportResultsExcel() {
+  if (!live.value || exportingResults.value) return
+  exportingResults.value = true
+  exportError.value = null
+  try {
+    await downloadEventResultsExcel(eventId.value, live.value.event.name)
+  } catch (err) {
+    exportError.value = getErrorMessage(err, 'Failed to export Excel results')
+  } finally {
+    exportingResults.value = false
   }
 }
 

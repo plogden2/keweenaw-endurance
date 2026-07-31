@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import {
   apiClient,
+  downloadEventResultsExcel,
   eventsApi,
   racesApi,
   participantsApi,
@@ -78,6 +79,54 @@ describe('eventsApi', () => {
     expect(apiClient.post).toHaveBeenCalledWith('/api/events', payload)
     expect(apiClient.put).toHaveBeenCalledWith('/api/events/evt-1', payload)
     expect(apiClient.delete).toHaveBeenCalledWith('/api/events/evt-1')
+  })
+})
+
+describe('downloadEventResultsExcel', () => {
+  it('requests the workbook as a blob and uses the server filename', async () => {
+    const link = document.createElement('a')
+    const click = vi.spyOn(link, 'click').mockImplementation(() => {})
+    const createElement = vi.spyOn(document, 'createElement').mockReturnValue(link)
+    const createObjectURL = vi.fn().mockReturnValue('blob:results')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    ;(apiClient.get as Mock).mockResolvedValue({
+      data: new Blob(['results']),
+      headers: { 'content-disposition': 'attachment; filename="bluffet-results.xlsx"' },
+    })
+
+    await downloadEventResultsExcel('evt-1', 'All You Can East Bluffet')
+
+    expect(apiClient.get).toHaveBeenCalledWith('/api/events/evt-1/results.xlsx', {
+      responseType: 'blob',
+    })
+    expect(link.download).toBe('bluffet-results.xlsx')
+    expect(click).toHaveBeenCalledOnce()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:results')
+
+    createElement.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
+  it('uses the event-name filename fallback without Content-Disposition', async () => {
+    const link = document.createElement('a')
+    vi.spyOn(link, 'click').mockImplementation(() => {})
+    const createElement = vi.spyOn(document, 'createElement').mockReturnValue(link)
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn().mockReturnValue('blob:results'),
+      revokeObjectURL: vi.fn(),
+    })
+    ;(apiClient.get as Mock).mockResolvedValue({
+      data: new Blob(['results']),
+      headers: {},
+    })
+
+    await downloadEventResultsExcel('evt-1', 'All You Can East Bluffet')
+
+    expect(link.download).toBe('All You Can East Bluffet-results.xlsx')
+
+    createElement.mockRestore()
+    vi.unstubAllGlobals()
   })
 })
 
