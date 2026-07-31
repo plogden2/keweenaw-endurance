@@ -15,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/keweenaw-endurance/backend/internal/bridge"
 	"github.com/keweenaw-endurance/backend/internal/bridgeapp"
+	"github.com/keweenaw-endurance/backend/internal/eventpolicy"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
 )
 
@@ -40,6 +41,8 @@ type readerUI struct {
 	eventSelect      *widget.Select
 	raceSelect       *widget.Select
 	checkpointSelect *widget.Select
+	configForm       *widget.Form
+	checkpointItem   *widget.FormItem
 	dataDir          *widget.Entry
 	proxmarkCLI      *widget.Entry
 	proxmarkPort     *widget.SelectEntry
@@ -109,6 +112,7 @@ func (ui *readerUI) build() {
 	ui.checkpointSelect = widget.NewSelect([]string{}, func(name string) {
 		ui.onCheckpointSelected(name)
 	})
+	ui.checkpointItem = widget.NewFormItem("Checkpoint (manual)", ui.checkpointSelect)
 	ui.selectEventMatchingConfig()
 	ui.selectRaceMatchingConfig()
 
@@ -268,7 +272,40 @@ func (ui *readerUI) onEventSelected(name string) {
 	}
 	ui.cfg.EventID = eventID
 	ui.mu.Unlock()
+	ui.syncCheckpointVisibility()
 	go ui.reloadRacesForEvent(eventID)
+}
+
+// isBluffetEvent reports whether the currently selected event is All You Can
+// East Bluffet, which supports a single finish station only (no checkpoint
+// mode / picker).
+func (ui *readerUI) isBluffetEvent() bool {
+	return eventpolicy.IsBluffetEventID(ui.cfg.EventID)
+}
+
+// syncCheckpointVisibility shows/hides the "Checkpoint (manual)" form row
+// based on the selected event. Bluffet operators must not be able to pick a
+// checkpoint — the race's finish checkpoint is always autofilled instead.
+func (ui *readerUI) syncCheckpointVisibility() {
+	if ui.configForm == nil || ui.checkpointItem == nil {
+		return
+	}
+	hasItem := false
+	for _, item := range ui.configForm.Items {
+		if item == ui.checkpointItem {
+			hasItem = true
+			break
+		}
+	}
+	if ui.isBluffetEvent() {
+		if hasItem {
+			ui.configForm.RemoveItem(ui.checkpointItem)
+		}
+		return
+	}
+	if !hasItem {
+		ui.configForm.AppendItem(ui.checkpointItem)
+	}
 }
 
 func (ui *readerUI) onRaceSelected(name string) {
@@ -293,6 +330,11 @@ func (ui *readerUI) onRaceSelected(name string) {
 		ui.cfg.CheckpointID = race.FinishCheckpointID
 	}
 	ui.mu.Unlock()
+	if ui.isBluffetEvent() {
+		// Bluffet is finish-only: the finish checkpoint above is autofilled
+		// and the picker stays hidden — no operator selection needed.
+		return
+	}
 	ui.checkpointSelect.Enable()
 	go ui.reloadCheckpoints(race.ID, race.FinishCheckpointID)
 }
@@ -317,18 +359,23 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 		"## Keweenaw Endurance — Reader\nProxmark bridge · event finish scores all races · manual lap fallback",
 	)
 
-	configForm := widget.NewForm(
+	// Checkpoint (manual) is appended/removed dynamically by
+	// syncCheckpointVisibility — it must stay last so Fyne's form row
+	// add/remove (tail-only) keeps the rendered grid in sync. It is hidden
+	// entirely for Bluffet (finish-only, no checkpoint picker).
+	ui.configForm = widget.NewForm(
 		widget.NewFormItem("Hosted API URL", ui.hostedURL),
 		widget.NewFormItem("Bridge token", ui.bridgeToken),
 		widget.NewFormItem("Organizer PIN", ui.organizerPIN),
 		widget.NewFormItem("Device ID", ui.deviceID),
 		widget.NewFormItem("Event", ui.eventSelect),
 		widget.NewFormItem("Race", ui.raceSelect),
-		widget.NewFormItem("Checkpoint (manual)", ui.checkpointSelect),
 		widget.NewFormItem("Data directory", ui.dataDir),
 		widget.NewFormItem("Proxmark CLI", ui.proxmarkCLI),
 		widget.NewFormItem("COM port", ui.proxmarkPort),
 	)
+	ui.syncCheckpointVisibility()
+	configForm := ui.configForm
 
 	saveBtn := widget.NewButton("Save config", ui.onSave)
 	testBtn := widget.NewButton("Test Proxmark", ui.onTestProxmark)
@@ -446,7 +493,8 @@ func (ui *readerUI) runAutofill() {
 		ui.manualRaceSelect.Options = ui.manualRaceOptionLabels()
 		ui.selectEventMatchingConfig()
 		ui.selectRaceMatchingConfig()
-		if ui.cfg.RaceID != "" {
+		ui.syncCheckpointVisibility()
+		if ui.cfg.RaceID != "" && !ui.isBluffetEvent() {
 			go ui.reloadCheckpoints(ui.cfg.RaceID, ui.cfg.CheckpointID)
 		}
 

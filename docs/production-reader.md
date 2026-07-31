@@ -9,6 +9,8 @@ Short setup and ops guide for the finish-line laptop against live production.
 
 **Organizer PIN:** `1738` (unless rotated in Secret Manager)
 
+**Bluffet is finish-only:** All You Can East Bluffet has a single start/finish lap point. The **Station** page has no checkpoint mode toggle or checkpoint picker for this event (only **Finish station**), and manual lap entry (reader GUI or website) never asks for a checkpoint — it always uses each race's finish checkpoint automatically.
+
 ### Where to find controls
 
 | Control | Where |
@@ -19,10 +21,10 @@ Short setup and ops guide for the finish-line laptop against live production.
 | **Station** | Top header · also footer |
 | **CSV recovery** | Footer · also PIN page after unlock |
 | **Racers** | After PIN unlock: each race row on **Manage** · live view toolbar · race details · event page |
-| **Manual entry (website)** | Same places as Racers (opens Live timing) |
+| **Manual entry (website)** | Same places as Racers (opens the event **Taps** page at `/events/:eventId/taps`) |
 | **Add racer** / **Program tag** / **Write tag** | On the Racers page for that race |
 | **Save & arm reader** | Station page |
-| **Record time** | Manual entry (Live timing) page · or reader GUI |
+| **Record time** | Event Taps page (**Add tap**) · or reader GUI |
 | **Online · Synced** chip | Live race flow page (when PIN unlocked) |
 
 ---
@@ -69,7 +71,7 @@ powershell -File scripts\pack-reader-setup.ps1
    - **Bridge token** (from Secret Manager `keweenaw-bridge-token`) and/or **Organizer PIN** `1738`
    - **Device ID:** `laptop-finish-1`
    - **Event ID:** `1441674d-a011-471a-a601-722b88b117f5` (Bluffet 2026)
-   - **Race ID** + **Checkpoint ID** for the finish (needed for GUI manual entry)
+   - **Race:** leave on **All races (event finish)** to score every distance from one mat, or pick a single distance. Bluffet has only one finish/lap point, so there is **no "Checkpoint (manual)" picker** — the GUI hides it and auto-uses each race's finish checkpoint.
    - **COM port:** usually `COM3`
    - **Proxmark CLI:** `C:\Users\gener\Documents\keweenaw-endurance\scripts\pm3.cmd`
    - Check **Use Proxmark hardware**
@@ -157,16 +159,16 @@ They can race as soon as the tag is written and the station is armed.
 
 **Preferred on the reader laptop:** `reader-gui.exe` → enter bib → **Record lap**.
 
-Website path (same as before):
+Website path — event-scoped **Taps** page (covers every race in the event, not just one):
 
 1. Unlock with PIN.
-2. Open **Manual entry** for that race (Manage → race → **Manual entry**, or live view → **Manual entry**).
-3. Under **Manual Timing Entry**:
-   - Select the **Finish** (or correct) checkpoint
-   - Enter **bib number** (preferred) *or* RFID tag UID
-4. Click **Record time**
+2. Open **Manual entry** (Manage → race → **Manual entry**, or live view → **Manual entry**, or event page). All of these open `/events/:eventId/taps`.
+3. Click **Add tap**.
+4. Search by bib or name and select the racer — their race is shown alongside their name, so no checkpoint picker is needed; the tap always records that racer's race finish.
+5. Leave **Karaoke bonus** off for a normal scored lap, or turn it on to add a standalone bonus lap with no underlying scored lap.
+6. Click **Add tap**.
 
-The lap is stored with the current timestamp and shows under **Recent Records**.
+The tap is stored with the current timestamp and shows in the taps table (sorted newest first).
 
 **Karaoke bonus lap:** after a normal RFID lap popup, use the karaoke control on the scan popup to add one bonus lap (when available).
 
@@ -179,9 +181,9 @@ Unlock **PIN** first. Scored laps can be soft-voided (and restored) without wipi
 | Situation | Fix |
 |-----------|-----|
 | Just scored the wrong lap | On the scan popup: **Discard lap** → confirm **Discard** |
-| Older bad lap / karaoke | Open **Manual entry** / live timing for the race → **Recent Records** → **Discard** (or **Restore** if already voided) |
+| Older bad lap / karaoke | Open **Manual entry** (event **Taps** page) → find the row → **Void** (or **Restore** if already voided) |
 | Accidental double-tap | Usually blocked by the **1-minute cooldown** — no action |
-| Missed tap | **reader-gui** manual entry or website Manual entry (section 5) |
+| Missed tap | **reader-gui** manual entry or website **Add tap** on the event Taps page (section 5) |
 | Need to wipe/rebuild timing data | Emergency only: footer **CSV recovery** (PIN required). This replaces event timing data — stop all scoring first |
 
 Voided laps stay in the database/CSV for audit but do not count toward standings or cooldown. Voiding an RFID lap also voids its karaoke bonus.
@@ -197,7 +199,7 @@ Do **not** call CSV import for normal outages. Offline scoring uses the device-b
 - [ ] Browser on https://www.keweenawendurance.com
 - [ ] Header shows **PIN** / **Station**; unlock PIN; arm station as finish / `laptop-finish-1`
 - [ ] From Manage, open **Racers** for a race; spot-check program + tap
-- [ ] Know **GUI Record lap** / website **Manual entry** for missed taps
+- [ ] Know **GUI Record lap** / website **Manual entry** (event Taps page → **Add tap**) for missed taps
 
 ---
 
