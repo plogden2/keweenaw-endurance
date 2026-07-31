@@ -146,6 +146,8 @@ function lapEvent(
 }
 
 describe('EventLive.vue', () => {
+  let activeWrapper: VueWrapper | null = null
+
   beforeEach(() => {
     setupPinia()
     vi.clearAllMocks()
@@ -154,7 +156,13 @@ describe('EventLive.vue', () => {
     ;(eventsLiveApi.getLive as Mock).mockResolvedValue({ data: livePayload })
   })
 
+  afterEach(() => {
+    activeWrapper?.unmount()
+    activeWrapper = null
+  })
+
   async function mountLive() {
+    activeWrapper?.unmount()
     const router = createTestRouter([
       {
         path: '/events/:eventId/live',
@@ -191,6 +199,7 @@ describe('EventLive.vue', () => {
         },
       },
     })
+    activeWrapper = wrapper
     await flushPromises()
     return wrapper
   }

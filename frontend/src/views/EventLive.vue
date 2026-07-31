@@ -1229,10 +1229,10 @@ onMounted(() => {
       void refreshPending()
       return
     }
-    void eventsLiveApi
-      .getLive(eventId.value)
-      .then(({ data }) => {
-        void applyLiveData(data)
+    void Promise.resolve(eventsLiveApi.getLive(eventId.value))
+      .then((res) => {
+        if (!res?.data) return
+        void applyLiveData(res.data)
         online.value = navigator.onLine
         void refreshPending()
       })

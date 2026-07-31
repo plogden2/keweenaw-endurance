@@ -5,7 +5,8 @@ import 'fake-indexeddb/auto'
 import { scansApi, rfidStreamUrl } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
-import { deleteDatabase } from '@/services/timingStorage'
+import * as offlineQueue from '@/services/offlineQueue'
+import { deleteDatabase, getDisplayCache } from '@/services/timingStorage'
 import { __resetReaderStationForTests } from './useReaderStation'
 
 vi.mock('@/services/api', async () => {
@@ -369,6 +370,193 @@ describe('useReaderStation', () => {
     await vi.advanceTimersByTimeAsync(2000)
     expect(MockWebSocket.instances).toHaveLength(1)
     vi.useRealTimers()
+  })
+
+  it('surfaces enqueueScan failures from Error and non-Error rejects', async () => {
+    unlockReaderPin()
+    const station = useStationStore()
+    station.eventId = 'evt-1'
+    station.deviceId = 'laptop-finish-1'
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop, error } = useReaderStation()
+    start()
+
+    const enqueueSpy = vi
+      .spyOn(offlineQueue, 'enqueueScan')
+      .mockRejectedValueOnce(new Error('scan failed hard'))
+      .mockRejectedValueOnce('boom')
+
+    MockWebSocket.instances[0].emit({
+      type: 'tag_read',
+      tag_uid: 'DEMO-TAG-ERR-1',
+    })
+    await vi.waitFor(() => expect(error.value).toBe('scan failed hard'))
+
+    MockWebSocket.instances[0].emit({
+      type: 'tag_read',
+      tag_uid: 'DEMO-TAG-ERR-2',
+    })
+    await vi.waitFor(() => expect(error.value).toBe('Scan failed'))
+
+    enqueueSpy.mockRestore()
+    stop()
+  })
+
+  it('handles DOM rfid-tag-read events when the stream is started', async () => {
+    unlockReaderPin()
+    const station = useStationStore()
+    station.eventId = 'evt-1'
+    station.deviceId = 'laptop-finish-1'
+    ;(scansApi.postScan as Mock).mockResolvedValue({
+      data: {
+        result: 'lap',
+        participant_name: 'Dom Reader',
+        bib_number: '99',
+      },
+    })
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop, lastScan } = useReaderStation()
+    start()
+
+    window.dispatchEvent(
+      new CustomEvent('rfid-tag-read', {
+        detail: { tag_uid: 'DOM-TAG-1', read_at: '2026-08-01T12:00:00-04:00' },
+      }),
+    )
+    await vi.waitFor(() => expect(lastScan.value?.participant_name).toBe('Dom Reader'))
+
+    window.dispatchEvent(new CustomEvent('rfid-tag-read', { detail: {} }))
+    expect(scansApi.postScan).toHaveBeenCalledTimes(1)
+
+    stop()
+  })
+
+  it('shows provisional queued lastScan when enqueue returns queued without scan', async () => {
+    unlockReaderPin()
+    const station = useStationStore()
+    station.eventId = 'evt-1'
+    station.deviceId = 'laptop-finish-1'
+
+    const enqueueSpy = vi
+      .spyOn(offlineQueue, 'enqueueScan')
+      .mockResolvedValueOnce({ status: 'queued' })
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop, lastScan } = useReaderStation()
+    start()
+
+    MockWebSocket.instances[0].emit({
+      type: 'tag_read',
+      tag_uid: 'DEMO-TAG-QUEUED',
+    })
+
+    await vi.waitFor(() => expect(lastScan.value?.message).toContain('Queued offline'))
+    expect(lastScan.value?.participant_name).toBe('Racer')
+    enqueueSpy.mockRestore()
+    stop()
+  })
+
+  it('skips tag reads when station fetch fails and no event is configured', async () => {
+    unlockReaderPin()
+    const station = useStationStore()
+    station.eventId = ''
+    vi.spyOn(station, 'fetchCurrent').mockRejectedValueOnce(new Error('offline'))
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop } = useReaderStation()
+    start()
+
+    MockWebSocket.instances[0].emit({
+      type: 'tag_read',
+      tag_uid: 'DEMO-TAG-NO-EVENT',
+    })
+
+    await vi.waitFor(() => expect(station.fetchCurrent).toHaveBeenCalled())
+    expect(scansApi.postScan).not.toHaveBeenCalled()
+    stop()
+  })
+
+  it('loads station config then posts when event id was initially missing', async () => {
+    unlockReaderPin()
+    const station = useStationStore()
+    station.eventId = ''
+    vi.spyOn(station, 'fetchCurrent').mockImplementation(async () => {
+      station.eventId = 'evt-1'
+      station.deviceId = 'laptop-finish-1'
+      return {
+        event_id: 'evt-1',
+        mode: 'finish',
+        device_id: 'laptop-finish-1',
+        name: 'Finish A',
+        checkpoint_id: null,
+      }
+    })
+    ;(scansApi.postScan as Mock).mockResolvedValue({
+      data: { result: 'lap', participant_name: 'Late Config', bib_number: '7' },
+    })
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop, lastScan } = useReaderStation()
+    start()
+
+    MockWebSocket.instances[0].emit({
+      type: 'tag_read',
+      tag_uid: 'DEMO-TAG-LATE',
+    })
+
+    await vi.waitFor(() => expect(lastScan.value?.participant_name).toBe('Late Config'))
+    expect(station.fetchCurrent).toHaveBeenCalled()
+    stop()
+  })
+
+  it('seeds display cache from empty cache for both named and unnamed laps', async () => {
+    unlockReaderPin()
+    const station = useStationStore()
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop, lastScan } = useReaderStation()
+    start()
+
+    await deleteDatabase()
+    station.eventId = ''
+    MockWebSocket.instances[0].emit({
+      type: 'scan_result',
+      tag_uid: 'CACHE-TAG-1',
+      scan: { result: 'lap', bib_number: '3' },
+    })
+    await vi.waitFor(() => expect(lastScan.value?.bib_number).toBe('3'))
+    await vi.waitFor(async () => {
+      const cache = await getDisplayCache()
+      expect(cache?.tags?.['CACHE-TAG-1']?.participant_name).toBe('Racer')
+    })
+
+    await deleteDatabase()
+    station.eventId = 'evt-1'
+    MockWebSocket.instances[0].emit({
+      type: 'scan_result',
+      tag_uid: 'CACHE-TAG-2',
+      scan: {
+        result: 'lap',
+        participant_name: 'Named Racer',
+        bib_number: '4',
+      },
+    })
+    await vi.waitFor(() => expect(lastScan.value?.participant_name).toBe('Named Racer'))
+    await vi.waitFor(async () => {
+      const cache = await getDisplayCache()
+      expect(cache?.event_id).toBe('evt-1')
+      expect(cache?.tags?.['CACHE-TAG-2']?.participant_name).toBe('Named Racer')
+    })
+
+    MockWebSocket.instances[0].emit({
+      type: 'scan_result',
+      scan: { result: 'lap', participant_name: 'No Tag Uid' },
+    })
+    await vi.waitFor(() => expect(lastScan.value?.participant_name).toBe('No Tag Uid'))
+
+    stop()
   })
 })
 

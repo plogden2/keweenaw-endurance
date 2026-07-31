@@ -91,6 +91,50 @@ describe('usePinAuthStore', () => {
     await expect(store.loginWithPin('0000')).rejects.toBe('denied')
     expect(store.error).toBe('Invalid PIN')
   })
+
+  it('ignores missing sessionStorage and clears corrupt stored auth', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage')
+    Object.defineProperty(globalThis, 'sessionStorage', {
+      configurable: true,
+      value: undefined,
+    })
+    try {
+      setActivePinia(createPinia())
+      const store = usePinAuthStore()
+      expect(store.token).toBeNull()
+      expect(store.isAuthenticated).toBe(false)
+
+      const expiresAt = Math.floor(Date.now() / 1000) + 3600
+      ;(authApi.loginWithPin as Mock).mockResolvedValue({
+        data: { token: 'tok', role: 'admin', expires_at: expiresAt },
+      })
+      await store.loginWithPin('1738')
+      expect(store.token).toBe('tok')
+      store.logout()
+      expect(store.token).toBeNull()
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(globalThis, 'sessionStorage', descriptor)
+      }
+    }
+
+    sessionStorage.setItem('keweenaw-pin-auth', '{not-json')
+    setActivePinia(createPinia())
+    const restored = usePinAuthStore()
+    expect(restored.token).toBeNull()
+    expect(sessionStorage.getItem('keweenaw-pin-auth')).toBeNull()
+
+    const expiresAt = Math.floor(Date.now() / 1000) + 3600
+    sessionStorage.setItem(
+      'keweenaw-pin-auth',
+      JSON.stringify({ token: 'tok-no-role', expiresAt }),
+    )
+    setActivePinia(createPinia())
+    const noRole = usePinAuthStore()
+    expect(noRole.token).toBe('tok-no-role')
+    expect(noRole.role).toBeNull()
+    expect(noRole.isAuthenticated).toBe(true)
+  })
 })
 
 describe('useStationStore', () => {
