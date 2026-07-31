@@ -342,10 +342,14 @@ export function resolveRaceFlowAxisMaxMinutes(
   recordedMaxMinutes: number,
   currentElapsedMinutes: number | null,
 ): number {
+  // Live races: x-axis ends at current elapsed time (duration is only a ceiling).
+  if (currentElapsedMinutes != null) {
+    return clampElapsedToDuration(currentElapsedMinutes, durationMinutes)
+  }
   if (durationMinutes != null && durationMinutes > 0) {
     return durationMinutes
   }
-  return Math.max(recordedMaxMinutes, currentElapsedMinutes ?? 0)
+  return Math.max(recordedMaxMinutes, 0)
 }
 
 /** Pixel radius for treating a near-miss click/hover as a line/point hit. */
@@ -453,16 +457,15 @@ export function resolveRaceFlowXAxisMax(
   currentElapsedMinutes: number | null,
   showCurrentTime: boolean,
 ): number | undefined {
-  const axisMax = resolveRaceFlowAxisMaxMinutes(
-    durationMinutes,
-    recordedMaxMinutes,
-    currentElapsedMinutes,
-  )
-  if (durationMinutes != null && durationMinutes > 0) {
-    return axisMax
+  if (showCurrentTime && currentElapsedMinutes != null) {
+    return resolveRaceFlowAxisMaxMinutes(
+      durationMinutes,
+      recordedMaxMinutes,
+      currentElapsedMinutes,
+    )
   }
-  if (showCurrentTime) {
-    return Math.ceil(axisMax * 1.05)
+  if (durationMinutes != null && durationMinutes > 0) {
+    return durationMinutes
   }
   return undefined
 }

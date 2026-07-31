@@ -107,14 +107,10 @@ const currentElapsedMinutes = computed(() => {
     return null
   }
 
-  const elapsed = clampElapsedToDuration(
+  return clampElapsedToDuration(
     getCurrentElapsedMinutes(raceStartMs.value, nowMs.value),
     props.durationMinutes,
   )
-  const lastPoint = participantFlow.value?.points.at(-1)
-  const latestRecordedMinute = lastPoint?.elapsedMinutes ?? 0
-
-  return elapsed > latestRecordedMinute ? elapsed : null
 })
 
 function clearLiveRefreshTimer(): void {
@@ -403,6 +399,8 @@ defineExpose({
 <style scoped>
 .participant-flow-chart {
   min-height: 280px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .chart-panel {
@@ -410,12 +408,17 @@ defineExpose({
   border-radius: 8px;
   padding: 1rem;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .chart-canvas-host {
   position: relative;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   height: 280px;
+  overflow: hidden;
 }
 
 .status,

@@ -722,9 +722,15 @@ describe('raceFlowData', () => {
     expect(clampElapsedToDuration(100, undefined)).toBe(100)
   })
 
-  it('uses duration as axis max when present', () => {
+  it('uses current elapsed as axis max for live races, capped by duration', () => {
+    expect(resolveRaceFlowAxisMaxMinutes(720, 12, 90)).toBe(90)
+    expect(resolveRaceFlowAxisMaxMinutes(360, 5, 40)).toBe(40)
     expect(resolveRaceFlowAxisMaxMinutes(720, 12, 2559)).toBe(720)
-    expect(resolveRaceFlowAxisMaxMinutes(360, 5, 40)).toBe(360)
+  })
+
+  it('uses duration as axis max when race is not live', () => {
+    expect(resolveRaceFlowAxisMaxMinutes(720, 12, null)).toBe(720)
+    expect(resolveRaceFlowAxisMaxMinutes(360, 5, null)).toBe(360)
   })
 
   it('falls back to recorded/live max when duration missing', () => {
@@ -732,9 +738,11 @@ describe('raceFlowData', () => {
     expect(resolveRaceFlowAxisMaxMinutes(0, 45, null)).toBe(45)
   })
 
-  it('resolves chart x-axis max with optional padding', () => {
+  it('resolves chart x-axis max to current time for active races', () => {
+    expect(resolveRaceFlowXAxisMax(720, 12, 90, true)).toBe(90)
     expect(resolveRaceFlowXAxisMax(720, 12, 2559, true)).toBe(720)
-    expect(resolveRaceFlowXAxisMax(undefined, 100, 100, true)).toBe(105)
+    expect(resolveRaceFlowXAxisMax(undefined, 100, 100, true)).toBe(100)
+    expect(resolveRaceFlowXAxisMax(720, 12, null, false)).toBe(720)
     expect(resolveRaceFlowXAxisMax(undefined, 100, 100, false)).toBeUndefined()
   })
 
@@ -1077,7 +1085,43 @@ describe('RaceFlowChart.vue', () => {
     wrapper.unmount()
   })
 
-  it('caps x-axis and extrapolations to duration_minutes for active races', async () => {
+  it('ends x-axis at current elapsed time for active races', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-06-01T12:00:00.000Z'))
+
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: sampleRecords },
+    })
+
+    mount(RaceFlowChart, {
+      props: {
+        raceId: 'race-1',
+        raceStatus: 'active',
+        raceStartTime: '2024-06-01T10:30:00.000Z',
+        raceType: 'lap_based',
+        durationMinutes: 720,
+      },
+    })
+    await flushPromises()
+
+    const chartConfig = (Chart as unknown as Mock).mock.calls.at(-1)?.[1] as {
+      options: {
+        scales: { x: { max?: number } }
+        plugins: { currentTimeLine: { xMinutes: number | null } }
+      }
+      data: { datasets: Array<{ data: Array<{ x: number }> }> }
+    }
+
+    expect(chartConfig.options.scales.x.max).toBe(90)
+    expect(chartConfig.options.plugins.currentTimeLine.xMinutes).toBe(90)
+
+    const xs = chartConfig.data.datasets.flatMap((d) => d.data.map((p) => p.x))
+    expect(Math.max(...xs)).toBeLessThanOrEqual(90)
+
+    vi.useRealTimers()
+  })
+
+  it('caps x-axis and extrapolations to duration_minutes once elapsed exceeds it', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2024-06-03T12:00:00.000Z'))
 

@@ -560,16 +560,10 @@ const currentElapsedMinutes = computed(() => {
     return null
   }
 
-  const elapsed = clampElapsedToDuration(
+  return clampElapsedToDuration(
     getCurrentElapsedMinutes(raceStartMs.value, nowMs.value),
     props.durationMinutes,
   )
-  const latestRecordedMinute = flows.value.reduce((latest, flow) => {
-    const lastPoint = flow.points.at(-1)
-    return lastPoint ? Math.max(latest, lastPoint.elapsedMinutes) : latest
-  }, 0)
-
-  return elapsed > latestRecordedMinute ? elapsed : null
 })
 
 const availableStatuses = computed(() =>
@@ -1646,12 +1640,16 @@ defineExpose({
 <style scoped>
 .race-flow-chart {
   min-height: 320px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .chart-panel {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .chart-toolbar {
@@ -1690,7 +1688,10 @@ defineExpose({
 .chart-canvas-host {
   position: relative;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   height: 320px;
+  overflow: hidden;
 }
 
 .legend-panel {
@@ -1716,7 +1717,7 @@ defineExpose({
 
 .legend-search-label {
   flex: 1 1 220px;
-  min-width: 180px;
+  min-width: min(180px, 100%);
   display: block;
 }
 
@@ -1736,7 +1737,8 @@ defineExpose({
 
 .filter-dropdown {
   position: relative;
-  min-width: 160px;
+  min-width: min(160px, 100%);
+  flex: 1 1 140px;
 }
 
 .filter-dropdown-trigger {
@@ -1846,10 +1848,11 @@ defineExpose({
 
 .legend-items {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
   gap: 0.35rem 0.75rem;
   max-height: 220px;
   overflow-y: auto;
+  min-width: 0;
 }
 
 .legend-item {
