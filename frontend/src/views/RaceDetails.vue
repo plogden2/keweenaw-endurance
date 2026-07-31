@@ -113,33 +113,35 @@
         <template v-else>
           <div v-if="leaderboardLoading" class="status">Loading leaderboard…</div>
           <div v-else-if="leaderboardError" class="status error">{{ leaderboardError }}</div>
-          <table v-else-if="leaderboard.length" class="leaderboard-table">
-            <thead>
-              <tr>
-                <th>Pos</th>
-                <th>Bib</th>
-                <th>Name</th>
-                <th>Location</th>
-                <th>Result</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="entry in leaderboard"
-                :key="entry.participant_id"
-                :class="{ clickable: entry.status === 'finished' }"
-                @click="selectParticipant(entry)"
-              >
-                <td>{{ entry.position }}</td>
-                <td>{{ entry.bib_number }}</td>
-                <td>{{ entry.first_name }} {{ entry.last_name }}</td>
-                <td>{{ entry.location || '—' }}</td>
-                <td>{{ formatResult(entry) }}</td>
-                <td>{{ entry.status }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div v-else-if="leaderboard.length" class="table-scroll" data-testid="leaderboard-scroll">
+            <table class="leaderboard-table">
+              <thead>
+                <tr>
+                  <th>Pos</th>
+                  <th>Bib</th>
+                  <th>Name</th>
+                  <th>Location</th>
+                  <th>Result</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="entry in leaderboard"
+                  :key="entry.participant_id"
+                  :class="{ clickable: entry.status === 'finished' }"
+                  @click="selectParticipant(entry)"
+                >
+                  <td>{{ entry.position }}</td>
+                  <td>{{ entry.bib_number }}</td>
+                  <td>{{ entry.first_name }} {{ entry.last_name }}</td>
+                  <td>{{ entry.location || '—' }}</td>
+                  <td>{{ formatResult(entry) }}</td>
+                  <td>{{ entry.status }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p v-else class="empty">No results yet.</p>
         </template>
       </section>
@@ -438,9 +440,25 @@ watch(activeTab, async (tab) => {
 
 <style scoped>
 .race-details {
-  max-width: 1200px;
+  width: 100%;
+  max-width: min(1200px, 100%);
   margin: 0 auto;
   padding: 0 2rem 2rem;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.leaderboard,
+.race-flow,
+.statistics {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .race-details {
+    padding: 0 1rem 2rem;
+  }
 }
 
 .back-link {
@@ -485,6 +503,7 @@ watch(activeTab, async (tab) => {
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 1.5rem;
 }
@@ -504,18 +523,24 @@ watch(activeTab, async (tab) => {
 
 .leaderboard-table {
   width: 100%;
+  min-width: 36rem;
   border-collapse: collapse;
   background: white;
   border-radius: 8px;
-  overflow: hidden;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
 }
 
 .leaderboard-table th,
 .leaderboard-table td {
-  padding: 0.75rem 1rem;
+  padding: 0.75rem 0.75rem;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.leaderboard-table td:nth-child(3),
+.leaderboard-table td:nth-child(4) {
+  white-space: normal;
 }
 
 .leaderboard-table th {

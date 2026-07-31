@@ -1346,9 +1346,12 @@ onUnmounted(() => {
 <style scoped>
 .event-live {
   position: relative;
-  max-width: 1200px;
+  width: 100%;
+  max-width: min(1200px, 100%);
   margin: 0 auto;
   padding: 0 2rem;
+  box-sizing: border-box;
+  min-width: 0;
   --line: var(--border);
   --live-display-scale: 1;
   --live-title-size: calc(1.75rem * var(--live-display-scale));
@@ -1547,6 +1550,10 @@ onUnmounted(() => {
   padding: 1rem 1.15rem;
   margin-bottom: 1rem;
   font-size: var(--live-body-size);
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .countdown-label {
@@ -1569,7 +1576,10 @@ onUnmounted(() => {
   border-radius: 6px;
   padding: 0.75rem;
   margin-bottom: 1rem;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .overlap-charts {

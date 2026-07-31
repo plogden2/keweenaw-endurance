@@ -321,13 +321,15 @@ async function saveSocialSquareImage(): Promise<void> {
 }
 
 .social-square-card {
+  /* Off-screen export target — keep it out of document scroll width. */
   position: fixed;
-  left: -10000px;
+  left: 0;
   top: 0;
   width: 1080px;
   height: 1080px;
   overflow: hidden;
   pointer-events: none;
+  transform: translate(-110%, -110%);
   font-family: Arial, Helvetica, sans-serif;
 }
 

@@ -84,62 +84,64 @@
       <div v-if="loading" class="status">Loading taps…</div>
       <div v-else-if="loadError" class="status error">{{ loadError }}</div>
       <template v-else>
-        <table class="taps-table" data-testid="event-taps-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Race</th>
-              <th>Bib</th>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Sync</th>
-              <th v-if="pinAuth.isAuthenticated">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="record in taps"
-              :key="record.id"
-              :class="{ voided: Boolean(record.voided_at) }"
-              :data-testid="`tap-row-${record.id}`"
-            >
-              <td>{{ formatTime(record.timestamp) }}</td>
-              <td>{{ record.participant?.race?.name ?? '—' }}</td>
-              <td>{{ record.participant?.bib_number ?? '—' }}</td>
-              <td>
-                {{ record.participant?.first_name }} {{ record.participant?.last_name }}
-                <span v-if="record.voided_at" class="void-badge" data-testid="voided-badge">
-                  voided
-                </span>
-              </td>
-              <td>{{ typeLabel(record.record_type) }}</td>
-              <td>{{ record.sync_status }}</td>
-              <td v-if="pinAuth.isAuthenticated">
-                <button
-                  v-if="!record.voided_at"
-                  type="button"
-                  class="row-action discard"
-                  data-testid="void-tap-btn"
-                  @click="confirmVoid(record)"
-                >
-                  Void
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  class="row-action restore"
-                  data-testid="restore-tap-btn"
-                  @click="confirmRestore(record)"
-                >
-                  Restore
-                </button>
-              </td>
-            </tr>
-            <tr v-if="!taps.length">
-              <td :colspan="pinAuth.isAuthenticated ? 7 : 6" class="empty">No taps yet.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table class="taps-table" data-testid="event-taps-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Race</th>
+                <th>Bib</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Sync</th>
+                <th v-if="pinAuth.isAuthenticated">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="record in taps"
+                :key="record.id"
+                :class="{ voided: Boolean(record.voided_at) }"
+                :data-testid="`tap-row-${record.id}`"
+              >
+                <td>{{ formatTime(record.timestamp) }}</td>
+                <td>{{ record.participant?.race?.name ?? '—' }}</td>
+                <td>{{ record.participant?.bib_number ?? '—' }}</td>
+                <td>
+                  {{ record.participant?.first_name }} {{ record.participant?.last_name }}
+                  <span v-if="record.voided_at" class="void-badge" data-testid="voided-badge">
+                    voided
+                  </span>
+                </td>
+                <td>{{ typeLabel(record.record_type) }}</td>
+                <td>{{ record.sync_status }}</td>
+                <td v-if="pinAuth.isAuthenticated">
+                  <button
+                    v-if="!record.voided_at"
+                    type="button"
+                    class="row-action discard"
+                    data-testid="void-tap-btn"
+                    @click="confirmVoid(record)"
+                  >
+                    Void
+                  </button>
+                  <button
+                    v-else
+                    type="button"
+                    class="row-action restore"
+                    data-testid="restore-tap-btn"
+                    @click="confirmRestore(record)"
+                  >
+                    Restore
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="!taps.length">
+                <td :colspan="pinAuth.isAuthenticated ? 7 : 6" class="empty">No taps yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p v-if="actionError" class="error" data-testid="tap-action-error">{{ actionError }}</p>
 
         <div v-if="totalPages > 1" class="pagination" data-testid="taps-pagination">
@@ -411,9 +413,18 @@ watch(eventId, async () => {
 
 <style scoped>
 .event-taps {
-  max-width: 1200px;
+  width: 100%;
+  max-width: min(1200px, 100%);
   margin: 0 auto;
-  padding: 0 2rem 2rem;
+  padding: 0 1rem 2rem;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+@media (min-width: 769px) {
+  .event-taps {
+    padding: 0 2rem 2rem;
+  }
 }
 
 .back-link {
@@ -541,6 +552,7 @@ watch(eventId, async () => {
 
 .taps-table {
   width: 100%;
+  min-width: 40rem;
   border-collapse: collapse;
 }
 

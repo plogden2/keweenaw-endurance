@@ -145,6 +145,9 @@ onUnmounted(() => {
 .main {
   min-height: calc(100vh - 80px);
   padding: 2rem 0;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 .footer {

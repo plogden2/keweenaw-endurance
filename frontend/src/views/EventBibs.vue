@@ -62,44 +62,6 @@
       <div v-if="loading" class="status">Loading bibs…</div>
       <div v-else-if="loadError" class="status error">{{ loadError }}</div>
       <div v-else class="panel">
-        <table class="bibs-table" data-testid="event-bibs-table">
-          <thead>
-            <tr>
-              <th>Bib #</th>
-              <th>Tags</th>
-              <th>Assigned racer</th>
-              <th v-if="pinAuth.isAuthenticated">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="bib in sortedBibs"
-              :key="bib.id"
-              :data-testid="`bib-row-${bib.id}`"
-            >
-              <td class="bib-num">{{ bib.bib_number }}</td>
-              <td>{{ bib.tag_count }}</td>
-              <td>
-                <template v-if="bib.participant_name">{{ bib.participant_name }}</template>
-                <span v-else class="muted">unassigned</span>
-              </td>
-              <td v-if="pinAuth.isAuthenticated">
-                <button
-                  type="button"
-                  class="btn"
-                  data-testid="bib-program-tag"
-                  :disabled="programmingId === bib.id"
-                  @click="programTag(bib)"
-                >
-                  {{ programmingId === bib.id ? 'Writing…' : 'Program' }}
-                </button>
-              </td>
-            </tr>
-            <tr v-if="!sortedBibs.length">
-              <td :colspan="pinAuth.isAuthenticated ? 4 : 3" class="empty">No bibs yet.</td>
-            </tr>
-          </tbody>
-        </table>
         <p
           v-if="programSuccess"
           class="success"
@@ -111,6 +73,46 @@
         <p v-if="programError" class="error" role="alert" data-testid="bib-program-error">
           {{ programError }}
         </p>
+        <div class="table-scroll">
+          <table class="bibs-table" data-testid="event-bibs-table">
+            <thead>
+              <tr>
+                <th>Bib #</th>
+                <th>Tags</th>
+                <th>Assigned racer</th>
+                <th v-if="pinAuth.isAuthenticated">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="bib in sortedBibs"
+                :key="bib.id"
+                :data-testid="`bib-row-${bib.id}`"
+              >
+                <td class="bib-num">{{ bib.bib_number }}</td>
+                <td>{{ bib.tag_count }}</td>
+                <td>
+                  <template v-if="bib.participant_name">{{ bib.participant_name }}</template>
+                  <span v-else class="muted">unassigned</span>
+                </td>
+                <td v-if="pinAuth.isAuthenticated">
+                  <button
+                    type="button"
+                    class="btn"
+                    data-testid="bib-program-tag"
+                    :disabled="programmingId !== null"
+                    @click="programTag(bib)"
+                  >
+                    {{ programmingId === bib.id ? 'Writing…' : 'Program' }}
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="!sortedBibs.length">
+                <td :colspan="pinAuth.isAuthenticated ? 4 : 3" class="empty">No bibs yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </template>
   </div>
@@ -190,6 +192,7 @@ async function programTag(bib: BibListItem) {
     await router.push('/pin')
     return
   }
+  if (programmingId.value !== null) return
   programmingId.value = bib.id
   programError.value = null
   programSuccess.value = null
@@ -220,9 +223,12 @@ watch(eventId, async () => {
 
 <style scoped>
 .event-bibs-page {
-  max-width: 1100px;
+  width: 100%;
+  max-width: min(1100px, 100%);
   margin: 0 auto;
-  padding: 0 1.5rem 3rem;
+  padding: 0 1rem 3rem;
+  box-sizing: border-box;
+  min-width: 0;
   --line: var(--border);
 }
 
@@ -326,6 +332,7 @@ input {
 
 .bibs-table {
   width: 100%;
+  min-width: 28rem;
   border-collapse: collapse;
 }
 

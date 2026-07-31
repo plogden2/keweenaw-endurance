@@ -35,12 +35,16 @@ const { active: bluffetActive, logoPath } = useBluffetTheme()
 }
 
 .nav {
-  max-width: 1200px;
+  width: 100%;
+  max-width: min(1200px, 100%);
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 0 1rem;
+  box-sizing: border-box;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
 }
 
 .logo {
@@ -53,8 +57,9 @@ const { active: bluffetActive, logoPath } = useBluffetTheme()
 
 .logo h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: clamp(1.1rem, 4.5vw, 1.5rem);
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .bluffet-nav-mark {
@@ -85,15 +90,26 @@ const { active: bluffetActive, logoPath } = useBluffetTheme()
   color: var(--ink);
 }
 
+@media (min-width: 769px) {
+  .nav {
+    padding: 0 2rem;
+  }
+}
+
 @media (max-width: 768px) {
   .nav {
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .nav-links {
     gap: 0.5rem;
     justify-content: center;
+    width: 100%;
+  }
+
+  .nav-link {
+    padding: 0.4rem 0.75rem;
   }
 }
 </style>

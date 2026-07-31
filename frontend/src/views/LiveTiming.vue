@@ -85,60 +85,66 @@
         <h2 class="section-title">Recent Records</h2>
         <div v-if="liveLoading" class="status">Loading records…</div>
         <div v-else-if="liveError" class="status error">{{ liveError }}</div>
-        <table v-else-if="liveRecords.length" class="records-table" data-testid="recent-records-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Participant</th>
-              <th>Checkpoint</th>
-              <th>Type</th>
-              <th>Sync</th>
-              <th v-if="pinAuth.isAuthenticated">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="record in liveRecordsNewestFirst"
-              :key="record.id"
-              :class="{ voided: Boolean(record.voided_at) }"
-              :data-testid="`timing-row-${record.id}`"
-            >
-              <td>{{ formatTime(record.timestamp) }}</td>
-              <td>
-                <template v-if="record.participant">
-                  #{{ record.participant.bib_number }}
-                  {{ record.participant.first_name }}
-                  {{ record.participant.last_name }}
-                </template>
-                <template v-else>{{ formatShortId(record.participant_id) }}</template>
-                <span v-if="record.voided_at" class="void-badge" data-testid="voided-badge">voided</span>
-              </td>
-              <td>{{ record.checkpoint?.name ?? formatShortId(record.checkpoint_id) }}</td>
-              <td>{{ record.record_type || 'rfid_lap' }}</td>
-              <td>{{ record.sync_status }}</td>
-              <td v-if="pinAuth.isAuthenticated">
-                <button
-                  v-if="!record.voided_at"
-                  type="button"
-                  class="row-action discard"
-                  data-testid="void-record-btn"
-                  @click="confirmVoid(record)"
-                >
-                  Discard
-                </button>
-                <button
-                  v-else
-                  type="button"
-                  class="row-action restore"
-                  data-testid="restore-record-btn"
-                  @click="confirmRestore(record)"
-                >
-                  Restore
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div
+          v-else-if="liveRecords.length"
+          class="table-scroll"
+          data-testid="recent-records-scroll"
+        >
+          <table class="records-table" data-testid="recent-records-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Participant</th>
+                <th>Checkpoint</th>
+                <th>Type</th>
+                <th>Sync</th>
+                <th v-if="pinAuth.isAuthenticated">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="record in liveRecordsNewestFirst"
+                :key="record.id"
+                :class="{ voided: Boolean(record.voided_at) }"
+                :data-testid="`timing-row-${record.id}`"
+              >
+                <td>{{ formatTime(record.timestamp) }}</td>
+                <td>
+                  <template v-if="record.participant">
+                    #{{ record.participant.bib_number }}
+                    {{ record.participant.first_name }}
+                    {{ record.participant.last_name }}
+                  </template>
+                  <template v-else>{{ formatShortId(record.participant_id) }}</template>
+                  <span v-if="record.voided_at" class="void-badge" data-testid="voided-badge">voided</span>
+                </td>
+                <td>{{ record.checkpoint?.name ?? formatShortId(record.checkpoint_id) }}</td>
+                <td>{{ record.record_type || 'rfid_lap' }}</td>
+                <td>{{ record.sync_status }}</td>
+                <td v-if="pinAuth.isAuthenticated">
+                  <button
+                    v-if="!record.voided_at"
+                    type="button"
+                    class="row-action discard"
+                    data-testid="void-record-btn"
+                    @click="confirmVoid(record)"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    v-else
+                    type="button"
+                    class="row-action restore"
+                    data-testid="restore-record-btn"
+                    @click="confirmRestore(record)"
+                  >
+                    Restore
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <p v-else class="empty">No timing records yet.</p>
         <p v-if="actionError" class="error" data-testid="timing-action-error">{{ actionError }}</p>
       </section>
@@ -345,9 +351,18 @@ watch(raceId, async () => {
 
 <style scoped>
 .live-timing {
-  max-width: 1200px;
+  width: 100%;
+  max-width: min(1200px, 100%);
   margin: 0 auto;
-  padding: 0 2rem 2rem;
+  padding: 0 1rem 2rem;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+@media (min-width: 769px) {
+  .live-timing {
+    padding: 0 2rem 2rem;
+  }
 }
 
 .page-title {
@@ -438,6 +453,7 @@ watch(raceId, async () => {
 
 .records-table {
   width: 100%;
+  min-width: 36rem;
   border-collapse: collapse;
 }
 

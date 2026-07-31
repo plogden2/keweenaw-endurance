@@ -222,6 +222,10 @@ describe('RaceDetails.vue', () => {
     expect(wrapper.text()).toContain('Alex')
     expect(wrapper.text()).toContain('Houghton MI')
     expect(wrapper.text()).toContain('7')
+
+    const scroll = wrapper.get('[data-testid="leaderboard-scroll"]')
+    expect(scroll.classes()).toContain('table-scroll')
+    expect(scroll.find('table.leaderboard-table').exists()).toBe(true)
   })
 
   it('shows certificate when a finished participant is selected', async () => {
