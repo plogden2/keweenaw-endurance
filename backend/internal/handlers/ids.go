@@ -34,6 +34,10 @@ func (h *Handlers) resolveTeamID(value string) (uuid.UUID, error) {
 	return resolveEntityID(h.services.DB, &models.Team{}, value, services.ErrTeamNotFound)
 }
 
+func (h *Handlers) resolveBibID(value string) (uuid.UUID, error) {
+	return resolveEntityID(h.services.DB, &models.Bib{}, value, services.ErrBibNotFound)
+}
+
 func (h *Handlers) resolveTimingRecordID(value string) (uuid.UUID, error) {
 	return resolveEntityID(h.services.DB, &models.TimingRecord{}, value, services.ErrTimingRecordNotFound)
 }

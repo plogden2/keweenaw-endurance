@@ -41,9 +41,28 @@ Server → client:
 
 ### POST `/api/rfid/write-tag` (PIN)
 ```json
-{ "participant_id": "<uuid>", "tag_uid": "<uid>" }
+{ "participant_id": "<uuid>", "bib_id": "<uuid>", "race_id": "<uuid>", "logical_uuid": "<ignored>" }
 ```
-Creates `rfid_tag_associations` (multi-tag; no revoke).
+Provide `participant_id` (existing) **or** `bib_id`. When `bib_id` is set, programs the chip with that bib’s UUID and returns `{ "bib_id", "tag_uid", "tag_uids" }` where `tag_uid` is the bib logical UUID. `logical_uuid` is ignored for new writes (bib id wins). Participant writes still return the participant JSON.
+
+### Event bibs inventory
+
+### GET `/api/events/{eventId}/bibs`
+Public. Lists event bibs with `tag_count`, `tag_uids`, and optional assigned participant (`participant_id`, `participant_name`, `race_id`).
+
+### POST `/api/events/{eventId}/bibs/bulk` (PIN)
+```json
+{ "from": 1, "to": 100 }
+```
+Ensures bibs for every integer in `[from, to]` inclusive (max span 500). Returns created/existing bib rows. Refreshes live CSV.
+
+### GET `/api/events/{eventId}/bibs/{bibId}/tags`
+Public. Active tag associations for a bib: `{ "data": [ … ] }`.
+
+### POST `/api/events/{eventId}/bibs/{bibId}/tags` (PIN)
+Empty body (or `{}`) → hardware write of bib UUID via `WriteTagForBib`.  
+`{ "tag_uid": "<uid>" }` → associate without hardware write.  
+Response `201`: `{ "bib_id", "tag_uid", "tag_uids" }`. Refreshes live CSV.
 
 ### POST `/api/rfid/inject` (test/dev only)
 When `GO_ENV=test` or `RFID_INJECT=true`: `{ "tag_uid": "DEMO-TAG-0001" }`
@@ -167,9 +186,10 @@ Response `200` is an attachment with:
 
 `/api/races/{raceId}/participants`:
 - `?q=` server-side filter (client also debounces)
-- Default sequential bib; unique per race
+- Default sequential bib; unique per **event** (not only per race)
 - `category_id` required on create for this feature
 - List includes `tag_uids[]`
+- Duplicate bib across races in the same event → `400`
 
 ### GET/POST `/api/races/{raceId}/participants/{id}/tags`
 

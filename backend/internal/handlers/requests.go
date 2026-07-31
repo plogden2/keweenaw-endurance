@@ -134,7 +134,10 @@ type updateTimingRecordRequest struct {
 }
 
 type writeRFIDTagRequest struct {
-	ParticipantID string `json:"participant_id" binding:"required"`
+	ParticipantID string `json:"participant_id"`
+	BibID         string `json:"bib_id"`
+	RaceID        string `json:"race_id"`
+	LogicalUUID   string `json:"logical_uuid"` // ignored for new writes; bib id wins
 }
 
 type participantTagRequest struct {

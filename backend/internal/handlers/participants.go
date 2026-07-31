@@ -283,7 +283,8 @@ func (h *Handlers) GetParticipantTags(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": tags})
 }
 
-// PostParticipantTag handles POST /api/races/:id/participants/:participantId/tags
+// PostParticipantTag handles POST /api/races/:id/participants/:participantId/tags.
+// Empty body programs the participant's event bib UUID onto the chip; {tag_uid} associates via that bib.
 func (h *Handlers) PostParticipantTag(c *gin.Context) {
 	if err := h.ensureParticipantInRace(c); err != nil {
 		return
@@ -295,7 +296,7 @@ func (h *Handlers) PostParticipantTag(c *gin.Context) {
 	}
 
 	var req participantTagRequest
-	_ = c.ShouldBindJSON(&req) // body optional; default programs logical UUID onto chip
+	_ = c.ShouldBindJSON(&req) // body optional; default programs bib UUID onto chip
 
 	if req.TagUID != "" {
 		if _, err := h.services.RFID.AssociateTag(participantID, req.TagUID); err != nil {
@@ -307,8 +308,7 @@ func (h *Handlers) PostParticipantTag(c *gin.Context) {
 			respondServiceError(c, err)
 			return
 		}
-		raceID, _ := h.resolveRaceID(c.Param("id"))
-		h.refreshLiveCSVForRace(raceID)
+		h.refreshLiveCSVForRace(participant.RaceID.UUID())
 		c.JSON(http.StatusCreated, gin.H{
 			"tag_uid":        participant.RFIDTagUID,
 			"participant_id": participant.ID,
