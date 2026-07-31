@@ -38,6 +38,18 @@ const sampleBibs = [
     participant_name: 'Alex Runner',
   },
   {
+    id: 'bib-10',
+    bib_number: '10',
+    tag_count: 0,
+    tag_uids: [],
+  },
+  {
+    id: 'bib-100',
+    bib_number: '100',
+    tag_count: 3,
+    tag_uids: [],
+  },
+  {
     id: 'bib-2',
     bib_number: '2',
     tag_count: 0,
@@ -113,18 +125,56 @@ describe('EventBibs.vue', () => {
     expect(eventBibsApi.list).toHaveBeenCalledTimes(2)
   })
 
+  it('sorts bib rows by bib number descending numerically', async () => {
+    const wrapper = await mountEventBibs()
+
+    const nums = wrapper
+      .findAll('[data-testid="event-bibs-table"] tbody tr')
+      .filter((row) => row.attributes('data-testid')?.startsWith('bib-row-'))
+      .map((row) => row.find('.bib-num').text())
+
+    expect(nums).toEqual(['100', '10', '2', '1'])
+  })
+
   it('program tag calls writeTag with bib_id and logical_uuid', async () => {
     authenticate()
     const wrapper = await mountEventBibs()
 
     const programBtns = wrapper.findAll('[data-testid="bib-program-tag"]')
     expect(programBtns.length).toBeGreaterThan(0)
-    await programBtns[1].trigger('click')
+    // Row order is bib desc: 100, 10, 2, 1 — program bib 2
+    await programBtns[2].trigger('click')
     await flushPromises()
 
     expect(rfidApi.writeTag).toHaveBeenCalledWith({
       bib_id: 'bib-2',
       logical_uuid: 'bib-2',
     })
+  })
+
+  it('shows write success message after programming a tag', async () => {
+    authenticate()
+    const wrapper = await mountEventBibs()
+
+    await wrapper.findAll('[data-testid="bib-program-tag"]')[2].trigger('click')
+    await flushPromises()
+
+    const success = wrapper.find('[data-testid="bib-program-success"]')
+    expect(success.exists()).toBe(true)
+    expect(success.text()).toMatch(/wrote tag for bib 2/i)
+  })
+
+  it('shows write fail message when programming fails', async () => {
+    authenticate()
+    ;(rfidApi.writeTag as Mock).mockRejectedValueOnce(new Error('Proxmark unavailable'))
+    const wrapper = await mountEventBibs()
+
+    await wrapper.findAll('[data-testid="bib-program-tag"]')[2].trigger('click')
+    await flushPromises()
+
+    const error = wrapper.find('[data-testid="bib-program-error"]')
+    expect(error.exists()).toBe(true)
+    expect(error.text()).toContain('Proxmark unavailable')
+    expect(wrapper.find('[data-testid="bib-program-success"]').exists()).toBe(false)
   })
 })

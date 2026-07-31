@@ -73,7 +73,7 @@
           </thead>
           <tbody>
             <tr
-              v-for="bib in bibs"
+              v-for="bib in sortedBibs"
               :key="bib.id"
               :data-testid="`bib-row-${bib.id}`"
             >
@@ -95,11 +95,19 @@
                 </button>
               </td>
             </tr>
-            <tr v-if="!bibs.length">
+            <tr v-if="!sortedBibs.length">
               <td :colspan="pinAuth.isAuthenticated ? 4 : 3" class="empty">No bibs yet.</td>
             </tr>
           </tbody>
         </table>
+        <p
+          v-if="programSuccess"
+          class="success"
+          role="status"
+          data-testid="bib-program-success"
+        >
+          {{ programSuccess }}
+        </p>
         <p v-if="programError" class="error" role="alert" data-testid="bib-program-error">
           {{ programError }}
         </p>
@@ -128,6 +136,12 @@ const bibs = ref<BibListItem[]>([])
 const loading = ref(false)
 const loadError = ref<string | null>(null)
 
+const sortedBibs = computed(() =>
+  [...bibs.value].sort(
+    (a, b) => Number(b.bib_number) - Number(a.bib_number) || String(b.bib_number).localeCompare(String(a.bib_number)),
+  ),
+)
+
 const bulkFrom = ref(1)
 const bulkTo = ref(100)
 const bulkSaving = ref(false)
@@ -135,6 +149,7 @@ const bulkError = ref<string | null>(null)
 
 const programmingId = ref<string | null>(null)
 const programError = ref<string | null>(null)
+const programSuccess = ref<string | null>(null)
 
 async function loadEvent() {
   await eventsStore.fetchEvent(eventId.value)
@@ -177,12 +192,14 @@ async function programTag(bib: BibListItem) {
   }
   programmingId.value = bib.id
   programError.value = null
+  programSuccess.value = null
   try {
     await rfidApi.writeTag({
       bib_id: bib.id,
       logical_uuid: bib.id,
     })
     await loadBibs()
+    programSuccess.value = `Wrote tag for bib ${bib.bib_number}`
   } catch (err) {
     programError.value = getErrorMessage(err, 'Failed to write tag')
   } finally {
@@ -345,5 +362,9 @@ input {
 .status.error,
 .error {
   color: var(--signal);
+}
+
+.success {
+  color: var(--success);
 }
 </style>
