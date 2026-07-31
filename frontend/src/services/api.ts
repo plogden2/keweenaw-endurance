@@ -2,6 +2,7 @@ import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import type {
   Checkpoint,
   CreateEventPayload,
+  CreateEventTapPayload,
   CreateParticipantPayload,
   CreateRacePayload,
   CreateTeamPayload,
@@ -146,6 +147,20 @@ export const eventsApi = createResourceApi<
   CreateEventPayload,
   UpdateEventPayload
 >('/api/events')
+
+export const eventTapsApi = {
+  list: (
+    eventId: string,
+    params?: { page?: number; limit?: number; race_id?: string; q?: string },
+  ) => apiClient.get<PaginatedResponse<TimingRecord>>(`/api/events/${eventId}/taps`, { params }),
+  create: (eventId: string, payload: CreateEventTapPayload) =>
+    apiClient.post<TimingRecord>(`/api/events/${eventId}/taps`, payload),
+}
+
+export const eventParticipantsApi = {
+  list: (eventId: string, params?: { page?: number; limit?: number; q?: string }) =>
+    apiClient.get<PaginatedResponse<Participant>>(`/api/events/${eventId}/participants`, { params }),
+}
 
 export const racesApi = createResourceApi<
   Race,

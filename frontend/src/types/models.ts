@@ -52,6 +52,7 @@ export interface Participant {
   tag_uids?: string[]
   status: ParticipantStatus
   created_at?: string
+  race?: Race
   category?: Category
   team?: Team
   /** Optional flat name when nested `team` is not populated. */
@@ -131,6 +132,12 @@ export type CreateParticipantPayload = {
 export type UpdateParticipantPayload = Partial<
   Omit<CreateParticipantPayload, 'race_id'>
 >
+
+export interface CreateEventTapPayload {
+  participant_id: string
+  karaoke_bonus: boolean
+  timestamp?: string
+}
 
 export type CreateTeamPayload = {
   name: string
