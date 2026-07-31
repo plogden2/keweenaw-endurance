@@ -109,7 +109,7 @@
           </router-link>
           <router-link
             class="ops-link"
-            :to="`/timing/live/${activeRaceId}`"
+            :to="`/events/${eventId}/taps`"
             data-testid="live-open-manual"
           >
             Manual entry

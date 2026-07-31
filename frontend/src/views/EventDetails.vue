@@ -57,7 +57,7 @@
               </router-link>
               <router-link
                 class="ops-link"
-                :to="`/timing/live/${race.id}`"
+                :to="`/events/${eventId}/taps`"
                 data-testid="event-race-manual"
               >
                 Manual entry
