@@ -164,7 +164,7 @@ Website path — event-scoped **Taps** page (covers every race in the event, not
 
 1. Unlock with PIN.
 2. Open **Manual entry** (Manage → race → **Manual entry**, or live view → **Manual entry**, or event page). All of these open `/events/:eventId/taps`.
-3. Type the **bib number** in the inline field and press **Enter**. No dialog — the tap records that racer's race finish immediately.
+3. Type the **bib number** in the inline field and press **Enter**. Check **Karaoke** first if this should be a karaoke bonus instead of a scored lap.
 4. Bibs must be unique across the event for Enter to resolve; if more than one racer shares the number, fix the duplicate on Racers first.
 
 The tap is stored with the current timestamp and shows in the taps table (sorted newest first). There is no karaoke control on this page.

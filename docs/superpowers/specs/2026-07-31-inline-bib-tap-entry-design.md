@@ -12,7 +12,7 @@ Replace the Add-tap dialog with a PIN-gated inline bib field. Typing a bib and p
 
 | Topic | Choice |
 |-------|--------|
-| Karaoke | Not on this screen (reader scan confirmation remains the karaoke path) |
+| Karaoke | Inline checkbox next to bib input; checked → `karaoke_bonus: true` on create |
 | Bib → participant | Frontend-only: `GET` participants `?q=<bib>`, require exactly one exact `bib_number` match, then existing `POST` with `participant_id` |
 | API | No backend change; keep `participant_id` create payload |
 | Missing / ambiguous | Inline error under input; keep focus and select contents |
@@ -25,9 +25,9 @@ Replace the Add-tap dialog with a PIN-gated inline bib field. Typing a bib and p
 When PIN-unlocked, above the taps table:
 
 ```
-[ Bib number ________ ]  ← Enter submits
-Recorded #12 Alex Rivera   (ephemeral success)
-Bib not found              (error)
+[ Bib number ________ ]  [ ] Karaoke  ← Enter submits
+Lap #12 Alex Rivera   (ephemeral success)
+Bib not found         (error)
 ```
 
 - Enter with empty input: no-op (or ignore).
@@ -48,7 +48,6 @@ Bib not found              (error)
 
 - Custom timestamps / checkpoint picker
 - Server-side `bib_number` on POST
-- Karaoke from this page
 - Bib conflicts across races (operator asserts none for Bluffet)
 
 ## Tests
