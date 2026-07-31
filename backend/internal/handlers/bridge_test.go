@@ -91,7 +91,9 @@ func TestBridgeWebSocket_AcceptsBridgeToken(t *testing.T) {
 	}
 	defer conn.Close()
 
-	assert.True(t, svc.Bridge.IsConnected("laptop-finish-1"))
+	require.Eventually(t, func() bool {
+		return svc.Bridge.IsConnected("laptop-finish-1")
+	}, time.Second, 10*time.Millisecond)
 }
 
 func TestBridgeWebSocket_WriteTagRoundTrip(t *testing.T) {

@@ -12,9 +12,8 @@ test.describe('Event taps editor', () => {
     await pinLogin(page)
 
     await page.goto(`/events/${event.id}/taps`)
-    await expect(page.getByTestId('event-taps-table').or(page.getByText(/No taps yet/i))).toBeVisible({
-      timeout: 15_000,
-    })
+    // Table is always rendered (empty state is a row inside it).
+    await expect(page.getByTestId('event-taps-table')).toBeVisible({ timeout: 15_000 })
 
     page.on('dialog', (dialog) => dialog.accept())
 
