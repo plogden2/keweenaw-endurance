@@ -159,6 +159,10 @@ func TestGetBridgeStatus(t *testing.T) {
 	require.NoError(t, err)
 	defer conn.Close()
 
+	require.Eventually(t, func() bool {
+		return svc.Bridge.IsConnected("laptop-finish-1")
+	}, 2*time.Second, 20*time.Millisecond)
+
 	req, err := http.NewRequest(http.MethodGet, server.URL+"/api/rfid/bridge/status?device_id=laptop-finish-1", nil)
 	require.NoError(t, err)
 	resp, err := http.DefaultClient.Do(req)
