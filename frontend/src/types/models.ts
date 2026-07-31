@@ -197,7 +197,8 @@ export interface LocalBridgeStatusResponse extends BridgeStatusResponse {
 
 export interface ManualTimingEntryPayload {
   race_id: string
-  checkpoint_id: string
+  /** Optional — Bluffet finish-only races omit this and the server autofills the finish checkpoint. */
+  checkpoint_id?: string
   bib_number?: string
   rfid_tag_uid?: string
   timestamp: string

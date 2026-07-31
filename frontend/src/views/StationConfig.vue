@@ -35,7 +35,11 @@
         <input v-model="form.device_id" required data-testid="station-device-id" />
       </label>
 
-      <label>
+      <p v-if="isBluffetEvent" class="hint" data-testid="bluffet-finish-only-hint">
+        All You Can East Bluffet supports finish station only — mode is locked to Finish.
+      </p>
+
+      <label v-else>
         Mode
         <select v-model="form.mode" required data-testid="station-mode">
           <option value="finish">Finish station (default) — each valid tap = +1 lap</option>
@@ -43,7 +47,7 @@
         </select>
       </label>
 
-      <label v-if="form.mode === 'checkpoint'">
+      <label v-if="!isBluffetEvent && form.mode === 'checkpoint'">
         Checkpoint
         <select
           v-model="form.checkpoint_id"
@@ -93,6 +97,7 @@ import { checkpointsApi, eventsApi, racesApi } from '@/services/api'
 import { useStationStore } from '@/stores/station'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import type { Event } from '@/types/models'
+import { isBluffetEventId } from '@/utils/bluffet'
 import { getErrorMessage } from '@/utils/error'
 
 const station = useStationStore()
@@ -112,7 +117,8 @@ const form = reactive({
   checkpoint_id: '' as string,
 })
 
-const needsCheckpoint = computed(() => form.mode === 'checkpoint')
+const isBluffetEvent = computed(() => isBluffetEventId(form.event_id))
+const needsCheckpoint = computed(() => !isBluffetEvent.value && form.mode === 'checkpoint')
 
 async function loadCheckpointsForEvent(eventId: string) {
   checkpointOptions.value = []
@@ -159,8 +165,9 @@ async function onSave() {
       event_id: form.event_id,
       name: form.name,
       device_id: form.device_id,
-      mode: form.mode,
-      checkpoint_id: form.mode === 'checkpoint' ? form.checkpoint_id : null,
+      mode: isBluffetEvent.value ? 'finish' : form.mode,
+      checkpoint_id:
+        !isBluffetEvent.value && form.mode === 'checkpoint' ? form.checkpoint_id : null,
     })
     await router.push(`/events/${form.event_id}/live`)
   } catch (err) {
@@ -185,6 +192,10 @@ watch(
   () => form.event_id,
   (id) => {
     void loadCheckpointsForEvent(id)
+    if (isBluffetEventId(id)) {
+      form.mode = 'finish'
+      form.checkpoint_id = ''
+    }
   },
 )
 
@@ -293,5 +304,13 @@ select {
 
 .error {
   color: var(--signal);
+}
+
+.hint {
+  color: var(--muted);
+  background: var(--mist);
+  padding: 0.65rem 0.85rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
 }
 </style>

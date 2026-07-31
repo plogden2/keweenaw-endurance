@@ -110,7 +110,12 @@ test.describe('US7 multi-station readers', () => {
     expect(second.retry_after_seconds).toBeLessThanOrEqual(60)
   })
 
-  test('checkpoint mode out-of-order tap does not complete a lap', async ({ page, request }) => {
+  // Bluffet is finish-only as of docs/superpowers/specs/2026-07-30-bluffet-finish-only-stations-design.md:
+  // StationConfig hides the mode toggle/checkpoint picker and always arms mode=finish for this event,
+  // so checkpoint mode can no longer be configured through the UI on the only seeded event. Revisit
+  // this coverage in Go (or against a non-Bluffet fixture) if checkpoint-mode out-of-order behavior
+  // needs an e2e regression test again.
+  test.skip('checkpoint mode out-of-order tap does not complete a lap', async ({ page, request }) => {
     const token = await pinToken(request)
     await ensureRacesActive(request, token)
 

@@ -71,6 +71,7 @@
             :race-id="raceId"
             :checkpoints="checkpoints"
             :submitting="submitting"
+            :hide-checkpoint="hideCheckpoint"
             @submit="onManualSubmit"
           />
         </section>
@@ -166,6 +167,7 @@ import type {
   Participant,
   TimingRecord,
 } from '@/types/models'
+import { isBluffetEventId } from '@/utils/bluffet'
 import { formatDateTime } from '@/utils/datetime'
 import { getErrorMessage } from '@/utils/error'
 import { formatShortId } from '@/utils/id'
@@ -187,6 +189,13 @@ const lookupError = ref<string | null>(null)
 const submitting = ref(false)
 const actionError = ref<string | null>(null)
 const actionBusy = ref(false)
+
+// Hide-by-default until the race loads to avoid a flash of checkpoint UI for Bluffet.
+const hideCheckpoint = computed(() => {
+  const race = racesStore.currentRace
+  if (!race) return true
+  return isBluffetEventId(race.event_id)
+})
 
 const liveRecordsNewestFirst = computed(() =>
   [...liveRecords.value].sort(

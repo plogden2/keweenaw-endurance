@@ -2,7 +2,7 @@
   <form class="manual-form" @submit.prevent="onSubmit">
     <h2 class="section-title">Manual Timing Entry</h2>
 
-    <label class="field">
+    <label v-if="!hideCheckpoint" class="field">
       <span>Checkpoint</span>
       <select
         v-model="checkpointId"
@@ -63,6 +63,8 @@ const props = defineProps<{
   raceId: string
   checkpoints: Checkpoint[]
   submitting?: boolean
+  /** Hide the checkpoint control (Bluffet finish-only races) — server autofills the finish checkpoint. */
+  hideCheckpoint?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -77,7 +79,7 @@ const validationError = ref<string | null>(null)
 function onSubmit(): void {
   validationError.value = null
 
-  if (!checkpointId.value) {
+  if (!props.hideCheckpoint && !checkpointId.value) {
     validationError.value = 'Select a checkpoint before recording.'
     return
   }
@@ -91,8 +93,10 @@ function onSubmit(): void {
 
   const payload: ManualTimingEntryPayload = {
     race_id: props.raceId,
-    checkpoint_id: checkpointId.value,
     timestamp: new Date().toISOString(),
+  }
+  if (!props.hideCheckpoint && checkpointId.value) {
+    payload.checkpoint_id = checkpointId.value
   }
   if (bib) {
     payload.bib_number = bib
