@@ -373,6 +373,7 @@ func (s *CSVExportService) BuildCSV(eventID uuid.UUID) ([]byte, error) {
 		return nil, err
 	}
 
+	// Bibs section (Task 7 owns full round-trip hardening / contract tests).
 	bibRows := make([][]string, 0, len(bibs))
 	for _, b := range bibs {
 		bibRows = append(bibRows, []string{

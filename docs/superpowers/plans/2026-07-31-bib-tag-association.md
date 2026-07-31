@@ -18,7 +18,7 @@
 |------|--------|
 | `backend/internal/models/models.go` | Add `Bib`; change `RFIDTagAssociation` to `bib_id` |
 | `backend/internal/database/database.go` | AutoMigrate `Bib` + data migration/backfill |
-| `database/migrations/05-bib-tag-association.sql` | Document schema |
+| `database/migrations/06-bib-tag-association.sql` | Document schema |
 | `backend/internal/services/bib_service.go` | New: ensure/list/bulk-create/get tags |
 | `backend/internal/services/rfid_service.go` | Associate/Write by bib; participant write via current bib |
 | `backend/internal/services/participant_service.go` | Event-wide bib uniqueness; ensure Bib on create/update |
@@ -41,7 +41,7 @@
 - Modify: `backend/internal/models/models.go`
 - Modify: `backend/internal/models/models_test.go`
 - Modify: `backend/internal/database/database.go`
-- Create: `database/migrations/05-bib-tag-association.sql`
+- Create: `database/migrations/06-bib-tag-association.sql`
 - Modify: all test `AutoMigrate(...)` lists that include `RFIDTagAssociation` to also include `&models.Bib{}`
 
 - [ ] **Step 1: Failing model test** — `TestBibModel` creates Bib with `EventID` + `BibNumber`; unique `(event_id, bib_number)` enforced.
@@ -78,7 +78,7 @@ Add `BeforeCreate` for Bib UUID if Participant pattern uses one.
   2. For participants with `bib_number` but no Bib yet, create Bib rows (even without tags).
   3. Drop `participant_id` when safe (Postgres: `ALTER TABLE ... DROP COLUMN IF EXISTS participant_id`). On SQLite test DB, recreate table or leave orphan column only if drop is painful — prefer dialect-aware drop; tests use fresh AutoMigrate so new shape is enough.
 
-- [ ] **Step 4: SQL doc** `database/migrations/05-bib-tag-association.sql` matching final schema (`bibs`, associations with `bib_id`).
+- [ ] **Step 4: SQL doc** `database/migrations/06-bib-tag-association.sql` matching final schema (`bibs`, associations with `bib_id`).
 
 - [ ] **Step 5: Run** `go test ./internal/models/ ./internal/database/ -count=1` — pass. Commit: `feat(db): add event Bib and tag associations by bib_id`
 
