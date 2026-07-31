@@ -1,7 +1,7 @@
 # Event Taps Editor — Design
 
 **Date**: 2026-07-30  
-**Status**: Approved (user + design subagent defaults)  
+**Status**: Implemented (2026-07-30) — branch `feature/event-taps-editor`  
 **Replaces**: Race-scoped Manual entry / Live Timing station page as the ops taps editor
 
 ## Problem
