@@ -16,6 +16,7 @@ type Services struct {
 	Events       *EventService
 	Races        *RaceService
 	Participants *ParticipantService
+	Bibs         *BibService
 	Checkpoints  *CheckpointService
 	Categories   *CategoryService
 	Teams        *TeamService
@@ -63,6 +64,7 @@ func NewServicesWithReader(db *gorm.DB, cfg *config.Config, reader rfid.Reader) 
 		Events:       NewEventService(db),
 		Races:        NewRaceService(db),
 		Participants: NewParticipantService(db),
+		Bibs:         NewBibService(db),
 		Checkpoints:  NewCheckpointService(db),
 		Categories:   NewCategoryService(db),
 		Teams:        NewTeamService(db),

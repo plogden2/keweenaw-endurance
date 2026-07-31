@@ -51,6 +51,19 @@
       {{ scan.participant_name || 'Racer' }} identified — race not started, no lap counted
     </div>
 
+    <!-- Unassigned bib (chip → bib, no racer) -->
+    <div
+      v-else-if="scan?.result === 'unassigned_bib'"
+      class="toast unassigned"
+      role="status"
+      aria-label="Unassigned bib"
+      data-testid="unassigned-bib-message"
+    >
+      <strong>Unassigned bib:</strong>
+      {{ scan.message || 'Bib has no assigned racer' }}
+      <template v-if="scan.bib_number"> (Bib #{{ scan.bib_number }})</template>
+    </div>
+
     <!-- Unknown tag -->
     <div
       v-else-if="scan?.result === 'unknown_tag'"
@@ -426,5 +439,10 @@ watch(
 .toast.unknown {
   background: #fadbd8;
   color: #922b21;
+}
+
+.toast.unassigned {
+  background: #fdebd0;
+  color: #7d6608;
 }
 </style>

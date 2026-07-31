@@ -124,8 +124,17 @@
           >
             Manual entry
           </router-link>
+          <button
+            type="button"
+            class="ops-link"
+            data-testid="live-open-test-mode"
+            @click="openTestMode"
+          >
+            Test mode
+          </button>
         </div>
       </div>
+      <EventTestModeDialog v-if="testMode.isOpen" @close="closeTestMode" />
       <p v-if="exportError" class="status error">{{ exportError }}</p>
 
       <div class="legend" data-testid="category-legend" role="list" aria-label="Category legend">
@@ -687,10 +696,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
+import EventTestModeDialog from '@/components/EventTestModeDialog.vue'
 import LapCelebrationOverlay from '@/components/LapCelebrationOverlay.vue'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import {
   downloadEventResultsExcel,
+  eventParticipantsApi,
   eventsLiveApi,
   rfidApi,
   type EventLiveRace,
@@ -713,6 +724,7 @@ import {
 } from '@/composables/useFullscreenRotator'
 import { useReaderStation } from '@/composables/useReaderStation'
 import { useSpectatorIdle } from '@/composables/useSpectatorIdle'
+import { useEventTestModeStore } from '@/stores/eventTestMode'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useEventsStore } from '@/stores/events'
 import { useStationStore } from '@/stores/station'
@@ -727,8 +739,27 @@ const eventId = computed(() => String(route.params.eventId))
 const station = useStationStore()
 const eventsStore = useEventsStore()
 const pinAuth = usePinAuthStore()
+const testMode = useEventTestModeStore()
 const { lastScan } = useReaderStation()
 const isReaderSession = computed(() => pinAuth.isAuthenticated)
+const testModeLoading = ref(false)
+
+async function openTestMode() {
+  if (testModeLoading.value || !eventId.value) return
+  testModeLoading.value = true
+  try {
+    const { data } = await eventParticipantsApi.list(eventId.value, { limit: 500 })
+    testMode.open(eventId.value, data.data ?? [])
+  } catch (err) {
+    exportError.value = getErrorMessage(err, 'Failed to open test mode')
+  } finally {
+    testModeLoading.value = false
+  }
+}
+
+function closeTestMode() {
+  testMode.close()
+}
 const { chipState, chipLabel } = useBridgeSyncStatus()
 const { lastLap } = useEventLiveStream(eventId)
 
@@ -1376,6 +1407,9 @@ onUnmounted(() => {
   text-decoration: none;
   font-weight: 600;
   font-size: 0.9rem;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .ops-link:hover {

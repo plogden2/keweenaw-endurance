@@ -144,6 +144,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { eventParticipantsApi, eventTapsApi, timingRecordsApi } from '@/services/api'
+import { useEventTestModeStore } from '@/stores/eventTestMode'
 import { useEventsStore } from '@/stores/events'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import type { TimingRecord } from '@/types/models'
@@ -162,6 +163,7 @@ const TYPE_LABELS: Record<string, string> = {
 const route = useRoute()
 const eventsStore = useEventsStore()
 const pinAuth = usePinAuthStore()
+const testMode = useEventTestModeStore()
 
 const eventId = computed(() => String(route.params.eventId))
 
@@ -228,6 +230,12 @@ function setEphemeralSuccess(message: string): void {
 async function submitBib(): Promise<void> {
   const bib = bibInput.value.trim()
   if (!bib || submitting.value) return
+
+  if (testMode.isActiveForEvent(eventId.value)) {
+    inlineError.value = 'Use Test mode dialog'
+    selectBibInput()
+    return
+  }
 
   submitting.value = true
   inlineError.value = null

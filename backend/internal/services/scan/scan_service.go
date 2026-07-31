@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	ResultLap        = "lap"
-	ResultTestRead   = "test_read"
-	ResultCooldown   = "cooldown"
-	ResultUnknownTag = "unknown_tag"
+	ResultLap           = "lap"
+	ResultTestRead      = "test_read"
+	ResultCooldown      = "cooldown"
+	ResultUnknownTag    = "unknown_tag"
+	ResultUnassignedBib = "unassigned_bib"
 
 	CooldownDuration = 60 * time.Second
 )
@@ -96,12 +97,24 @@ func (s *ScanService) ProcessScan(eventID uuid.UUID, tagUID, deviceID string, lo
 		localTimestamp = time.Now().UTC()
 	}
 
-	participant, err := s.resolveParticipant(eventID, tagUID)
+	participant, bib, err := s.resolveParticipant(eventID, tagUID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return &ScanResult{Result: ResultUnknownTag}, nil
 		}
 		return nil, err
+	}
+	if participant == nil {
+		bibNumber := ""
+		if bib != nil {
+			bibNumber = bib.BibNumber
+		}
+		s.notifyChange(eventID)
+		return &ScanResult{
+			Result:    ResultUnassignedBib,
+			BibNumber: bibNumber,
+			Message:   "Bib has no assigned racer",
+		}, nil
 	}
 
 	race := participant.Race
@@ -234,31 +247,65 @@ func withScanDisplay(r *ScanResult) *ScanResult {
 	return r
 }
 
-func (s *ScanService) resolveParticipant(eventID uuid.UUID, tagUID string) (*models.Participant, error) {
+// resolveParticipant maps a chip UID to a participant for the event.
+// Order: active association → bib → participant by bib_number; else legacy
+// rfid_tag_uid; else chip UUID = participants.id (scoped to event).
+// Association/bib wins when both association and legacy id would match.
+// When a bib is found in the event with no assigned participant, returns
+// (nil, bib, nil) so ProcessScan can emit ResultUnassignedBib.
+func (s *ScanService) resolveParticipant(eventID uuid.UUID, tagUID string) (*models.Participant, *models.Bib, error) {
 	var assoc models.RFIDTagAssociation
 	err := s.db.Where("tag_uid = ? AND active = ?", tagUID, true).First(&assoc).Error
 	if err == nil {
+		var bib models.Bib
+		if err := s.db.First(&bib, "id = ?", assoc.BibID).Error; err != nil {
+			return nil, nil, err
+		}
+		if bib.EventID.UUID() != eventID {
+			return nil, nil, gorm.ErrRecordNotFound
+		}
 		var p models.Participant
-		if err := s.db.Preload("Category").Preload("Team").Preload("Race").First(&p, "id = ?", assoc.ParticipantID).Error; err != nil {
-			return nil, err
+		err := s.db.Preload("Category").Preload("Team").Preload("Race").
+			Joins("JOIN races ON races.id = participants.race_id").
+			Where("races.event_id = ? AND participants.bib_number = ?", eventID, bib.BibNumber).
+			First(&p).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, &bib, nil
+			}
+			return nil, nil, err
 		}
-		if !s.participantInEvent(&p, eventID) {
-			return nil, gorm.ErrRecordNotFound
-		}
-		return &p, nil
+		return &p, &bib, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var p models.Participant
-	if err := s.db.Preload("Category").Preload("Team").Preload("Race").Where("rfid_tag_uid = ?", tagUID).First(&p).Error; err != nil {
-		return nil, err
+	err = s.db.Preload("Category").Preload("Team").Preload("Race").
+		Where("rfid_tag_uid = ?", tagUID).First(&p).Error
+	if err == nil {
+		if !s.participantInEvent(&p, eventID) {
+			return nil, nil, gorm.ErrRecordNotFound
+		}
+		return &p, nil, nil
 	}
-	if !s.participantInEvent(&p, eventID) {
-		return nil, gorm.ErrRecordNotFound
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil, err
 	}
-	return &p, nil
+
+	parsed, parseErr := uuid.Parse(tagUID)
+	if parseErr != nil {
+		return nil, nil, gorm.ErrRecordNotFound
+	}
+	err = s.db.Preload("Category").Preload("Team").Preload("Race").
+		Joins("JOIN races ON races.id = participants.race_id").
+		Where("races.event_id = ? AND participants.id = ?", eventID, parsed).
+		First(&p).Error
+	if err != nil {
+		return nil, nil, err
+	}
+	return &p, nil, nil
 }
 
 func (s *ScanService) participantInEvent(p *models.Participant, eventID uuid.UUID) bool {

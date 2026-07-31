@@ -23,6 +23,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&TimingCheckpoint{},
 		&TimingRecord{},
 		&Category{},
+		&Bib{},
 		&RFIDTagAssociation{},
 		&ReaderStation{},
 	)
@@ -654,6 +655,64 @@ func TestModelUUIDGeneration(t *testing.T) {
 	})
 }
 
+func TestBibModel(t *testing.T) {
+	db := setupTestDB(t)
+
+	event := Event{
+		Name:      "Bib Event",
+		EventDate: time.Now(),
+		Status:    "upcoming",
+	}
+	err := db.Create(&event).Error
+	require.NoError(t, err)
+
+	t.Run("CreateBib", func(t *testing.T) {
+		bib := Bib{
+			EventID:   event.ID,
+			BibNumber: "42",
+		}
+		err := db.Create(&bib).Error
+		require.NoError(t, err)
+
+		assert.False(t, bib.ID.IsZero())
+		assert.Equal(t, event.ID, bib.EventID)
+		assert.Equal(t, "42", bib.BibNumber)
+		assert.False(t, bib.CreatedAt.IsZero())
+	})
+
+	t.Run("UniqueEventBibNumber", func(t *testing.T) {
+		err := db.Create(&Bib{
+			EventID:   event.ID,
+			BibNumber: "99",
+		}).Error
+		require.NoError(t, err)
+
+		err = db.Create(&Bib{
+			EventID:   event.ID,
+			BibNumber: "99",
+		}).Error
+		assert.Error(t, err)
+	})
+
+	t.Run("SameBibNumberDifferentEvents", func(t *testing.T) {
+		other := Event{
+			Name:      "Other Event",
+			EventDate: time.Now(),
+			Status:    "upcoming",
+		}
+		require.NoError(t, db.Create(&other).Error)
+
+		require.NoError(t, db.Create(&Bib{
+			EventID:   event.ID,
+			BibNumber: "7",
+		}).Error)
+		require.NoError(t, db.Create(&Bib{
+			EventID:   other.ID,
+			BibNumber: "7",
+		}).Error)
+	})
+}
+
 func TestRFIDTagAssociationModel(t *testing.T) {
 	db := setupTestDB(t)
 
@@ -665,36 +724,24 @@ func TestRFIDTagAssociationModel(t *testing.T) {
 	err := db.Create(&event).Error
 	require.NoError(t, err)
 
-	race := Race{
-		EventID:  event.ID,
-		Name:     "Parent Race",
-		RaceType: "lap_based",
-		Status:   "scheduled",
-	}
-	err = db.Create(&race).Error
-	require.NoError(t, err)
-
-	participant := Participant{
-		RaceID:    race.ID,
+	bib := Bib{
+		EventID:   event.ID,
 		BibNumber: "100",
-		FirstName: "Tag",
-		LastName:  "Owner",
-		Status:    "registered",
 	}
-	err = db.Create(&participant).Error
+	err = db.Create(&bib).Error
 	require.NoError(t, err)
 
 	t.Run("CreateRFIDTagAssociation", func(t *testing.T) {
 		assoc := RFIDTagAssociation{
-			ParticipantID: participant.ID,
-			TagUID:        "DEMO-TAG-0001",
-			Active:        true,
+			BibID:  bib.ID,
+			TagUID: "DEMO-TAG-0001",
+			Active: true,
 		}
 		err := db.Create(&assoc).Error
 		require.NoError(t, err)
 
 		assert.False(t, assoc.ID.IsZero())
-		assert.Equal(t, participant.ID, assoc.ParticipantID)
+		assert.Equal(t, bib.ID, assoc.BibID)
 		assert.Equal(t, "DEMO-TAG-0001", assoc.TagUID)
 		assert.True(t, assoc.Active)
 		assert.False(t, assoc.CreatedAt.IsZero())
@@ -702,39 +749,39 @@ func TestRFIDTagAssociationModel(t *testing.T) {
 
 	t.Run("UniqueTagUID", func(t *testing.T) {
 		assoc1 := RFIDTagAssociation{
-			ParticipantID: participant.ID,
-			TagUID:        "UNIQUE-TAG-ABC",
-			Active:        true,
+			BibID:  bib.ID,
+			TagUID: "UNIQUE-TAG-ABC",
+			Active: true,
 		}
 		err := db.Create(&assoc1).Error
 		require.NoError(t, err)
 
 		assoc2 := RFIDTagAssociation{
-			ParticipantID: participant.ID,
-			TagUID:        "UNIQUE-TAG-ABC",
-			Active:        true,
+			BibID:  bib.ID,
+			TagUID: "UNIQUE-TAG-ABC",
+			Active: true,
 		}
 		err = db.Create(&assoc2).Error
 		assert.Error(t, err)
 	})
 
-	t.Run("MultipleTagsPerParticipant", func(t *testing.T) {
+	t.Run("MultipleTagsPerBib", func(t *testing.T) {
 		err := db.Create(&RFIDTagAssociation{
-			ParticipantID: participant.ID,
-			TagUID:        "MULTI-TAG-1",
-			Active:        true,
+			BibID:  bib.ID,
+			TagUID: "MULTI-TAG-1",
+			Active: true,
 		}).Error
 		require.NoError(t, err)
 
 		err = db.Create(&RFIDTagAssociation{
-			ParticipantID: participant.ID,
-			TagUID:        "MULTI-TAG-2",
-			Active:        true,
+			BibID:  bib.ID,
+			TagUID: "MULTI-TAG-2",
+			Active: true,
 		}).Error
 		require.NoError(t, err)
 
-		var loaded Participant
-		err = db.Preload("TagAssociations").First(&loaded, participant.ID).Error
+		var loaded Bib
+		err = db.Preload("TagAssociations").First(&loaded, bib.ID).Error
 		require.NoError(t, err)
 		assert.GreaterOrEqual(t, len(loaded.TagAssociations), 2)
 	})

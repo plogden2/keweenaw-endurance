@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,6 +73,7 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
 		&models.Category{},
+		&models.Bib{},
 		&models.RFIDTagAssociation{},
 		&models.ReaderStation{},
 	))
@@ -101,6 +103,10 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		api.GET("/events/:id/taps", h.ListEventTaps)
 		api.GET("/events/:id/participants", h.ListEventParticipants)
 		api.POST("/events/:id/taps", append(timerWrite, h.CreateEventTap)...)
+		api.GET("/events/:id/bibs", h.ListEventBibs)
+		api.POST("/events/:id/bibs/bulk", append(adminOnly, h.BulkCreateEventBibs)...)
+		api.GET("/events/:id/bibs/:bibId/tags", h.ListBibTags)
+		api.POST("/events/:id/bibs/:bibId/tags", append(adminOnly, h.PostBibTag)...)
 		api.GET("/events/:id/live-csv", append(adminOnly, h.GetLiveCSV)...)
 		api.GET("/events/:id/live-csv/status", append(adminOnly, h.GetLiveCSVStatus)...)
 		api.POST("/events/:id/import.csv", append(adminOnly, h.ImportCSV)...)
@@ -968,6 +974,7 @@ func TestRFIDHandlers_ReadPayload(t *testing.T) {
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
 		&models.Category{},
+		&models.Bib{},
 		&models.RFIDTagAssociation{},
 		&models.ReaderStation{},
 	))
@@ -1044,6 +1051,7 @@ func TestRFIDHandlers_InjectDisabled(t *testing.T) {
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
 		&models.Category{},
+		&models.Bib{},
 		&models.RFIDTagAssociation{},
 		&models.ReaderStation{},
 	))
@@ -1117,10 +1125,12 @@ func seedScanHandlerFixture(t *testing.T, svc *services.Services, raceStatus str
 	require.NoError(t, db.Create(finish).Error)
 
 	tagUID = "DEMO-TAG-0001"
+	bib := models.Bib{EventID: event.ID, BibNumber: part.BibNumber}
+	require.NoError(t, db.Create(&bib).Error)
 	require.NoError(t, db.Create(&models.RFIDTagAssociation{
-		ParticipantID: part.ID,
-		TagUID:        tagUID,
-		Active:        true,
+		BibID:  bib.ID,
+		TagUID: tagUID,
+		Active: true,
 	}).Error)
 
 	return event.ID.Short(), tagUID
@@ -1379,4 +1389,195 @@ func TestEventTaps_CreateRequiresTimerJWTAndSupportsKaraoke(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &bonus))
 	assert.Equal(t, "karaoke_bonus", bonus["record_type"])
 	assert.NotContains(t, bonus, "source_lap_id")
+}
+
+func TestBibHandlers_BulkCreateAndListShowsAssignment(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+	auth := adminAuthHeader(t, svc)
+
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Bib Event", EventDate: time.Now().AddDate(0, 1, 0),
+	})
+	require.NoError(t, err)
+	race, err := svc.Races.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	participant, err := svc.Participants.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "2", FirstName: "Ada", LastName: "Lovelace",
+	})
+	require.NoError(t, err)
+
+	payload, err := json.Marshal(map[string]int{"from": 1, "to": 3})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/events/"+event.ID.Short()+"/bibs/bulk", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var created []map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+	require.Len(t, created, 3)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/events/"+event.ID.Short()+"/bibs", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var listed struct {
+		Data []services.BibListItem `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &listed))
+	require.Len(t, listed.Data, 3)
+
+	byNumber := map[string]services.BibListItem{}
+	for _, item := range listed.Data {
+		byNumber[item.BibNumber] = item
+	}
+	assigned := byNumber["2"]
+	require.NotNil(t, assigned.ParticipantID)
+	assert.Equal(t, participant.ID, *assigned.ParticipantID)
+	assert.Equal(t, "Ada Lovelace", assigned.ParticipantName)
+	assert.Nil(t, byNumber["1"].ParticipantID)
+}
+
+func TestBibHandlers_WriteTagForBibReturnsBibLogical(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+	auth := adminAuthHeader(t, svc)
+
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Write Bib Event", EventDate: time.Now().AddDate(0, 1, 0),
+	})
+	require.NoError(t, err)
+	bib, err := svc.Bibs.EnsureBib(event.ID.UUID(), "7")
+	require.NoError(t, err)
+	logical := strings.ToLower(bib.ID.String())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/events/"+event.ID.Short()+"/bibs/"+bib.ID.Short()+"/tags", bytes.NewReader([]byte("{}")))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	var resp map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, logical, resp["tag_uid"])
+	assert.Equal(t, bib.ID.Short(), resp["bib_id"])
+
+	req = httptest.NewRequest(http.MethodGet, "/api/events/"+event.ID.Short()+"/bibs/"+bib.ID.Short()+"/tags", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	var tags struct {
+		Data []models.RFIDTagAssociation `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &tags))
+	require.Len(t, tags.Data, 1)
+	assert.Equal(t, logical, tags.Data[0].TagUID)
+
+	// write-tag with bib_id also programs bib logical UUID
+	payload, err := json.Marshal(map[string]string{"bib_id": bib.ID.Short()})
+	require.NoError(t, err)
+	req = httptest.NewRequest(http.MethodPost, "/api/rfid/write-tag", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, logical, resp["tag_uid"])
+	assert.Equal(t, bib.ID.Short(), resp["bib_id"])
+}
+
+func TestRFIDHandlers_WriteTag_ParticipantStillWorks(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Event", EventDate: time.Now().AddDate(0, 1, 0),
+	})
+	require.NoError(t, err)
+	race, err := svc.Races.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	participant, err := svc.Participants.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "10", FirstName: "Write", LastName: "Tag",
+	})
+	require.NoError(t, err)
+
+	body := map[string]string{"participant_id": participant.ID.Short()}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/rfid/write-tag", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var updated models.Participant
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &updated))
+	require.NotEmpty(t, updated.RFIDTagUID)
+	_, err = uuid.Parse(updated.RFIDTagUID)
+	require.NoError(t, err)
+
+	bib, err := svc.Bibs.EnsureBib(event.ID.UUID(), "10")
+	require.NoError(t, err)
+	assert.Equal(t, strings.ToLower(bib.ID.String()), updated.RFIDTagUID)
+}
+
+func TestParticipantHandlers_EventWideBibClashReturns400(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+	auth := adminAuthHeader(t, svc)
+
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Clash Event", EventDate: time.Now().AddDate(0, 1, 0),
+	})
+	require.NoError(t, err)
+	raceA, err := svc.Races.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race A", RaceType: "time_based", DistanceKm: 5,
+	})
+	require.NoError(t, err)
+	raceB, err := svc.Races.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race B", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	catA, err := svc.Categories.CreateCategory(&models.Category{
+		RaceID: raceA.ID, Name: "Open", CategoryType: "open",
+	})
+	require.NoError(t, err)
+	catB, err := svc.Categories.CreateCategory(&models.Category{
+		RaceID: raceB.ID, Name: "Open", CategoryType: "open",
+	})
+	require.NoError(t, err)
+
+	payload, err := json.Marshal(map[string]string{
+		"first_name":  "A",
+		"last_name":   "One",
+		"bib_number":  "7",
+		"category_id": catA.ID.Short(),
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/races/"+raceA.ID.Short()+"/participants", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	payload, err = json.Marshal(map[string]string{
+		"first_name":  "B",
+		"last_name":   "Two",
+		"bib_number":  "7",
+		"category_id": catB.ID.Short(),
+	})
+	require.NoError(t, err)
+	req = httptest.NewRequest(http.MethodPost, "/api/races/"+raceB.ID.Short()+"/participants", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", auth)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
 }

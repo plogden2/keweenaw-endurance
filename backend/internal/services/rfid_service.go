@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	ErrRFIDTagNotFound    = errors.New("rfid tag not found")
-	ErrInvalidRFIDInput   = errors.New("invalid rfid input")
+	ErrRFIDTagNotFound     = errors.New("rfid tag not found")
+	ErrInvalidRFIDInput    = errors.New("invalid rfid input")
 	ErrHardwareUnavailable = rfid.ErrHardwareUnavailable
 )
 
@@ -82,24 +82,44 @@ func (s *RFIDService) LookupParticipantByUID(uid string) (*models.Participant, e
 		return nil, fmt.Errorf("%w: uid is required", ErrInvalidRFIDInput)
 	}
 
+	partSvc := NewParticipantService(s.db)
+
 	var assoc models.RFIDTagAssociation
 	err := s.db.Where("tag_uid = ? AND active = ?", uid, true).First(&assoc).Error
 	if err == nil {
-		return NewParticipantService(s.db).GetParticipant(assoc.ParticipantID.UUID())
+		var bib models.Bib
+		if err := s.db.First(&bib, "id = ?", assoc.BibID).Error; err != nil {
+			return nil, err
+		}
+		found, err := participantForBib(s.db, &bib)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrRFIDTagNotFound
+			}
+			return nil, err
+		}
+		return partSvc.GetParticipant(found.ID.UUID())
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
 
 	var participant models.Participant
-	if err := s.db.Where(&models.Participant{RFIDTagUID: uid}).First(&participant).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrRFIDTagNotFound
-		}
+	if err := s.db.Where(&models.Participant{RFIDTagUID: uid}).First(&participant).Error; err == nil {
+		return partSvc.GetParticipant(participant.ID.UUID())
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	partSvc := NewParticipantService(s.db)
-	return partSvc.GetParticipant(participant.ID.UUID())
+
+	if parsed, parseErr := uuid.Parse(uid); parseErr == nil {
+		if err := s.db.First(&participant, "id = ?", parsed).Error; err == nil {
+			return partSvc.GetParticipant(participant.ID.UUID())
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
+
+	return nil, ErrRFIDTagNotFound
 }
 
 // ListParticipantTags returns active RFID tag associations for a participant.
@@ -110,8 +130,15 @@ func (s *RFIDService) ListParticipantTags(participantID uuid.UUID) ([]models.RFI
 	if _, err := NewParticipantService(s.db).GetParticipant(participantID); err != nil {
 		return nil, err
 	}
+	bibIDs, err := bibIDsForParticipant(s.db, participantID)
+	if err != nil {
+		return nil, err
+	}
 	var assocs []models.RFIDTagAssociation
-	if err := s.db.Where("participant_id = ? AND active = ?", participantID, true).
+	if len(bibIDs) == 0 {
+		return assocs, nil
+	}
+	if err := s.db.Where("bib_id IN ? AND active = ?", bibIDs, true).
 		Order("created_at ASC").
 		Find(&assocs).Error; err != nil {
 		return nil, err
@@ -119,7 +146,65 @@ func (s *RFIDService) ListParticipantTags(participantID uuid.UUID) ([]models.RFI
 	return assocs, nil
 }
 
-// AssociateTag links a tag UID to a participant via rfid_tag_associations (no revoke).
+// AssociateTagToBib links a tag UID to a bib (last-write-wins on rebind).
+func (s *RFIDService) AssociateTagToBib(bibID uuid.UUID, tagUID string) (*models.RFIDTagAssociation, error) {
+	tagUID = strings.TrimSpace(tagUID)
+	if tagUID == "" {
+		return nil, fmt.Errorf("%w: tag_uid is required", ErrInvalidRFIDInput)
+	}
+	if bibID == uuid.Nil {
+		return nil, fmt.Errorf("%w: bib_id is required", ErrInvalidRFIDInput)
+	}
+
+	var bib models.Bib
+	if err := s.db.First(&bib, "id = ?", bibID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrBibNotFound
+		}
+		return nil, err
+	}
+
+	var existing models.RFIDTagAssociation
+	err := s.db.Where("tag_uid = ?", tagUID).First(&existing).Error
+	if err == nil {
+		changed := false
+		if existing.BibID.UUID() != bib.ID.UUID() {
+			existing.BibID = bib.ID
+			changed = true
+		}
+		if !existing.Active {
+			existing.Active = true
+			changed = true
+		}
+		if changed {
+			if err := s.db.Save(&existing).Error; err != nil {
+				return nil, err
+			}
+		}
+		if err := s.mirrorTagUIDToBibParticipant(&bib, tagUID); err != nil {
+			return nil, err
+		}
+		return &existing, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	assoc := models.RFIDTagAssociation{
+		BibID:  bib.ID,
+		TagUID: tagUID,
+		Active: true,
+	}
+	if err := s.db.Create(&assoc).Error; err != nil {
+		return nil, err
+	}
+	if err := s.mirrorTagUIDToBibParticipant(&bib, tagUID); err != nil {
+		return nil, err
+	}
+	return &assoc, nil
+}
+
+// AssociateTag links a tag UID to a participant via their event bib.
 // Also mirrors the UID onto participants.rfid_tag_uid for legacy lookup compatibility.
 func (s *RFIDService) AssociateTag(participantID uuid.UUID, tagUID string) (*models.RFIDTagAssociation, error) {
 	tagUID = strings.TrimSpace(tagUID)
@@ -136,56 +221,37 @@ func (s *RFIDService) AssociateTag(participantID uuid.UUID, tagUID string) (*mod
 		return nil, err
 	}
 
-	var existing models.RFIDTagAssociation
-	err = s.db.Where("tag_uid = ?", tagUID).First(&existing).Error
-	if err == nil {
-		if existing.ParticipantID.UUID() != participantID {
-			return nil, fmt.Errorf("%w: tag_uid already associated with another participant", ErrInvalidRFIDInput)
-		}
-		if !existing.Active {
-			existing.Active = true
-			if err := s.db.Save(&existing).Error; err != nil {
-				return nil, err
-			}
-		}
-		if participant.RFIDTagUID == "" {
-			_, _ = partSvc.UpdateParticipant(participantID, &models.Participant{RFIDTagUID: tagUID})
-		}
-		return &existing, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
+	bib, err := ensureBibForParticipant(s.db, participant)
+	if err != nil {
 		return nil, err
 	}
 
-	assoc := models.RFIDTagAssociation{
-		ParticipantID: participant.ID,
-		TagUID:        tagUID,
-		Active:        true,
-	}
-	if err := s.db.Create(&assoc).Error; err != nil {
+	assoc, err := s.AssociateTagToBib(bib.ID.UUID(), tagUID)
+	if err != nil {
 		return nil, err
 	}
-
 	if _, err := partSvc.UpdateParticipant(participantID, &models.Participant{RFIDTagUID: tagUID}); err != nil {
 		return nil, err
 	}
-	return &assoc, nil
+	return assoc, nil
 }
 
-// WriteTag programs the chip on the antenna with this participant's logical RFID UUID.
-// Ensures an association exists (creates one with a new UUID if the racer has none).
-func (s *RFIDService) WriteTag(participantID uuid.UUID) (*models.Participant, error) {
-	if participantID == uuid.Nil {
-		return nil, fmt.Errorf("%w: participant_id is required", ErrInvalidRFIDInput)
+// WriteTagForBib programs the chip with the bib's UUID and ensures that association exists.
+func (s *RFIDService) WriteTagForBib(bibID uuid.UUID) (*models.Bib, error) {
+	if bibID == uuid.Nil {
+		return nil, fmt.Errorf("%w: bib_id is required", ErrInvalidRFIDInput)
 	}
 
-	partSvc := NewParticipantService(s.db)
-	if _, err := partSvc.GetParticipant(participantID); err != nil {
+	var bib models.Bib
+	if err := s.db.First(&bib, "id = ?", bibID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrBibNotFound
+		}
 		return nil, err
 	}
 
-	logical, err := s.ensureLogicalTagUUID(participantID)
-	if err != nil {
+	logical := strings.ToLower(bib.ID.String())
+	if _, err := s.AssociateTagToBib(bib.ID.UUID(), logical); err != nil {
 		return nil, err
 	}
 
@@ -194,7 +260,7 @@ func (s *RFIDService) WriteTag(participantID uuid.UUID) (*models.Participant, er
 		if err := device.WriteLogicalUUID(logical); err != nil {
 			return nil, err
 		}
-		return partSvc.GetParticipant(participantID)
+		return &bib, nil
 	}
 
 	if s.bridge == nil {
@@ -205,6 +271,30 @@ func (s *RFIDService) WriteTag(participantID uuid.UUID) (*models.Participant, er
 	if err := s.bridge.RequestWrite(deviceID, logical, 0); err != nil {
 		return nil, err
 	}
+	return &bib, nil
+}
+
+// WriteTag ensures a Bib for the participant, then writes the bib UUID to the chip.
+func (s *RFIDService) WriteTag(participantID uuid.UUID) (*models.Participant, error) {
+	if participantID == uuid.Nil {
+		return nil, fmt.Errorf("%w: participant_id is required", ErrInvalidRFIDInput)
+	}
+
+	partSvc := NewParticipantService(s.db)
+	participant, err := partSvc.GetParticipant(participantID)
+	if err != nil {
+		return nil, err
+	}
+
+	bib, err := ensureBibForParticipant(s.db, participant)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := s.WriteTagForBib(bib.ID.UUID()); err != nil {
+		return nil, err
+	}
+
 	return partSvc.GetParticipant(participantID)
 }
 
@@ -215,34 +305,29 @@ func (s *RFIDService) bridgeDeviceID() string {
 	return DefaultBridgeDeviceID
 }
 
-func (s *RFIDService) ensureLogicalTagUUID(participantID uuid.UUID) (string, error) {
-	var assoc models.RFIDTagAssociation
-	err := s.db.Where("participant_id = ? AND active = ?", participantID, true).
-		Order("created_at ASC").First(&assoc).Error
-	if err == nil {
-		return assoc.TagUID, nil
+// mirrorTagUIDToBibParticipant copies the latest tag onto the assigned participant's
+// legacy rfid_tag_uid column for display/lookup compatibility.
+// Clears the UID from any other participant first (last-write-wins rebind).
+func (s *RFIDService) mirrorTagUIDToBibParticipant(bib *models.Bib, tagUID string) error {
+	if bib == nil {
+		return nil
 	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", err
-	}
-
-	partSvc := NewParticipantService(s.db)
-	participant, err := partSvc.GetParticipant(participantID)
+	p, err := participantForBib(s.db, bib)
 	if err != nil {
-		return "", err
-	}
-	if legacy := strings.TrimSpace(participant.RFIDTagUID); legacy != "" {
-		if _, err := s.AssociateTag(participantID, legacy); err != nil {
-			return "", err
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
 		}
-		return legacy, nil
+		return err
 	}
-
-	logical := uuid.New().String()
-	if _, err := s.AssociateTag(participantID, logical); err != nil {
-		return "", err
+	clear := s.db.Model(&models.Participant{}).Where("rfid_tag_uid = ?", tagUID)
+	if !p.ID.IsZero() {
+		clear = clear.Where("id != ?", p.ID)
 	}
-	return logical, nil
+	if err := clear.Update("rfid_tag_uid", "").Error; err != nil {
+		return err
+	}
+	_, err = NewParticipantService(s.db).UpdateParticipant(p.ID.UUID(), &models.Participant{RFIDTagUID: tagUID})
+	return err
 }
 
 func (s *RFIDService) ManualEntry(input *ManualEntryInput) (*models.TimingRecord, error) {

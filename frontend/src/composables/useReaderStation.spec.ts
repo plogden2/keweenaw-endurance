@@ -5,6 +5,7 @@ import 'fake-indexeddb/auto'
 import { scansApi, rfidStreamUrl } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
+import { useEventTestModeStore } from '@/stores/eventTestMode'
 import * as offlineQueue from '@/services/offlineQueue'
 import { deleteDatabase, getDisplayCache } from '@/services/timingStorage'
 import { __resetReaderStationForTests } from './useReaderStation'
@@ -143,6 +144,51 @@ describe('useReaderStation', () => {
     )
     expect(lastScan.value?.participant_name).toBe('Alex Rivera')
     expect(lastScan.value?.lap_count).toBe(14)
+
+    stop()
+  })
+
+  it('when event test mode is open, tag_read records into the store and does not enqueueScan', async () => {
+    unlockReaderPin()
+    const station = useStationStore()
+    station.eventId = 'evt-1'
+    station.deviceId = 'laptop-finish-1'
+
+    const testMode = useEventTestModeStore()
+    testMode.open('evt-1', [
+      {
+        id: 'p1',
+        race_id: 'r1',
+        bib_number: '12',
+        first_name: 'Alex',
+        last_name: 'Rivera',
+        status: 'registered',
+        tag_uids: ['DEMO-TAG-0001'],
+      },
+    ])
+
+    const enqueueSpy = vi.spyOn(offlineQueue, 'enqueueScan')
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop, lastScan } = useReaderStation()
+    start()
+
+    MockWebSocket.instances[0].emit({
+      type: 'tag_read',
+      tag_uid: 'DEMO-TAG-0001',
+      read_at: '2026-08-01T12:00:01-04:00',
+      device_id: 'laptop-finish-1',
+    })
+
+    await vi.waitFor(() => {
+      expect(testMode.taps).toHaveLength(1)
+    })
+
+    expect(enqueueSpy).not.toHaveBeenCalled()
+    expect(scansApi.postScan).not.toHaveBeenCalled()
+    expect(lastScan.value).toBeNull()
+    expect(testMode.lastFeedback?.ok).toBe(true)
+    expect(testMode.lastFeedback?.bib_number).toBe('12')
 
     stop()
   })

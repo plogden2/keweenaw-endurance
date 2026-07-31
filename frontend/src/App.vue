@@ -7,7 +7,7 @@
     </main>
 
     <ScanPopup
-      v-if="pinAuth.isAuthenticated"
+      v-if="pinAuth.isAuthenticated && !testMode.isOpen"
       :scan="lastScan"
       @dismiss="clearLastScan"
       @karaoke="onKaraoke"
@@ -54,11 +54,13 @@ import ScanPopup from '@/components/ScanPopup.vue'
 import { useReaderStation } from '@/composables/useReaderStation'
 import { useBluffetTheme } from '@/composables/useBluffetTheme'
 import { timingRecordsApi } from '@/services/api'
+import { useEventTestModeStore } from '@/stores/eventTestMode'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
 
 const station = useStationStore()
 const pinAuth = usePinAuthStore()
+const testMode = useEventTestModeStore()
 const { lastScan, clearLastScan, start, stop } = useReaderStation()
 const { active: bluffetActive, themeClass } = useBluffetTheme()
 const discardToast = ref<string | null>(null)

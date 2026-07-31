@@ -43,6 +43,7 @@ func setupBridgeHandlerTest(t *testing.T) (*gin.Engine, *services.Services, *htt
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
 		&models.Category{},
+		&models.Bib{},
 		&models.RFIDTagAssociation{},
 		&models.ReaderStation{},
 	))

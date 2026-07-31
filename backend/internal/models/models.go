@@ -12,33 +12,34 @@ import (
 // Event represents a race event
 type Event struct {
 	ID          uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
-	Name        string    `gorm:"type:varchar(255);not null" json:"name"`
-	Description string    `gorm:"type:text" json:"description"`
-	EventDate   time.Time `gorm:"type:date;not null" json:"event_date"`
-	Location    string    `gorm:"type:varchar(500)" json:"location"`
-	WebsiteURL  string    `gorm:"type:varchar(500)" json:"website_url"`
-	LogoURL     string    `gorm:"type:varchar(500)" json:"logo_url"`
-	Status      string    `gorm:"type:varchar(50);not null;check:status IN ('upcoming','active','completed','cancelled')" json:"status"`
-	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-	
+	Name        string              `gorm:"type:varchar(255);not null" json:"name"`
+	Description string              `gorm:"type:text" json:"description"`
+	EventDate   time.Time           `gorm:"type:date;not null" json:"event_date"`
+	Location    string              `gorm:"type:varchar(500)" json:"location"`
+	WebsiteURL  string              `gorm:"type:varchar(500)" json:"website_url"`
+	LogoURL     string              `gorm:"type:varchar(500)" json:"logo_url"`
+	Status      string              `gorm:"type:varchar(50);not null;check:status IN ('upcoming','active','completed','cancelled')" json:"status"`
+	CreatedAt   time.Time           `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time           `gorm:"autoUpdateTime" json:"updated_at"`
+
 	// Relationships
 	Races          []Race          `gorm:"foreignKey:EventID" json:"races,omitempty"`
+	Bibs           []Bib           `gorm:"foreignKey:EventID" json:"bibs,omitempty"`
 	ReaderStations []ReaderStation `gorm:"foreignKey:EventID" json:"reader_stations,omitempty"`
 }
 
 // Race represents a race within an event
 type Race struct {
-	ID             uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
-	EventID        uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"event_id"`
-	Name           string    `gorm:"type:varchar(255);not null" json:"name"`
-	RaceType       string    `gorm:"type:varchar(50);not null;check:race_type IN ('time_based','lap_based')" json:"race_type"`
-	DistanceKm     float64   `gorm:"type:decimal(10,2)" json:"distance_km"`
-	DurationMinutes int       `gorm:"type:integer" json:"duration_minutes"`
-	StartTime      time.Time `gorm:"type:timestamp" json:"start_time"`
-	Status         string    `gorm:"type:varchar(50);not null;check:status IN ('scheduled','active','finished','cancelled')" json:"status"`
-	CreatedAt      time.Time `gorm:"autoCreateTime" json:"created_at"`
-	
+	ID              uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
+	EventID         uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"event_id"`
+	Name            string              `gorm:"type:varchar(255);not null" json:"name"`
+	RaceType        string              `gorm:"type:varchar(50);not null;check:race_type IN ('time_based','lap_based')" json:"race_type"`
+	DistanceKm      float64             `gorm:"type:decimal(10,2)" json:"distance_km"`
+	DurationMinutes int                 `gorm:"type:integer" json:"duration_minutes"`
+	StartTime       time.Time           `gorm:"type:timestamp" json:"start_time"`
+	Status          string              `gorm:"type:varchar(50);not null;check:status IN ('scheduled','active','finished','cancelled')" json:"status"`
+	CreatedAt       time.Time           `gorm:"autoCreateTime" json:"created_at"`
+
 	// Relationships
 	Event        Event              `gorm:"foreignKey:EventID" json:"event,omitempty"`
 	Participants []Participant      `gorm:"foreignKey:RaceID" json:"participants,omitempty"`
@@ -81,26 +82,25 @@ type Participant struct {
 	TagUIDs []string `gorm:"-" json:"tag_uids,omitempty"`
 
 	// Relationships
-	Race              Race                 `gorm:"foreignKey:RaceID" json:"race,omitempty"`
-	Category          *Category            `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
-	Team              *Team                `gorm:"foreignKey:TeamID" json:"team,omitempty"`
-	TimingRecords     []TimingRecord       `gorm:"foreignKey:ParticipantID" json:"timing_records,omitempty"`
-	TagAssociations   []RFIDTagAssociation `gorm:"foreignKey:ParticipantID" json:"tag_associations,omitempty"`
+	Race          Race           `gorm:"foreignKey:RaceID" json:"race,omitempty"`
+	Category      *Category      `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
+	Team          *Team          `gorm:"foreignKey:TeamID" json:"team,omitempty"`
+	TimingRecords []TimingRecord `gorm:"foreignKey:ParticipantID" json:"timing_records,omitempty"`
 }
 
 // TimingCheckpoint represents a timing checkpoint in a race
 type TimingCheckpoint struct {
-	ID                uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
-	RaceID            uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"race_id"`
-	Name              string    `gorm:"type:varchar(255);not null" json:"name"`
-	CheckpointType    string    `gorm:"type:varchar(50);not null;check:checkpoint_type IN ('start','finish','intermediate')" json:"checkpoint_type"`
-	DistanceFromStartKm float64 `gorm:"type:decimal(10,2)" json:"distance_from_start_km"`
-	LocationDescription string  `gorm:"type:varchar(500)" json:"location_description"`
-	IsActive          bool      `gorm:"type:boolean;default:true" json:"is_active"`
-	CreatedAt         time.Time `gorm:"autoCreateTime" json:"created_at"`
-	
+	ID                  uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
+	RaceID              uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"race_id"`
+	Name                string              `gorm:"type:varchar(255);not null" json:"name"`
+	CheckpointType      string              `gorm:"type:varchar(50);not null;check:checkpoint_type IN ('start','finish','intermediate')" json:"checkpoint_type"`
+	DistanceFromStartKm float64             `gorm:"type:decimal(10,2)" json:"distance_from_start_km"`
+	LocationDescription string              `gorm:"type:varchar(500)" json:"location_description"`
+	IsActive            bool                `gorm:"type:boolean;default:true" json:"is_active"`
+	CreatedAt           time.Time           `gorm:"autoCreateTime" json:"created_at"`
+
 	// Relationships
-	Race         Race           `gorm:"foreignKey:RaceID" json:"race,omitempty"`
+	Race          Race           `gorm:"foreignKey:RaceID" json:"race,omitempty"`
 	TimingRecords []TimingRecord `gorm:"foreignKey:CheckpointID" json:"timing_records,omitempty"`
 }
 
@@ -120,10 +120,10 @@ type TimingRecord struct {
 	CreatedAt      time.Time            `gorm:"autoCreateTime" json:"created_at"`
 
 	// Relationships
-	Participant Participant       `gorm:"foreignKey:ParticipantID" json:"participant,omitempty"`
-	Checkpoint  TimingCheckpoint  `gorm:"foreignKey:CheckpointID" json:"checkpoint,omitempty"`
-	SourceLap   *TimingRecord     `gorm:"foreignKey:SourceLapID" json:"source_lap,omitempty"`
-	Station     *ReaderStation    `gorm:"foreignKey:StationID" json:"station,omitempty"`
+	Participant Participant      `gorm:"foreignKey:ParticipantID" json:"participant,omitempty"`
+	Checkpoint  TimingCheckpoint `gorm:"foreignKey:CheckpointID" json:"checkpoint,omitempty"`
+	SourceLap   *TimingRecord    `gorm:"foreignKey:SourceLapID" json:"source_lap,omitempty"`
+	Station     *ReaderStation   `gorm:"foreignKey:StationID" json:"station,omitempty"`
 }
 
 // IsVoided reports whether this timing record is soft-voided from scoring.
@@ -131,16 +131,29 @@ func (r *TimingRecord) IsVoided() bool {
 	return r != nil && r.VoidedAt != nil
 }
 
-// RFIDTagAssociation links an RFID tag UID to a participant
+// Bib is an event-scoped race number; RFID chips store Bib.ID.
+type Bib struct {
+	ID        uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
+	EventID   uuidutil.PublicUUID `gorm:"type:uuid;not null;uniqueIndex:idx_bibs_event_number" json:"event_id"`
+	BibNumber string              `gorm:"type:varchar(20);not null;uniqueIndex:idx_bibs_event_number" json:"bib_number"`
+	CreatedAt time.Time           `gorm:"autoCreateTime" json:"created_at"`
+
+	Event           Event                `gorm:"foreignKey:EventID" json:"event,omitempty"`
+	TagAssociations []RFIDTagAssociation `gorm:"foreignKey:BibID" json:"tag_associations,omitempty"`
+}
+
+func (Bib) TableName() string { return "bibs" }
+
+// RFIDTagAssociation links an RFID tag UID to a bib
 type RFIDTagAssociation struct {
-	ID            uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
-	ParticipantID uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"participant_id"`
-	TagUID        string              `gorm:"type:varchar(100);not null;uniqueIndex" json:"tag_uid"`
-	CreatedAt     time.Time           `gorm:"autoCreateTime" json:"created_at"`
-	Active        bool                `gorm:"type:boolean;not null;default:true" json:"active"`
+	ID        uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
+	BibID     uuidutil.PublicUUID `gorm:"type:uuid;not null;index" json:"bib_id"`
+	TagUID    string              `gorm:"type:varchar(100);not null;uniqueIndex" json:"tag_uid"`
+	CreatedAt time.Time           `gorm:"autoCreateTime" json:"created_at"`
+	Active    bool                `gorm:"type:boolean;not null;default:true" json:"active"`
 
 	// Relationships
-	Participant Participant `gorm:"foreignKey:ParticipantID" json:"participant,omitempty"`
+	Bib Bib `gorm:"foreignKey:BibID" json:"bib,omitempty"`
 }
 
 func (RFIDTagAssociation) TableName() string { return "rfid_tag_associations" }
@@ -166,16 +179,16 @@ func (ReaderStation) TableName() string { return "reader_stations" }
 
 // Category represents a participant category for race results
 type Category struct {
-	ID            uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
-	RaceID        uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"race_id"`
-	Name          string    `gorm:"type:varchar(255);not null" json:"name"`
-	CategoryType  string    `gorm:"type:varchar(50);not null;check:category_type IN ('overall','male','female','age_group','custom')" json:"category_type"`
-	AgeMin        int       `gorm:"type:integer" json:"age_min"`
-	AgeMax        int       `gorm:"type:integer" json:"age_max"`
-	GenderFilter  string    `gorm:"type:varchar(10)" json:"gender_filter"`
-	DisplayOrder  int       `gorm:"type:integer;default:0" json:"display_order"`
-	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
-	
+	ID           uuidutil.PublicUUID `gorm:"type:uuid;primary_key" json:"id"`
+	RaceID       uuidutil.PublicUUID `gorm:"type:uuid;not null" json:"race_id"`
+	Name         string              `gorm:"type:varchar(255);not null" json:"name"`
+	CategoryType string              `gorm:"type:varchar(50);not null;check:category_type IN ('overall','male','female','age_group','custom')" json:"category_type"`
+	AgeMin       int                 `gorm:"type:integer" json:"age_min"`
+	AgeMax       int                 `gorm:"type:integer" json:"age_max"`
+	GenderFilter string              `gorm:"type:varchar(10)" json:"gender_filter"`
+	DisplayOrder int                 `gorm:"type:integer;default:0" json:"display_order"`
+	CreatedAt    time.Time           `gorm:"autoCreateTime" json:"created_at"`
+
 	// Relationships
 	Race         Race          `gorm:"foreignKey:RaceID" json:"race,omitempty"`
 	Participants []Participant `gorm:"foreignKey:CategoryID" json:"participants,omitempty"`
@@ -245,6 +258,13 @@ func (c *Category) BeforeCreate(tx *gorm.DB) error {
 func (t *Team) BeforeCreate(tx *gorm.DB) error {
 	if t.ID.IsZero() {
 		t.ID = uuidutil.PublicUUID(uuid.New())
+	}
+	return nil
+}
+
+func (b *Bib) BeforeCreate(tx *gorm.DB) error {
+	if b.ID.IsZero() {
+		b.ID = uuidutil.PublicUUID(uuid.New())
 	}
 	return nil
 }
