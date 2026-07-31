@@ -22,6 +22,7 @@ Short setup and ops guide for the finish-line laptop against live production.
 | **CSV recovery** | Footer · also PIN page after unlock |
 | **Racers** | After PIN unlock: each race row on **Manage** · live view toolbar · race details · event page |
 | **Manual entry (website)** | Same places as Racers (opens the event **Taps** page at `/events/:eventId/taps`) |
+| **Export Excel** | PIN-unlocked live race flow toolbar |
 | **Add racer** / **Program tag** / **Write tag** | On the Racers page for that race |
 | **Save & arm reader** | Station page |
 | **Record time** | Event Taps page (**Add tap**) · or reader GUI |

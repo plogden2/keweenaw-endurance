@@ -490,6 +490,32 @@ export const eventsLiveApi = {
     apiClient.get<EventLiveResponse>(`/api/events/${eventId}/live`, { params }),
 }
 
+function excelFilename(contentDisposition: string | undefined, eventName: string): string {
+  const encodedFilename = contentDisposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  if (encodedFilename) {
+    try {
+      return decodeURIComponent(encodedFilename)
+    } catch {
+      // Fall through to the regular filename or event-name fallback.
+    }
+  }
+  const filename = contentDisposition?.match(/filename="?([^";]+)"?/i)?.[1]
+  return filename || `${eventName}-results.xlsx`
+}
+
+/** Download the authenticated event results workbook in the browser. */
+export async function downloadEventResultsExcel(eventId: string, eventName: string): Promise<void> {
+  const response = await apiClient.get<Blob>(`/api/events/${eventId}/results.xlsx`, {
+    responseType: 'blob',
+  })
+  const url = URL.createObjectURL(response.data)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = excelFilename(response.headers['content-disposition'], eventName)
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export interface LiveCSVStatus {
   path: string
   exists: boolean

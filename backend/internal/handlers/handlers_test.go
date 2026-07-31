@@ -104,6 +104,7 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		api.GET("/events/:id/live-csv", append(adminOnly, h.GetLiveCSV)...)
 		api.GET("/events/:id/live-csv/status", append(adminOnly, h.GetLiveCSVStatus)...)
 		api.POST("/events/:id/import.csv", append(adminOnly, h.ImportCSV)...)
+		api.GET("/events/:id/results.xlsx", append(adminOnly, h.GetEventResultsExcel)...)
 
 		api.GET("/stations/current", h.GetCurrentStation)
 		api.PUT("/stations/current", append(adminOnly, h.PutCurrentStation)...)
@@ -777,6 +778,30 @@ func pinBearerToken(t *testing.T, router *gin.Engine) string {
 	var pinResp map[string]interface{}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &pinResp))
 	return "Bearer " + pinResp["token"].(string)
+}
+
+func TestGetEventResultsExcel_RequiresPINJWT(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Results Export Event", EventDate: time.Now().AddDate(0, 0, 1),
+	})
+	require.NoError(t, err)
+
+	path := "/api/events/" + event.ID.Short() + "/results.xlsx"
+
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.True(t, w.Code == http.StatusUnauthorized || w.Code == http.StatusForbidden)
+
+	req = httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("Authorization", pinBearerToken(t, router))
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", w.Header().Get("Content-Type"))
+	assert.Contains(t, w.Header().Get("Content-Disposition"), ".xlsx")
+	assert.True(t, bytes.HasPrefix(w.Body.Bytes(), []byte("PK")))
 }
 
 // T059 — race create/delete require PIN JWT (adminOnly).
