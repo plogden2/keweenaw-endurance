@@ -407,12 +407,16 @@ const HIGHLIGHT_COLOR = '#9b654e'
 const DIMMED_OPACITY = 0.2
 
 const props = defineProps<{
-  raceId: string
+  /** Required for live API fetch; omit when supplying externalTimingRecords. */
+  raceId?: string
   raceStatus?: RaceStatus
   raceStartTime?: string
   raceType?: RaceType
   durationMinutes?: number
   highlightParticipantId?: string
+  /** When set, skip API fetch and render these records (e.g. event test mode). */
+  externalTimingRecords?: TimingRecord[]
+  externalParticipants?: Participant[]
 }>()
 
 const emit = defineEmits<{
@@ -831,7 +835,30 @@ function startLiveRefreshTimer(): void {
   }, LIVE_REFRESH_MS)
 }
 
+function applyExternalRecords(): boolean {
+  if (props.externalTimingRecords == null) {
+    return false
+  }
+  records.value = props.externalTimingRecords
+  registeredParticipants.value = props.externalParticipants ?? []
+  nowMs.value = Date.now()
+  loading.value = false
+  error.value = null
+  return true
+}
+
 async function loadRecords(): Promise<void> {
+  if (applyExternalRecords()) {
+    return
+  }
+
+  if (!props.raceId) {
+    records.value = []
+    registeredParticipants.value = []
+    loading.value = false
+    return
+  }
+
   // Keep an already-drawn canvas mounted during background refresh. Flipping
   // `loading` tears the <canvas> out of the DOM and Chart.js often stays blank
   // afterward (especially around tab switches) until a hard refresh.
@@ -1263,6 +1290,16 @@ watch(
     await loadRecords()
     startLiveRefreshTimer()
   },
+)
+
+watch(
+  () => [props.externalTimingRecords, props.externalParticipants],
+  () => {
+    if (applyExternalRecords()) {
+      startLiveRefreshTimer()
+    }
+  },
+  { deep: true },
 )
 
 watch(

@@ -2,6 +2,7 @@ import { ref, type Ref } from 'vue'
 import { type ScanResult } from '@/services/api'
 import { enqueueScan } from '@/services/offlineQueue'
 import { setDisplayCache, getDisplayCache } from '@/services/timingStorage'
+import { useEventTestModeStore } from '@/stores/eventTestMode'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import { useStationStore } from '@/stores/station'
 import { rfidStreamUrl } from '@/services/api'
@@ -62,6 +63,13 @@ function createReaderStation(): UseReaderStation {
     }
     if (!station.eventId) return
 
+    const testMode = useEventTestModeStore()
+    if (testMode.isActiveForEvent(station.eventId)) {
+      testMode.recordTagTap(tagUid, readAt)
+      error.value = null
+      return
+    }
+
     const deviceId = station.deviceId || 'unknown-device'
     const payload = {
       tag_uid: tagUid,
@@ -92,7 +100,17 @@ function createReaderStation(): UseReaderStation {
   function onMessage(ev: MessageEvent) {
     try {
       const raw = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
+      const station = useStationStore()
+      const testMode = useEventTestModeStore()
+      const testActive =
+        Boolean(station.eventId) && testMode.isActiveForEvent(station.eventId)
+
       if (raw?.type === 'scan_result' && raw.scan) {
+        // Bridge already scored server-side; do not surface production
+        // ScanPopup feedback while this station's test mode is open.
+        if (testActive) {
+          return
+        }
         lastScan.value = raw.scan as ScanResult
         const tagUid = String(raw.tag_uid || '')
         if (tagUid && raw.scan.result === 'lap') {
