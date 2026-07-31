@@ -16,9 +16,6 @@
       <div class="nav-links">
         <router-link to="/" class="nav-link">Home</router-link>
         <router-link to="/timing" class="nav-link">Timing</router-link>
-        <router-link to="/pin" class="nav-link" data-testid="nav-pin">
-          {{ pinAuth.isAuthenticated ? 'Manage' : 'PIN' }}
-        </router-link>
       </div>
     </nav>
   </header>
@@ -26,10 +23,8 @@
 
 <script setup lang="ts">
 import { useBluffetTheme } from '@/composables/useBluffetTheme'
-import { usePinAuthStore } from '@/stores/pinAuth'
 
 const { active: bluffetActive, logoPath } = useBluffetTheme()
-const pinAuth = usePinAuthStore()
 </script>
 
 <style scoped>

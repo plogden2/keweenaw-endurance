@@ -16,7 +16,11 @@
           {{ racesStore.currentRace.status }}
         </span>
       </p>
-      <p class="ops-bar" data-testid="race-ops-bar">
+      <p
+        v-if="pinAuth.isAuthenticated"
+        class="ops-bar"
+        data-testid="race-ops-bar"
+      >
         <router-link
           class="ops-link"
           :to="`/races/${raceId}/racers`"
@@ -192,6 +196,7 @@ import ParticipantFlowChart from '@/components/ParticipantFlowChart.vue'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import ResultCertificate from '@/components/ResultCertificate.vue'
 import { useEventsStore } from '@/stores/events'
+import { usePinAuthStore } from '@/stores/pinAuth'
 import { useRacesStore } from '@/stores/races'
 import { useUnitsStore } from '@/stores/units'
 import { participantsApi, timingApi } from '@/services/api'
@@ -218,6 +223,7 @@ import { formatDistance } from '@/utils/units'
 const route = useRoute()
 const racesStore = useRacesStore()
 const eventsStore = useEventsStore()
+const pinAuth = usePinAuthStore()
 const unitsStore = useUnitsStore()
 
 const eventId = computed(() => String(route.params.eventId))

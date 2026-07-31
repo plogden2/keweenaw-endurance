@@ -122,6 +122,21 @@ describe('Racers.vue', () => {
     expect(wrapper.findAll('[data-testid="racer-row"]')).toHaveLength(2)
   })
 
+  it('hides management actions without PIN', async () => {
+    const pin = usePinAuthStore()
+    pin.logout()
+    const wrapper = await mountRacers()
+
+    expect(wrapper.find('[data-testid="racers-search"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid="racer-row"]')).toHaveLength(2)
+    expect(wrapper.find('[data-testid="add-racer"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="team-create"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="team-delete"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="bib-edit"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="racer-team-select"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="program-tag"]').exists()).toBe(false)
+  })
+
   it('renders teams section and assigns team from racer dropdown', async () => {
     ;(raceParticipantsApi.update as Mock).mockResolvedValue({
       data: { ...sampleRacers[0], team_id: 'team-a' },

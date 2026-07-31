@@ -56,10 +56,9 @@ describe('AppHeader', () => {
     expect(headerVue).toMatch(/background(-color)?:\s*var\(--ink\)/)
   })
 
-  it('exposes PIN nav link on every page (Station lives under PIN management)', async () => {
+  it('does not expose PIN in the header (PIN lives in the footer)', async () => {
     const wrapper = await mountHeader('/')
     expect(wrapper.find('[data-testid="nav-station"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="nav-pin"]').text()).toBe('PIN')
-    expect(wrapper.get('[data-testid="nav-pin"]').attributes('href')).toBe('/pin')
+    expect(wrapper.find('[data-testid="nav-pin"]').exists()).toBe(false)
   })
 })

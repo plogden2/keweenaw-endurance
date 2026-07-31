@@ -33,6 +33,7 @@
           />
         </label>
         <button
+          v-if="pinAuth.isAuthenticated"
           type="button"
           class="btn secondary"
           data-testid="add-racer"
@@ -44,7 +45,7 @@
       <p class="muted hint">Results update as you type (debounced). No search button.</p>
     </div>
 
-    <div v-if="showAdd" class="panel" data-testid="add-racer-form">
+    <div v-if="pinAuth.isAuthenticated && showAdd" class="panel" data-testid="add-racer-form">
       <h2>Add racer</h2>
       <form @submit.prevent="onAddRacer">
         <div class="grid-2">
@@ -98,7 +99,11 @@
         Teams
         <span class="muted">({{ teams.length }})</span>
       </h2>
-      <form class="row team-create" @submit.prevent="onCreateTeam">
+      <form
+        v-if="pinAuth.isAuthenticated"
+        class="row team-create"
+        @submit.prevent="onCreateTeam"
+      >
         <label class="grow">
           New team name
           <input
@@ -124,14 +129,14 @@
           <tr>
             <th>Name</th>
             <th>Members</th>
-            <th>Actions</th>
+            <th v-if="pinAuth.isAuthenticated">Actions</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="team in teams" :key="team.id" data-testid="team-row">
             <td>{{ team.name }}</td>
             <td>{{ memberCountForTeam(team.id) }}</td>
-            <td>
+            <td v-if="pinAuth.isAuthenticated">
               <button
                 type="button"
                 class="btn secondary"
@@ -143,7 +148,9 @@
             </td>
           </tr>
           <tr v-if="!teams.length">
-            <td colspan="3" class="muted">No teams yet. Create one, then assign racers below.</td>
+            <td :colspan="pinAuth.isAuthenticated ? 3 : 2" class="muted">
+              No teams yet. Create one, then assign racers below.
+            </td>
           </tr>
         </tbody>
       </table>
@@ -171,7 +178,7 @@
             <th>Category</th>
             <th>Team</th>
             <th>Tags</th>
-            <th>Actions</th>
+            <th v-if="pinAuth.isAuthenticated">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -181,7 +188,7 @@
               :class="{ programming: programmingId === racer.id }"
             >
               <td class="bib-cell">
-                <template v-if="editingBibId === racer.id">
+                <template v-if="pinAuth.isAuthenticated && editingBibId === racer.id">
                   <span class="bib-edit-wrap">
                     <input
                       v-model="bibDraft"
@@ -220,7 +227,7 @@
                   </span>
                 </template>
                 <button
-                  v-else
+                  v-else-if="pinAuth.isAuthenticated"
                   type="button"
                   class="bib-display"
                   data-testid="bib-edit"
@@ -229,11 +236,13 @@
                 >
                   {{ racer.bib_number }}
                 </button>
+                <span v-else>{{ racer.bib_number }}</span>
               </td>
               <td>{{ racer.first_name }} {{ racer.last_name }}</td>
               <td>{{ categoryLabel(racer) }}</td>
               <td>
                 <select
+                  v-if="pinAuth.isAuthenticated"
                   class="team-select"
                   data-testid="racer-team-select"
                   :aria-label="`Team for ${racer.first_name} ${racer.last_name}`"
@@ -245,12 +254,13 @@
                     {{ team.name }}
                   </option>
                 </select>
+                <span v-else>{{ teamNameFor(racer.team_id) }}</span>
               </td>
               <td class="tag-count">
                 {{ (racer.tag_uids?.length || 0) }}
                 {{ (racer.tag_uids?.length || 0) === 1 ? 'tag' : 'tags' }}
               </td>
-              <td>
+              <td v-if="pinAuth.isAuthenticated">
                 <button
                   type="button"
                   class="btn"
@@ -261,7 +271,7 @@
                 </button>
               </td>
             </tr>
-            <tr v-if="programmingId === racer.id" class="program-row">
+            <tr v-if="pinAuth.isAuthenticated && programmingId === racer.id" class="program-row">
               <td colspan="6">
                 <div class="program-inline" data-testid="program-tag-panel">
                   <p class="muted">
@@ -306,7 +316,7 @@
             </tr>
           </template>
           <tr v-if="!filteredRacers.length">
-            <td colspan="6" class="muted">No racers match.</td>
+            <td :colspan="pinAuth.isAuthenticated ? 6 : 5" class="muted">No racers match.</td>
           </tr>
         </tbody>
       </table>
@@ -398,6 +408,11 @@ function categoryLabel(racer: Participant): string {
 
 function memberCountForTeam(teamId: string): number {
   return racers.value.filter((r) => r.team_id === teamId).length
+}
+
+function teamNameFor(teamId: string | null | undefined): string {
+  if (!teamId) return '—'
+  return teams.value.find((t) => t.id === teamId)?.name ?? '—'
 }
 
 function normalizeTeamsResponse(data: unknown): Team[] {

@@ -47,7 +47,7 @@
                 {{ race.status }}
               </span>
             </router-link>
-            <div class="race-ops">
+            <div v-if="pinAuth.isAuthenticated" class="race-ops">
               <router-link
                 class="ops-link"
                 :to="`/races/${race.id}/racers`"
@@ -79,6 +79,7 @@ import { useRoute } from 'vue-router'
 import EventLogo from '@/components/EventLogo.vue'
 import { useEventsStore } from '@/stores/events'
 import { useRacesStore } from '@/stores/races'
+import { usePinAuthStore } from '@/stores/pinAuth'
 import { useUnitsStore } from '@/stores/units'
 import { formatEventDate } from '@/utils/participantResults'
 import { formatDistance } from '@/utils/units'
@@ -87,6 +88,7 @@ import type { Race } from '@/types/models'
 const route = useRoute()
 const eventsStore = useEventsStore()
 const racesStore = useRacesStore()
+const pinAuth = usePinAuthStore()
 const unitsStore = useUnitsStore()
 
 const eventId = computed(() => String(route.params.eventId))

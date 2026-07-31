@@ -4,6 +4,7 @@ import RaceDetails from './RaceDetails.vue'
 import { setupPinia, createTestRouter } from '@/test/helpers'
 import { useRacesStore } from '@/stores/races'
 import { useEventsStore } from '@/stores/events'
+import { usePinAuthStore } from '@/stores/pinAuth'
 import { timingApi, participantsApi } from '@/services/api'
 
 vi.mock('@/stores/races', async () => {
@@ -58,6 +59,61 @@ describe('RaceDetails.vue', () => {
     ;(useRacesStore as unknown as Mock).mockReturnValue(racesStore)
     ;(useEventsStore as unknown as Mock).mockReturnValue(eventsStore)
     vi.clearAllMocks()
+  })
+
+  it('hides Racers and Manual entry ops without PIN', async () => {
+    racesStore.currentRace = {
+      id: 'race-1',
+      name: 'Marathon',
+      race_type: 'time_based',
+      status: 'active',
+    }
+    ;(timingApi.getLeaderboard as Mock).mockResolvedValue({ data: { data: [] } })
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: [] },
+    })
+
+    const router = createTestRouter()
+    await router.push('/timing/evt-1/race/race-1')
+    await router.isReady()
+
+    const wrapper = mount(RaceDetails, {
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="race-details-racers"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="race-details-manual"]').exists()).toBe(false)
+  })
+
+  it('shows Racers and Manual entry ops when PIN unlocked', async () => {
+    const pin = usePinAuthStore()
+    pin.token = 'test-token'
+    pin.role = 'admin'
+    pin.expiresAt = Math.floor(Date.now() / 1000) + 3600
+
+    racesStore.currentRace = {
+      id: 'race-1',
+      name: 'Marathon',
+      race_type: 'time_based',
+      status: 'active',
+    }
+    ;(timingApi.getLeaderboard as Mock).mockResolvedValue({ data: { data: [] } })
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: [] },
+    })
+
+    const router = createTestRouter()
+    await router.push('/timing/evt-1/race/race-1')
+    await router.isReady()
+
+    const wrapper = mount(RaceDetails, {
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="race-details-racers"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="race-details-manual"]').exists()).toBe(true)
   })
 
   it('loads race and leaderboard on mount', async () => {
