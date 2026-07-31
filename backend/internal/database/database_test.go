@@ -18,16 +18,16 @@ func TestDatabaseInitialization(t *testing.T) {
 		db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 		require.NoError(t, err)
 		require.NotNil(t, db)
-		
+
 		// Test that we can get the underlying SQL database
 		sqlDB, err := db.DB()
 		require.NoError(t, err)
 		require.NotNil(t, sqlDB)
-		
+
 		// Test connection
 		err = sqlDB.Ping()
 		assert.NoError(t, err)
-		
+
 		// Close the connection
 		err = sqlDB.Close()
 		assert.NoError(t, err)
@@ -45,15 +45,15 @@ func TestMigrate(t *testing.T) {
 				sqlDB.Close()
 			}
 		}()
-		
+
 		// Test migration
 		err = Migrate(db)
 		assert.NoError(t, err)
-		
+
 		// Verify tables exist by attempting to query them
 		// This will fail if the tables don't exist
 		tables := []string{"events", "races", "participants", "timing_checkpoints", "timing_records", "categories", "bibs", "rfid_tag_associations"}
-		
+
 		for _, table := range tables {
 			var count int64
 			err = db.Table(table).Count(&count).Error
@@ -67,7 +67,7 @@ func TestClose(t *testing.T) {
 		// Create in-memory SQLite database
 		db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 		require.NoError(t, err)
-		
+
 		// Test close function
 		err = Close(db)
 		assert.NoError(t, err)
@@ -87,7 +87,7 @@ func TestIntegrationWithConfig(t *testing.T) {
 			MaxIdleConns:    2,
 			ConnMaxLifetime: time.Hour,
 		}
-		
+
 		// Note: We can't test the actual Initialize function with PostgreSQL
 		// in unit tests without a real database, but we can test the configuration
 		// processing logic
@@ -111,19 +111,19 @@ func TestDatabaseConnectionPooling(t *testing.T) {
 				sqlDB.Close()
 			}
 		}()
-		
+
 		// Get the underlying SQL database
 		sqlDB, err := db.DB()
 		require.NoError(t, err)
-		
+
 		// Configure connection pool
 		sqlDB.SetMaxOpenConns(5)
 		sqlDB.SetMaxIdleConns(2)
 		sqlDB.SetConnMaxLifetime(time.Hour)
-		
+
 		// Verify configuration
 		assert.Equal(t, 5, sqlDB.Stats().MaxOpenConnections)
-		
+
 		// Test that we can perform operations
 		err = db.Exec("SELECT 1").Error
 		assert.NoError(t, err)
