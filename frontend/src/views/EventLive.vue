@@ -464,13 +464,45 @@
         data-testid="fullscreen-rotator"
         aria-label="Fullscreen rotating race display"
       >
-        <button type="button" class="btn secondary fs-exit" @click="rotatorOpen = false">
-          Exit (Esc)
-        </button>
+        <div class="fs-controls" data-testid="rotator-controls">
+          <button
+            type="button"
+            class="btn secondary"
+            data-testid="rotator-play-pause"
+            :aria-pressed="rotatorPlaying"
+            :aria-label="rotatorPlaying ? 'Pause rotation' : 'Play rotation'"
+            @click="toggleRotatorPlay"
+          >
+            {{ rotatorPlaying ? 'Pause' : 'Play' }}
+          </button>
+          <button
+            type="button"
+            class="btn secondary fs-cog"
+            data-testid="rotator-settings-open"
+            aria-label="Rotator settings"
+            title="Settings"
+            @click="openRotatorSettings"
+          >
+            ⚙
+          </button>
+          <button
+            type="button"
+            class="btn secondary"
+            data-testid="rotator-exit"
+            @click="rotatorOpen = false"
+          >
+            Exit (Esc)
+          </button>
+        </div>
         <div class="fs-top">
           <div>
-            <h1>{{ race12?.name || '12 Hour' }}</h1>
-            <p class="fs-meta">Fullscreen rotator · combined overall</p>
+            <h1>{{ rotatorRace?.name || rotatorPageTitle }}</h1>
+            <p class="fs-meta">
+              Fullscreen rotator · {{ rotatorPageTitle }}
+              <span v-if="rotatorActivePages.length > 1">
+                · {{ rotatorPageIndex + 1 }}/{{ rotatorActivePages.length }}
+              </span>
+            </p>
           </div>
         </div>
         <div
@@ -482,13 +514,13 @@
             <h2>Race flow</h2>
             <div class="chart-wrap">
               <RaceFlowChart
-                v-if="race12?.id"
+                v-if="rotatorRace?.id"
                 ref="chartRotatorRef"
-                :race-id="race12.id"
-                :race-status="asRaceStatus(race12.status)"
-                :race-start-time="race12.start_time"
-                :race-type="race12.race_type"
-                :duration-minutes="race12.duration_minutes"
+                :race-id="rotatorRace.id"
+                :race-status="asRaceStatus(rotatorRace.status)"
+                :race-start-time="rotatorRace.start_time"
+                :race-type="rotatorRace.race_type"
+                :duration-minutes="rotatorRace.duration_minutes"
                 v-model:highlight-participant-id="highlightParticipantId"
               />
             </div>
@@ -504,12 +536,12 @@
           <div class="fs-panel" data-testid="rotator-leaderboard">
             <h2>
               {{
-                leaderboardMode === 'teams'
+                rotatorMode === 'teams'
                   ? 'Leaderboard — Teams'
                   : 'Leaderboard — Combined overall'
               }}
             </h2>
-            <table v-if="leaderboardMode === 'individuals'">
+            <table v-if="rotatorMode === 'individuals'">
               <thead>
                 <tr>
                   <th>#</th>
@@ -520,7 +552,7 @@
               </thead>
               <tbody>
                 <tr
-                  v-for="e in race12?.leaderboard_overall || []"
+                  v-for="e in rotatorRace?.leaderboard_overall || []"
                   :key="'fs-' + e.participant_id"
                   data-testid="leaderboard-row"
                   :data-participant-id="e.participant_id"
@@ -544,7 +576,7 @@
               </thead>
               <tbody>
                 <tr
-                  v-for="e in race12?.leaderboard_teams || []"
+                  v-for="e in rotatorRace?.leaderboard_teams || []"
                   :key="'fs-team-' + e.team_id"
                   data-testid="leaderboard-team-row"
                 >
@@ -555,6 +587,85 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <div
+          v-if="rotatorSettingsOpen"
+          class="confirm-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rotator-settings-title"
+          data-testid="rotator-settings-dialog"
+        >
+          <div class="confirm-panel panel">
+            <h2 id="rotator-settings-title">Rotator settings</h2>
+            <label class="rotator-settings-field">
+              Seconds per page
+              <input
+                data-testid="rotator-dwell-seconds"
+                type="number"
+                min="1"
+                max="120"
+                step="1"
+                :value="Math.round(rotatorSettings.dwellMs / 1000)"
+                @change="onRotatorDwellChange"
+              />
+            </label>
+            <p class="muted">Pages in cycle (drag order with ↑ ↓)</p>
+            <ul class="rotator-page-list" data-testid="rotator-page-list">
+              <li
+                v-for="page in rotatorSettings.pages"
+                :key="`${page.race}:${page.mode}`"
+                class="rotator-page-row"
+              >
+                <label>
+                  <input
+                    type="checkbox"
+                    :data-testid="`rotator-page-enabled-${page.race}-${page.mode}`"
+                    :checked="page.enabled"
+                    @change="
+                      setRotatorPageEnabled(
+                        page.race,
+                        page.mode,
+                        ($event.target as HTMLInputElement).checked,
+                      )
+                    "
+                  />
+                  {{ rotatorPageLabel(page) }}
+                </label>
+                <span class="rotator-page-order">
+                  <button
+                    type="button"
+                    class="btn secondary"
+                    :data-testid="`rotator-page-up-${page.race}-${page.mode}`"
+                    aria-label="Move page earlier"
+                    @click="moveRotatorPage(page.race, page.mode, -1)"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    class="btn secondary"
+                    :data-testid="`rotator-page-down-${page.race}-${page.mode}`"
+                    aria-label="Move page later"
+                    @click="moveRotatorPage(page.race, page.mode, 1)"
+                  >
+                    ↓
+                  </button>
+                </span>
+              </li>
+            </ul>
+            <div class="row">
+              <button
+                type="button"
+                class="btn"
+                data-testid="rotator-settings-done"
+                @click="closeRotatorSettings"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -582,6 +693,12 @@ import {
 import { setDisplayCache } from '@/services/timingStorage'
 import { useBridgeSyncStatus } from '@/composables/useBridgeSyncStatus'
 import { useEventLiveStream } from '@/composables/useEventLiveStream'
+import {
+  pageLabel as rotatorPageLabel,
+  useFullscreenRotator,
+  type RotatorMode,
+  type RotatorRaceKey,
+} from '@/composables/useFullscreenRotator'
 import { useReaderStation } from '@/composables/useReaderStation'
 import { useSpectatorIdle } from '@/composables/useSpectatorIdle'
 import { usePinAuthStore } from '@/stores/pinAuth'
@@ -697,9 +814,58 @@ const race90 = computed(
     matchRace((n) => /\b5\b/.test(n) && n.includes('minute')),
 )
 
+const rotatorRaces = computed(() => ({
+  '12h': {
+    available: Boolean(race12.value?.id),
+    status: race12.value?.status,
+  },
+  '6h': {
+    available: Boolean(race6.value?.id),
+    status: race6.value?.status,
+  },
+}))
+
+const {
+  settings: rotatorSettings,
+  playing: rotatorPlaying,
+  settingsOpen: rotatorSettingsOpen,
+  pageIndex: rotatorPageIndex,
+  activePages: rotatorActivePages,
+  currentPage: rotatorCurrentPage,
+  togglePlay: toggleRotatorPlay,
+  openSettings: openRotatorSettings,
+  closeSettings: closeRotatorSettings,
+  setDwellSeconds,
+  setPageEnabled: setRotatorPageEnabled,
+  movePage: moveRotatorPage,
+  onKeydown: onRotatorKeydown,
+} = useFullscreenRotator({
+  open: rotatorOpen,
+  races: rotatorRaces,
+})
+
+function raceForRotatorKey(key: RotatorRaceKey | undefined): EventLiveRace | undefined {
+  if (key === '12h') return race12.value
+  if (key === '6h') return race6.value
+  return undefined
+}
+
+const rotatorRace = computed(() => raceForRotatorKey(rotatorCurrentPage.value?.race))
+const rotatorMode = computed<RotatorMode>(
+  () => rotatorCurrentPage.value?.mode ?? 'individuals',
+)
+const rotatorPageTitle = computed(() =>
+  rotatorCurrentPage.value ? rotatorPageLabel(rotatorCurrentPage.value) : 'No active pages',
+)
+
+function onRotatorDwellChange(e: Event) {
+  const value = Number((e.target as HTMLInputElement).value)
+  if (Number.isFinite(value)) setDwellSeconds(value)
+}
+
 const visibleRaceIds = computed(() => {
   if (rotatorOpen.value) {
-    return race12.value?.id ? [race12.value.id] : []
+    return rotatorRace.value?.id ? [rotatorRace.value.id] : []
   }
   if (activeTab.value === 'overlap') {
     return [race12.value?.id, race6.value?.id].filter(Boolean) as string[]
@@ -724,7 +890,7 @@ function chartBindings(): Array<{ raceId?: string; chart: typeof chart12hRef }> 
     { raceId: race90.value?.id, chart: chart90mRef },
     { raceId: race12.value?.id, chart: chartOverlap12Ref },
     { raceId: race6.value?.id, chart: chartOverlap6Ref },
-    { raceId: race12.value?.id, chart: chartRotatorRef },
+    { raceId: rotatorRace.value?.id, chart: chartRotatorRef },
   ]
 }
 
@@ -862,7 +1028,12 @@ async function loadLive() {
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') rotatorOpen.value = false
+  if (!rotatorOpen.value) return
+  if (e.key === 'Escape' && !rotatorSettingsOpen.value) {
+    rotatorOpen.value = false
+    return
+  }
+  onRotatorKeydown(e)
 }
 
 function clampFsFlowWidth(percent: number): number {
@@ -1432,10 +1603,65 @@ td {
   color: var(--ink);
 }
 
-.fs-exit {
+.fs-controls {
   position: absolute;
   top: 1rem;
   right: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  z-index: 2;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 1rem;
+}
+
+.confirm-panel {
+  max-width: 28rem;
+  width: 100%;
+  margin: 0;
+}
+
+.rotator-settings-field {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.rotator-settings-field input {
+  max-width: 8rem;
+}
+
+.rotator-page-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.rotator-page-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.rotator-page-order {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.rotator-page-order .btn {
+  padding: 0.25rem 0.5rem;
+  min-width: 2rem;
 }
 
 @media (min-width: 900px) {

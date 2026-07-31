@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import EventLive from '@/views/EventLive.vue'
@@ -635,6 +635,88 @@ describe('EventLive.vue', () => {
     it('source contract: uses event-live-fs-flow-width sessionStorage key', () => {
       const src = readFileSync(join(process.cwd(), 'src/views/EventLive.vue'), 'utf8')
       expect(src).toMatch(/event-live-fs-flow-width/)
+    })
+  })
+
+  describe('fullscreen rotator cycle', () => {
+    beforeEach(() => {
+      sessionStorage.clear()
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    async function openFullscreenRotator(wrapper: VueWrapper) {
+      await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+      await nextTick()
+    }
+
+    it('shows play/pause and settings controls in the top right', async () => {
+      const wrapper = await mountLive()
+      await openFullscreenRotator(wrapper)
+
+      expect(wrapper.find('[data-testid="rotator-play-pause"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="rotator-settings-open"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="rotator-exit"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="rotator-controls"]').exists()).toBe(true)
+    })
+
+    it('cycles pages on a 5s dwell and can be paused', async () => {
+      const wrapper = await mountLive()
+      await openFullscreenRotator(wrapper)
+
+      expect(wrapper.find('.fs-meta').text()).toContain('12 Hour · Individual')
+      await vi.advanceTimersByTimeAsync(5000)
+      await nextTick()
+      expect(wrapper.find('.fs-meta').text()).toContain('12 Hour · Team')
+
+      await wrapper.find('[data-testid="rotator-play-pause"]').trigger('click')
+      await nextTick()
+      await vi.advanceTimersByTimeAsync(5000)
+      await nextTick()
+      expect(wrapper.find('.fs-meta').text()).toContain('12 Hour · Team')
+    })
+
+    it('opens settings dialog to adjust dwell and page enablement', async () => {
+      const wrapper = await mountLive()
+      await openFullscreenRotator(wrapper)
+
+      await wrapper.find('[data-testid="rotator-settings-open"]').trigger('click')
+      await nextTick()
+      expect(wrapper.find('[data-testid="rotator-settings-dialog"]').exists()).toBe(true)
+
+      const dwell = wrapper.find('[data-testid="rotator-dwell-seconds"]')
+      await dwell.setValue('8')
+      await dwell.trigger('change')
+      await nextTick()
+      expect(sessionStorage.getItem('event-live-fs-rotator-settings')).toContain('"dwellMs":8000')
+
+      await wrapper.find('[data-testid="rotator-settings-done"]').trigger('click')
+      await nextTick()
+      expect(wrapper.find('[data-testid="rotator-settings-dialog"]').exists()).toBe(false)
+    })
+
+    it('removes 6 hour pages from the cycle after the race finishes', async () => {
+      const wrapper = await mountLive()
+      await openFullscreenRotator(wrapper)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+      await nextTick()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+      await nextTick()
+      expect(wrapper.find('.fs-meta').text()).toContain('6 Hour')
+
+      const finished = structuredClone(livePayload)
+      finished.races[1]!.status = 'finished'
+      ;(eventsLiveApi.getLive as Mock).mockResolvedValue({ data: finished })
+      await vi.advanceTimersByTimeAsync(2000)
+      await flushPromises()
+      await nextTick()
+
+      expect(wrapper.find('.fs-meta').text()).not.toContain('6 Hour')
+      expect(wrapper.find('.fs-meta').text()).toContain('12 Hour')
     })
   })
 })
