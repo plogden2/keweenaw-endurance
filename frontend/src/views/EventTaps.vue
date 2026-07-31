@@ -7,15 +7,39 @@
       <router-link :to="`/timing/${eventId}`" class="back-link">← Back to event</router-link>
       <div class="header-row">
         <h1 class="page-title">{{ eventsStore.currentEvent.name }} — Taps</h1>
-        <button
-          v-if="pinAuth.isAuthenticated"
-          type="button"
-          class="btn"
-          data-testid="add-tap-btn"
-          @click="showAddDialog = true"
+      </div>
+
+      <div v-if="pinAuth.isAuthenticated" class="inline-bib-form">
+        <label class="inline-bib-label">
+          <span class="sr-only">Bib number</span>
+          <input
+            ref="bibInputRef"
+            v-model="bibInput"
+            type="text"
+            class="inline-bib-input"
+            data-testid="inline-bib-input"
+            placeholder="Bib number"
+            autocomplete="off"
+            :disabled="submitting"
+            @keydown.enter.prevent="submitBib"
+            @input="onBibInput"
+          />
+        </label>
+        <p
+          v-if="inlineSuccess"
+          class="inline-bib-success"
+          data-testid="inline-bib-success"
         >
-          Add tap
-        </button>
+          {{ inlineSuccess }}
+        </p>
+        <p
+          v-if="inlineError"
+          class="error"
+          role="alert"
+          data-testid="inline-bib-error"
+        >
+          {{ inlineError }}
+        </p>
       </div>
 
       <div v-if="loading" class="status">Loading taps…</div>
@@ -101,22 +125,14 @@
           </button>
         </div>
       </template>
-
-      <AddTapDialog
-        v-if="showAddDialog"
-        :event-id="eventId"
-        @close="showAddDialog = false"
-        @refresh="loadTaps"
-      />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import AddTapDialog from '@/components/AddTapDialog.vue'
-import { eventTapsApi, timingRecordsApi } from '@/services/api'
+import { eventParticipantsApi, eventTapsApi, timingRecordsApi } from '@/services/api'
 import { useEventsStore } from '@/stores/events'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import type { TimingRecord } from '@/types/models'
@@ -124,6 +140,7 @@ import { formatDateTime } from '@/utils/datetime'
 import { getErrorMessage } from '@/utils/error'
 
 const PAGE_LIMIT = 50
+const SUCCESS_CLEAR_MS = 2000
 
 const TYPE_LABELS: Record<string, string> = {
   rfid_lap: 'Lap',
@@ -144,7 +161,13 @@ const loading = ref(false)
 const loadError = ref<string | null>(null)
 const actionError = ref<string | null>(null)
 const actionBusy = ref(false)
-const showAddDialog = ref(false)
+
+const bibInput = ref('')
+const bibInputRef = ref<HTMLInputElement | null>(null)
+const submitting = ref(false)
+const inlineError = ref<string | null>(null)
+const inlineSuccess = ref<string | null>(null)
+let successTimer: ReturnType<typeof setTimeout> | null = null
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_LIMIT)))
 
@@ -154,6 +177,82 @@ function typeLabel(recordType: TimingRecord['record_type']): string {
 
 function formatTime(iso: string): string {
   return formatDateTime(iso)
+}
+
+function clearSuccessTimer(): void {
+  if (successTimer) {
+    clearTimeout(successTimer)
+    successTimer = null
+  }
+}
+
+function onBibInput(): void {
+  inlineSuccess.value = null
+  clearSuccessTimer()
+}
+
+function selectBibInput(): void {
+  void nextTick(() => {
+    bibInputRef.value?.focus()
+    bibInputRef.value?.select()
+  })
+}
+
+function focusBibInput(): void {
+  void nextTick(() => {
+    bibInputRef.value?.focus()
+  })
+}
+
+function setEphemeralSuccess(message: string): void {
+  clearSuccessTimer()
+  inlineSuccess.value = message
+  successTimer = setTimeout(() => {
+    inlineSuccess.value = null
+    successTimer = null
+  }, SUCCESS_CLEAR_MS)
+}
+
+async function submitBib(): Promise<void> {
+  const bib = bibInput.value.trim()
+  if (!bib || submitting.value) return
+
+  submitting.value = true
+  inlineError.value = null
+  inlineSuccess.value = null
+  clearSuccessTimer()
+
+  try {
+    const { data } = await eventParticipantsApi.list(eventId.value, { q: bib, limit: 20 })
+    const matches = (data.data ?? []).filter((p) => String(p.bib_number) === bib)
+
+    if (matches.length === 0) {
+      inlineError.value = 'Bib not found'
+      selectBibInput()
+      return
+    }
+    if (matches.length > 1) {
+      inlineError.value = 'Multiple matches'
+      selectBibInput()
+      return
+    }
+
+    const match = matches[0]
+    await eventTapsApi.create(eventId.value, {
+      participant_id: match.id,
+      karaoke_bonus: false,
+    })
+
+    bibInput.value = ''
+    setEphemeralSuccess(`Recorded #${match.bib_number} ${match.first_name} ${match.last_name}`)
+    focusBibInput()
+    await loadTaps()
+  } catch (err) {
+    inlineError.value = getErrorMessage(err, 'Failed to record tap')
+    selectBibInput()
+  } finally {
+    submitting.value = false
+  }
 }
 
 async function loadEvent(): Promise<void> {
@@ -223,6 +322,10 @@ onMounted(async () => {
   await loadTaps()
 })
 
+onUnmounted(() => {
+  clearSuccessTimer()
+})
+
 watch(eventId, async () => {
   page.value = 1
   await loadEvent()
@@ -256,6 +359,47 @@ watch(eventId, async () => {
 .page-title {
   color: var(--ink);
   margin: 0;
+}
+
+.inline-bib-form {
+  margin-bottom: 1.25rem;
+}
+
+.inline-bib-label {
+  display: block;
+}
+
+.inline-bib-input {
+  width: min(280px, 100%);
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.inline-bib-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.inline-bib-success {
+  margin: 0.4rem 0 0;
+  color: #1e8449;
+  font-size: 0.9rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .btn {
