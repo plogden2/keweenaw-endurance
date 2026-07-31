@@ -238,12 +238,20 @@ func (s *ScanService) resolveParticipant(eventID uuid.UUID, tagUID string) (*mod
 	var assoc models.RFIDTagAssociation
 	err := s.db.Where("tag_uid = ? AND active = ?", tagUID, true).First(&assoc).Error
 	if err == nil {
-		var p models.Participant
-		if err := s.db.Preload("Category").Preload("Team").Preload("Race").First(&p, "id = ?", assoc.ParticipantID).Error; err != nil {
+		var bib models.Bib
+		if err := s.db.First(&bib, "id = ?", assoc.BibID).Error; err != nil {
 			return nil, err
 		}
-		if !s.participantInEvent(&p, eventID) {
+		if bib.EventID.UUID() != eventID {
 			return nil, gorm.ErrRecordNotFound
+		}
+		var p models.Participant
+		err := s.db.Preload("Category").Preload("Team").Preload("Race").
+			Joins("JOIN races ON races.id = participants.race_id").
+			Where("races.event_id = ? AND participants.bib_number = ?", eventID, bib.BibNumber).
+			First(&p).Error
+		if err != nil {
+			return nil, err
 		}
 		return &p, nil
 	}

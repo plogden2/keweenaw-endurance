@@ -25,6 +25,7 @@ func setupScanTestDB(t *testing.T) *gorm.DB {
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
 		&models.Category{},
+		&models.Bib{},
 		&models.RFIDTagAssociation{},
 		&models.ReaderStation{},
 	))
@@ -45,6 +46,18 @@ type scanFixture struct {
 	finish      *models.TimingCheckpoint
 	category    *models.Category
 	tagUID      string
+}
+
+func associateParticipantTag(t *testing.T, db *gorm.DB, eventID uuidutil.PublicUUID, participant *models.Participant, tagUID string) {
+	t.Helper()
+	bib := models.Bib{EventID: eventID, BibNumber: participant.BibNumber}
+	require.NoError(t, db.Where("event_id = ? AND bib_number = ?", eventID, participant.BibNumber).
+		FirstOrCreate(&bib, bib).Error)
+	require.NoError(t, db.Create(&models.RFIDTagAssociation{
+		BibID:  bib.ID,
+		TagUID: tagUID,
+		Active: true,
+	}).Error)
 }
 
 func seedActiveLapFixture(t *testing.T, raceStatus string) *scanFixture {
@@ -97,11 +110,7 @@ func seedActiveLapFixture(t *testing.T, raceStatus string) *scanFixture {
 	require.NoError(t, db.Create(finish).Error)
 
 	tagUID := "DEMO-TAG-0001"
-	require.NoError(t, db.Create(&models.RFIDTagAssociation{
-		ParticipantID: participant.ID,
-		TagUID:        tagUID,
-		Active:        true,
-	}).Error)
+	associateParticipantTag(t, db, event.ID, participant, tagUID)
 
 	station := &models.ReaderStation{
 		EventID:  event.ID,
@@ -355,11 +364,7 @@ func TestProcessScan_PlacementUsesKaraokeBonus(t *testing.T) {
 		Status:     "started",
 	}
 	require.NoError(t, fx.db.Create(rival).Error)
-	require.NoError(t, fx.db.Create(&models.RFIDTagAssociation{
-		ParticipantID: rival.ID,
-		TagUID:        "DEMO-TAG-RIVAL",
-		Active:        true,
-	}).Error)
+	associateParticipantTag(t, fx.db, fx.event.ID, rival, "DEMO-TAG-RIVAL")
 
 	base := time.Now().UTC().Truncate(time.Second)
 	_, err := svc.ProcessScan(fx.event.ID.UUID(), "DEMO-TAG-RIVAL", "laptop-finish-1", base)
@@ -459,9 +464,9 @@ func TestProcessScan_OrphanAssociation(t *testing.T) {
 	fx := seedActiveLapFixture(t, "active")
 	orphanUID := "ORPHAN-TAG"
 	require.NoError(t, fx.db.Create(&models.RFIDTagAssociation{
-		ParticipantID: uuidutil.NewPublicUUID(uuid.New()),
-		TagUID:        orphanUID,
-		Active:        true,
+		BibID:  uuidutil.NewPublicUUID(uuid.New()),
+		TagUID: orphanUID,
+		Active: true,
 	}).Error)
 	svc := NewScanService(fx.db, nil)
 	result, err := svc.ProcessScan(fx.event.ID.UUID(), orphanUID, "laptop-finish-1", time.Now().UTC())
@@ -573,9 +578,7 @@ func TestScoreRace_TieBreakEarliestLastLap(t *testing.T) {
 		FirstName: "Other", LastName: "Racer", Gender: "male", Status: "started",
 	}
 	require.NoError(t, fx.db.Create(other).Error)
-	require.NoError(t, fx.db.Create(&models.RFIDTagAssociation{
-		ParticipantID: other.ID, TagUID: "TIE-TAG", Active: true,
-	}).Error)
+	associateParticipantTag(t, fx.db, fx.event.ID, other, "TIE-TAG")
 
 	base := time.Now().UTC().Truncate(time.Second)
 	_, err := svc.ProcessScan(fx.event.ID.UUID(), fx.tagUID, "laptop-finish-1", base.Add(10*time.Second))
@@ -602,9 +605,7 @@ func TestPlacements_SkipsDifferentCategory(t *testing.T) {
 		FirstName: "Pat", LastName: "Lee", Gender: "female", Status: "started",
 	}
 	require.NoError(t, fx.db.Create(woman).Error)
-	require.NoError(t, fx.db.Create(&models.RFIDTagAssociation{
-		ParticipantID: woman.ID, TagUID: "WOMEN-TAG", Active: true,
-	}).Error)
+	associateParticipantTag(t, fx.db, fx.event.ID, woman, "WOMEN-TAG")
 
 	svc := NewScanService(fx.db, nil)
 	base := time.Now().UTC()

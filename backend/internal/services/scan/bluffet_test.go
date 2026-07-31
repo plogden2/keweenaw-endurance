@@ -59,11 +59,7 @@ func seedBluffetFixture(t *testing.T) *scanFixture {
 	require.NoError(t, db.Create(finish).Error)
 
 	tagUID := "BLUFFET-TAG-0001"
-	require.NoError(t, db.Create(&models.RFIDTagAssociation{
-		ParticipantID: participant.ID,
-		TagUID:        tagUID,
-		Active:        true,
-	}).Error)
+	associateParticipantTag(t, db, event.ID, participant, tagUID)
 
 	// Mis-armed as checkpoint mode — ProcessScan must still force finish for Bluffet.
 	station := &models.ReaderStation{

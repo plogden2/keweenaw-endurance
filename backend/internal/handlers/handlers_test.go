@@ -72,6 +72,7 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
 		&models.Category{},
+		&models.Bib{},
 		&models.RFIDTagAssociation{},
 		&models.ReaderStation{},
 	))
@@ -968,6 +969,7 @@ func TestRFIDHandlers_ReadPayload(t *testing.T) {
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
 		&models.Category{},
+		&models.Bib{},
 		&models.RFIDTagAssociation{},
 		&models.ReaderStation{},
 	))
@@ -1044,6 +1046,7 @@ func TestRFIDHandlers_InjectDisabled(t *testing.T) {
 		&models.TimingCheckpoint{},
 		&models.TimingRecord{},
 		&models.Category{},
+		&models.Bib{},
 		&models.RFIDTagAssociation{},
 		&models.ReaderStation{},
 	))
@@ -1117,10 +1120,12 @@ func seedScanHandlerFixture(t *testing.T, svc *services.Services, raceStatus str
 	require.NoError(t, db.Create(finish).Error)
 
 	tagUID = "DEMO-TAG-0001"
+	bib := models.Bib{EventID: event.ID, BibNumber: part.BibNumber}
+	require.NoError(t, db.Create(&bib).Error)
 	require.NoError(t, db.Create(&models.RFIDTagAssociation{
-		ParticipantID: part.ID,
-		TagUID:        tagUID,
-		Active:        true,
+		BibID:  bib.ID,
+		TagUID: tagUID,
+		Active: true,
 	}).Error)
 
 	return event.ID.Short(), tagUID

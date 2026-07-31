@@ -51,7 +51,7 @@ func TestMigrate(t *testing.T) {
 		
 		// Verify tables exist by attempting to query them
 		// This will fail if the tables don't exist
-		tables := []string{"events", "races", "participants", "timing_checkpoints", "timing_records", "categories"}
+		tables := []string{"events", "races", "participants", "timing_checkpoints", "timing_records", "categories", "bibs", "rfid_tag_associations"}
 		
 		for _, table := range tables {
 			var count int64

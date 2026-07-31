@@ -351,7 +351,13 @@ func (s *ParticipantService) ensureRFIDAvailable(rfid string, excludeID *uuid.UU
 
 	assocQuery := s.db.Model(&models.RFIDTagAssociation{}).Where("tag_uid = ? AND active = ?", rfid, true)
 	if excludeID != nil {
-		assocQuery = assocQuery.Where("participant_id != ?", *excludeID)
+		bibIDs, err := bibIDsForParticipant(s.db, *excludeID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if len(bibIDs) > 0 {
+			assocQuery = assocQuery.Where("bib_id NOT IN ?", bibIDs)
+		}
 	}
 	if err := assocQuery.Count(&count).Error; err != nil {
 		return err
@@ -366,25 +372,10 @@ func (s *ParticipantService) attachTagUIDs(participants []models.Participant) er
 	if len(participants) == 0 {
 		return nil
 	}
-	ids := make([]uuidutil.PublicUUID, len(participants))
 	for i := range participants {
-		ids[i] = participants[i].ID
-	}
-	var assocs []models.RFIDTagAssociation
-	if err := s.db.Where("participant_id IN ? AND active = ?", ids, true).
-		Order("created_at ASC").
-		Find(&assocs).Error; err != nil {
-		return err
-	}
-	byParticipant := map[string][]string{}
-	for _, a := range assocs {
-		key := a.ParticipantID.String()
-		byParticipant[key] = append(byParticipant[key], a.TagUID)
-	}
-	for i := range participants {
-		uids := byParticipant[participants[i].ID.String()]
-		if uids == nil {
-			uids = []string{}
+		uids, err := s.tagUIDsForParticipant(participants[i].ID)
+		if err != nil {
+			return err
 		}
 		participants[i].TagUIDs = uids
 	}
@@ -392,8 +383,18 @@ func (s *ParticipantService) attachTagUIDs(participants []models.Participant) er
 }
 
 func (s *ParticipantService) tagUIDsForParticipant(id uuidutil.PublicUUID) ([]string, error) {
+	bibIDs, err := bibIDsForParticipant(s.db, id.UUID())
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+	if len(bibIDs) == 0 {
+		return []string{}, nil
+	}
 	var assocs []models.RFIDTagAssociation
-	if err := s.db.Where("participant_id = ? AND active = ?", id, true).
+	if err := s.db.Where("bib_id IN ? AND active = ?", bibIDs, true).
 		Order("created_at ASC").
 		Find(&assocs).Error; err != nil {
 		return nil, err

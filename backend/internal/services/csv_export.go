@@ -237,10 +237,20 @@ func (s *CSVExportService) BuildCSV(eventID uuid.UUID) ([]byte, error) {
 
 	var tags []models.RFIDTagAssociation
 	var timing []models.TimingRecord
-	if len(partIDs) > 0 {
-		if err := s.db.Where("participant_id IN ?", partIDs).Order("created_at ASC").Find(&tags).Error; err != nil {
+	var bibs []models.Bib
+	if err := s.db.Where("event_id = ?", eventID).Order("bib_number ASC").Find(&bibs).Error; err != nil {
+		return nil, err
+	}
+	bibIDs := make([]uuidutil.PublicUUID, 0, len(bibs))
+	for _, b := range bibs {
+		bibIDs = append(bibIDs, b.ID)
+	}
+	if len(bibIDs) > 0 {
+		if err := s.db.Where("bib_id IN ?", bibIDs).Order("created_at ASC").Find(&tags).Error; err != nil {
 			return nil, err
 		}
+	}
+	if len(partIDs) > 0 {
 		if err := s.db.Where("participant_id IN ?", partIDs).Order("timestamp ASC").Find(&timing).Error; err != nil {
 			return nil, err
 		}
@@ -363,17 +373,33 @@ func (s *CSVExportService) BuildCSV(eventID uuid.UUID) ([]byte, error) {
 		return nil, err
 	}
 
+	bibRows := make([][]string, 0, len(bibs))
+	for _, b := range bibs {
+		bibRows = append(bibRows, []string{
+			b.ID.String(),
+			b.EventID.String(),
+			b.BibNumber,
+			b.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	if err := writeSection("bibs",
+		[]string{"id", "event_id", "bib_number", "created_at"},
+		bibRows,
+	); err != nil {
+		return nil, err
+	}
+
 	tagRows := make([][]string, 0, len(tags))
 	for _, tg := range tags {
 		tagRows = append(tagRows, []string{
 			tg.ID.String(),
-			tg.ParticipantID.String(),
+			tg.BibID.String(),
 			tg.TagUID,
 			tg.CreatedAt.Format(time.RFC3339),
 		})
 	}
 	if err := writeSection("tags",
-		[]string{"id", "participant_id", "tag_uid", "created_at"},
+		[]string{"id", "bib_id", "tag_uid", "created_at"},
 		tagRows,
 	); err != nil {
 		return nil, err
@@ -481,6 +507,10 @@ func (s *CSVExportService) ImportCSV(eventID uuid.UUID, data []byte) (*CSVImport
 	if err != nil {
 		return nil, err
 	}
+	bibs, err := parseBibRows(sections["bibs"], eventID)
+	if err != nil {
+		return nil, err
+	}
 	tags, err := parseTagRows(sections["tags"])
 	if err != nil {
 		return nil, err
@@ -539,6 +569,11 @@ func (s *CSVExportService) ImportCSV(eventID uuid.UUID, data []byte) (*CSVImport
 		}
 		if len(participants) > 0 {
 			if err := tx.Create(&participants).Error; err != nil {
+				return err
+			}
+		}
+		if len(bibs) > 0 {
+			if err := tx.Create(&bibs).Error; err != nil {
 				return err
 			}
 		}
@@ -608,25 +643,31 @@ func deleteEventScopedData(tx *gorm.DB, eventID uuid.UUID) error {
 	if err := tx.Model(&models.Race{}).Where("event_id = ?", eventID).Pluck("id", &raceIDs).Error; err != nil {
 		return err
 	}
-	if len(raceIDs) == 0 {
-		return nil
-	}
 
 	var partIDs []uuidutil.PublicUUID
-	if err := tx.Model(&models.Participant{}).Where("race_id IN ?", raceIDs).Pluck("id", &partIDs).Error; err != nil {
-		return err
+	if len(raceIDs) > 0 {
+		if err := tx.Model(&models.Participant{}).Where("race_id IN ?", raceIDs).Pluck("id", &partIDs).Error; err != nil {
+			return err
+		}
 	}
 
 	if len(partIDs) > 0 {
 		if err := tx.Where("participant_id IN ?", partIDs).Delete(&models.TimingRecord{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("participant_id IN ?", partIDs).Delete(&models.RFIDTagAssociation{}).Error; err != nil {
-			return err
-		}
 		if err := tx.Where("id IN ?", partIDs).Delete(&models.Participant{}).Error; err != nil {
 			return err
 		}
+	}
+	if err := tx.Where("bib_id IN (?)", tx.Model(&models.Bib{}).Select("id").Where("event_id = ?", eventID)).
+		Delete(&models.RFIDTagAssociation{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("event_id = ?", eventID).Delete(&models.Bib{}).Error; err != nil {
+		return err
+	}
+	if len(raceIDs) == 0 {
+		return nil
 	}
 	if err := tx.Where("race_id IN ?", raceIDs).Delete(&models.Team{}).Error; err != nil {
 		return err
@@ -861,6 +902,30 @@ func parseParticipantRows(rows []map[string]string) ([]models.Participant, error
 	return out, nil
 }
 
+func parseBibRows(rows []map[string]string, eventID uuid.UUID) ([]models.Bib, error) {
+	out := make([]models.Bib, 0, len(rows))
+	for _, row := range rows {
+		id, err := parseUUID(row["id"])
+		if err != nil {
+			return nil, fmt.Errorf("%w: bibs.id: %v", ErrInvalidCSV, err)
+		}
+		created := time.Now().UTC()
+		if ts := strings.TrimSpace(row["created_at"]); ts != "" {
+			created, err = time.Parse(time.RFC3339, ts)
+			if err != nil {
+				return nil, fmt.Errorf("%w: bibs.created_at: %v", ErrInvalidCSV, err)
+			}
+		}
+		out = append(out, models.Bib{
+			ID:        uuidutil.NewPublicUUID(id),
+			EventID:   uuidutil.NewPublicUUID(eventID),
+			BibNumber: strings.TrimSpace(row["bib_number"]),
+			CreatedAt: created,
+		})
+	}
+	return out, nil
+}
+
 func parseTagRows(rows []map[string]string) ([]models.RFIDTagAssociation, error) {
 	out := make([]models.RFIDTagAssociation, 0, len(rows))
 	for _, row := range rows {
@@ -868,9 +933,14 @@ func parseTagRows(rows []map[string]string) ([]models.RFIDTagAssociation, error)
 		if err != nil {
 			return nil, fmt.Errorf("%w: tags.id: %v", ErrInvalidCSV, err)
 		}
-		partID, err := parseUUID(row["participant_id"])
+		bibIDRaw := strings.TrimSpace(row["bib_id"])
+		if bibIDRaw == "" {
+			// Legacy CSV column until Task 6 rewrites export/import fully.
+			bibIDRaw = strings.TrimSpace(row["participant_id"])
+		}
+		bibID, err := parseUUID(bibIDRaw)
 		if err != nil {
-			return nil, fmt.Errorf("%w: tags.participant_id: %v", ErrInvalidCSV, err)
+			return nil, fmt.Errorf("%w: tags.bib_id: %v", ErrInvalidCSV, err)
 		}
 		created := time.Now().UTC()
 		if ts := strings.TrimSpace(row["created_at"]); ts != "" {
@@ -880,11 +950,11 @@ func parseTagRows(rows []map[string]string) ([]models.RFIDTagAssociation, error)
 			}
 		}
 		out = append(out, models.RFIDTagAssociation{
-			ID:            uuidutil.NewPublicUUID(id),
-			ParticipantID: uuidutil.NewPublicUUID(partID),
-			TagUID:        strings.TrimSpace(row["tag_uid"]),
-			CreatedAt:     created,
-			Active:        true,
+			ID:        uuidutil.NewPublicUUID(id),
+			BibID:     uuidutil.NewPublicUUID(bibID),
+			TagUID:    strings.TrimSpace(row["tag_uid"]),
+			CreatedAt: created,
+			Active:    true,
 		})
 	}
 	return out, nil
