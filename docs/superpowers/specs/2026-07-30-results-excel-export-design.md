@@ -1,7 +1,7 @@
 # Results Excel Export — Design
 
 **Date**: 2026-07-30  
-**Status**: Approved (advisor defaults; user chose overall + category sheets)  
+**Status**: Implemented (2026-07-30) — branch `feature/results-excel-export`  
 **Branch context**: `main` / race-day ops
 
 ## Problem
