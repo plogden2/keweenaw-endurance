@@ -1,6 +1,6 @@
 export const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
-  advanced_men: '#1a3f3d',
-  advanced_women: '#2f6b5a',
+  expert_men: '#1a3f3d',
+  expert_women: '#2f6b5a',
   beginner_men: '#9b654e',
   beginner_women: '#a1b383',
 }

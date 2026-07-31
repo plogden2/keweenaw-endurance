@@ -1098,7 +1098,7 @@ func seedScanHandlerFixture(t *testing.T, svc *services.Services, raceStatus str
 
 	cat := &models.Category{
 		RaceID:       race.ID,
-		Name:         "Advanced Men",
+		Name:         "Expert Men",
 		CategoryType: "custom",
 		GenderFilter: "male",
 	}
@@ -1218,8 +1218,8 @@ func TestGetEventLive_CountdownAndLegend(t *testing.T) {
 	legend := live["category_legend"].([]interface{})
 	require.NotEmpty(t, legend)
 	entry := legend[0].(map[string]interface{})
-	assert.Equal(t, "advanced_men", entry["key"])
-	assert.Equal(t, "Advanced Men", entry["label"])
+	assert.Equal(t, "expert_men", entry["key"])
+	assert.Equal(t, "Expert Men", entry["label"])
 	assert.NotEmpty(t, entry["color"])
 
 	races = live["races"].([]interface{})

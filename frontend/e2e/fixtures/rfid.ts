@@ -28,8 +28,8 @@ export const BLUFFET = {
       categoryNames: [
         'Intermediate Men',
         'Intermediate Women',
-        'Advanced Men',
-        'Advanced Women',
+        'Expert Men',
+        'Expert Women',
       ],
     },
     sixHour: {
@@ -39,8 +39,8 @@ export const BLUFFET = {
       categoryNames: [
         'Intermediate Men',
         'Intermediate Women',
-        'Advanced Men',
-        'Advanced Women',
+        'Expert Men',
+        'Expert Women',
       ],
     },
     kids: {

@@ -128,7 +128,7 @@ Public. Includes races, countdowns, **overall** leaderboards (default) with cate
 {
   "event": { "id": "...", "name": "All You Can East Bluffet" },
   "category_legend": [
-    { "key": "advanced_men", "label": "Advanced Men", "color": "#1a5276" }
+    { "key": "expert_men", "label": "Expert Men", "color": "#1a5276" }
   ],
   "races": [
     {
@@ -143,7 +143,7 @@ Public. Includes races, countdowns, **overall** leaderboards (default) with cate
           "participant_id": "...",
           "bib_number": "12",
           "name": "Alex Rivera",
-          "category_key": "advanced_men",
+          "category_key": "expert_men",
           "laps": 14,
           "last_lap_at": "..."
         }

@@ -56,12 +56,12 @@ test.describe('Racers page [US3]', () => {
 
     await page.getByTestId('racer-first-name').fill('E2E')
     await page.getByTestId('racer-last-name').fill('Racer')
-    await page.getByTestId('racer-category').selectOption({ label: /Advanced Men/i })
+    await page.getByTestId('racer-category').selectOption({ label: /Expert Men/i })
     await page.getByTestId('racer-save').click()
 
     const list = page.getByTestId('racers-list')
     await expect(list.getByText('E2E Racer')).toBeVisible()
-    await expect(list.getByText(/Advanced Men/i)).toBeVisible()
+    await expect(list.getByText(/Expert Men/i)).toBeVisible()
   })
 
   test('click-to-edit bib shows save when dirty and persists', async ({ page }) => {

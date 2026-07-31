@@ -743,7 +743,7 @@ func TestTimestampInRaceWindow_Edges(t *testing.T) {
 func TestWithScanDisplay_TeamAndCategory(t *testing.T) {
 	teamID := uuidutil.NewPublicUUID(uuid.New())
 	team := &models.Team{ID: teamID, Name: "Keweenaw"}
-	cat := &models.Category{Name: "Advanced Men"}
+	cat := &models.Category{Name: "Expert Men"}
 	p := &models.Participant{
 		FirstName: "Sam",
 		LastName:  "Lee",
@@ -755,7 +755,7 @@ func TestWithScanDisplay_TeamAndCategory(t *testing.T) {
 	out := withScanDisplay(&ScanResult{Participant: p})
 	assert.Equal(t, "Sam Lee", out.ParticipantName)
 	assert.Equal(t, "7", out.BibNumber)
-	assert.Equal(t, "Advanced Men", out.CategoryLabel)
+	assert.Equal(t, "Expert Men", out.CategoryLabel)
 	assert.Equal(t, "12 Hour", out.RaceName)
 	assert.Equal(t, "Keweenaw", out.TeamName)
 	require.NotNil(t, out.TeamID)

@@ -116,7 +116,7 @@ describe('useReaderStation', () => {
       timing_record_id: 'tr-1',
       karaoke_available: true,
       bib_number: '12',
-      category_label: 'Advanced Men',
+      category_label: 'Expert Men',
     }
     ;(scansApi.postScan as Mock).mockResolvedValue({ data: lapResult })
 

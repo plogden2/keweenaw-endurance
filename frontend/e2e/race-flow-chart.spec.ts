@@ -69,7 +69,7 @@ const sam = participant(P2, '2', 'Sam', 'Trail')
 const liveEventPayload = {
   event: { id: EVENT_ID, name: 'Plot Reliability Cup' },
   category_legend: [
-    { key: 'advanced_men', label: 'Advanced Men', color: '#1a5276' },
+    { key: 'expert_men', label: 'Expert Men', color: '#1a5276' },
   ],
   races: [
     {
@@ -86,7 +86,7 @@ const liveEventPayload = {
           participant_id: P1,
           bib_number: '1',
           name: 'Alex Rivera',
-          category_key: 'advanced_men',
+          category_key: 'expert_men',
           laps: 2,
           last_lap_at: lap2Iso,
         },
@@ -95,7 +95,7 @@ const liveEventPayload = {
           participant_id: P2,
           bib_number: '2',
           name: 'Sam Trail',
-          category_key: 'advanced_men',
+          category_key: 'expert_men',
           laps: 1,
           last_lap_at: lap1Iso,
         },

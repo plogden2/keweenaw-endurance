@@ -43,7 +43,7 @@ const sampleRacers = [
     category_id: 'c1',
     tag_uids: ['TAG-A'],
     status: 'registered' as const,
-    category: { id: 'c1', race_id: 'race-1', name: 'Advanced Men', category_type: 'custom' },
+    category: { id: 'c1', race_id: 'race-1', name: 'Expert Men', category_type: 'custom' },
   },
   {
     id: 'p2',
@@ -78,7 +78,7 @@ describe('Racers.vue', () => {
     ;(raceParticipantsApi.listCategories as Mock).mockResolvedValue({
       data: {
         data: [
-          { id: 'c1', race_id: 'race-1', name: 'Advanced Men', category_type: 'custom' },
+          { id: 'c1', race_id: 'race-1', name: 'Expert Men', category_type: 'custom' },
           { id: 'c2', race_id: 'race-1', name: 'Intermediate Women', category_type: 'custom' },
         ],
       },

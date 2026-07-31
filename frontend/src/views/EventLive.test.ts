@@ -71,8 +71,8 @@ vi.mock('@/services/timingStorage', () => ({
 const livePayload = {
   event: { id: 'evt-1', name: 'All You Can East Bluffet' },
   category_legend: [
-    { key: 'advanced_men', label: 'Advanced Men', color: '#1a5276' },
-    { key: 'advanced_women', label: 'Advanced Women', color: '#8e44ad' },
+    { key: 'expert_men', label: 'Expert Men', color: '#1a5276' },
+    { key: 'expert_women', label: 'Expert Women', color: '#8e44ad' },
   ],
   races: [
     {
@@ -89,7 +89,7 @@ const livePayload = {
           participant_id: 'p1',
           bib_number: '12',
           name: 'Alex Rivera',
-          category_key: 'advanced_men',
+          category_key: 'expert_men',
           laps: 14,
           last_lap_at: '2026-08-01T11:02:41-04:00',
         },

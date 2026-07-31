@@ -3,14 +3,14 @@ import { resolveCategoryColor, DEFAULT_CATEGORY_COLORS } from './defaultLegend'
 
 describe('defaultLegend', () => {
   it('maps known keys to brand-family colors', () => {
-    expect(DEFAULT_CATEGORY_COLORS.advanced_men).toBe('#1a3f3d')
-    expect(DEFAULT_CATEGORY_COLORS.advanced_women).toBe('#2f6b5a')
+    expect(DEFAULT_CATEGORY_COLORS.expert_men).toBe('#1a3f3d')
+    expect(DEFAULT_CATEGORY_COLORS.expert_women).toBe('#2f6b5a')
     expect(DEFAULT_CATEGORY_COLORS.beginner_men).toBe('#9b654e')
     expect(DEFAULT_CATEGORY_COLORS.beginner_women).toBe('#a1b383')
   })
 
   it('overrides API blue chrome with brand colors for known keys', () => {
-    expect(resolveCategoryColor('advanced_men', '#1a5276')).toBe('#1a3f3d')
+    expect(resolveCategoryColor('expert_men', '#1a5276')).toBe('#1a3f3d')
   })
 
   it('falls back to muted for unknown keys without blue', () => {

@@ -83,7 +83,7 @@ func seedActiveLapFixture(t *testing.T, raceStatus string) *scanFixture {
 
 	category := &models.Category{
 		RaceID:       race.ID,
-		Name:         "Advanced Men",
+		Name:         "Expert Men",
 		CategoryType: "custom",
 		GenderFilter: "male",
 	}
@@ -690,7 +690,7 @@ func TestScoreRace_TieBreakEarliestLastLap(t *testing.T) {
 func TestPlacements_SkipsDifferentCategory(t *testing.T) {
 	fx := seedActiveLapFixture(t, "active")
 	otherCat := &models.Category{
-		RaceID: fx.race.ID, Name: "Advanced Women", CategoryType: "custom", GenderFilter: "female",
+		RaceID: fx.race.ID, Name: "Expert Women", CategoryType: "custom", GenderFilter: "female",
 	}
 	require.NoError(t, fx.db.Create(otherCat).Error)
 	catID := otherCat.ID

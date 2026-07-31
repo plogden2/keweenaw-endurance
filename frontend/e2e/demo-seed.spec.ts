@@ -96,7 +96,7 @@ test.describe('US8 demo seed — All You Can East Bluffet 2026', () => {
     expect(kidsCats).toHaveLength(2)
     const kidsNames = kidsCats.map((c: { name: string }) => c.name)
     expect(kidsNames).toEqual(expect.arrayContaining(['Men', 'Women']))
-    expect(kidsNames.some((n: string) => /intermediate|advanced/i.test(n))).toBeFalsy()
+    expect(kidsNames.some((n: string) => /intermediate|expert|advanced/i.test(n))).toBeFalsy()
   })
 
   test('100 racers total across the demo event', async ({ request }) => {

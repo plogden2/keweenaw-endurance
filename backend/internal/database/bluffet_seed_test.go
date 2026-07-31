@@ -68,8 +68,8 @@ func TestBluffetSeedSQL_Invariants(t *testing.T) {
 	// 4 adult cats × 2 races + 2 kids = 10 category name mentions (adults appear twice)
 	assert.Equal(t, 2, strings.Count(sql, "'Intermediate Men'"))
 	assert.Equal(t, 2, strings.Count(sql, "'Intermediate Women'"))
-	assert.Equal(t, 2, strings.Count(sql, "'Advanced Men'"))
-	assert.Equal(t, 2, strings.Count(sql, "'Advanced Women'"))
+	assert.Equal(t, 2, strings.Count(sql, "'Expert Men'"))
+	assert.Equal(t, 2, strings.Count(sql, "'Expert Women'"))
 	assert.Contains(t, sql, "'Men'")
 	assert.Contains(t, sql, "'Women'")
 

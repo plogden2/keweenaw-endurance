@@ -170,8 +170,8 @@ The system ships with a seeded demo event “All You Can East Bluffet” on Augu
 
 1. **Given** the demo seed is loaded, **When** staff open the event list, **Then** “All You Can East Bluffet” dated August 1, 2026 is present.
 2. **Given** the demo event, **When** its races are inspected, **Then** there are three lap-format races: 12-hour, 6-hour, and 90-minute kids, with 6-hour and 12-hour starting at 8:00 AM and the 90-minute kids race starting at 3:00 PM (event-local time).
-3. **Given** the 12-hour and 6-hour races, **When** categories are inspected, **Then** each includes Intermediate and Advanced, each further split into Men and Women (four categories per duration race).
-4. **Given** the 90-minute kids race, **When** categories are inspected, **Then** it includes Men and Women categories (no Intermediate/Advanced split).
+3. **Given** the 12-hour and 6-hour races, **When** categories are inspected, **Then** each includes Intermediate and Expert, each further split into Men and Women (four categories per duration race).
+4. **Given** the 90-minute kids race, **When** categories are inspected, **Then** it includes Men and Women categories (no Intermediate/Expert split).
 5. **Given** the demo seed, **When** racers are counted across the event, **Then** there are 100 racers total assigned across the races/categories.
 
 ---
@@ -242,7 +242,7 @@ Before the feature is considered complete, a full suite of end-to-end tests cove
 - **FR-020**: A full end-to-end automated test suite MUST cover the acceptance scenarios in this specification (with Proxmark3 interactions simulated where physical hardware is unavailable).
 - **FR-021**: System MUST provide a demo seed for event “All You Can East Bluffet” on August 1, 2026, with:
   - Lap-format races: 12-hour, 6-hour, and 90-minute kids
-  - 12-hour and 6-hour: Intermediate and Advanced, each with Men and Women
+  - 12-hour and 6-hour: Intermediate and Expert, each with Men and Women
   - 90-minute kids: Men and Women only
   - Start times: 8:00 AM for 6-hour and 12-hour; 3:00 PM for 90-minute kids (America/Detroit local time unless otherwise configured)
   - 100 total seeded racers across the event, each assigned to a category
@@ -260,7 +260,7 @@ Before the feature is considered complete, a full suite of end-to-end tests cove
 
 - **Event**: A named race day (e.g., All You Can East Bluffet) with a calendar date and one or more races.
 - **Race**: A lap-format contest under an event with duration, start time, status (scheduled/active/finished), and category structure.
-- **Category**: A scoring/placement bucket within a race (e.g., Intermediate Men, Advanced Women, Kids Men).
+- **Category**: A scoring/placement bucket within a race (e.g., Intermediate Men, Expert Women, Kids Men).
 - **Racer**: A participant in a race with unique identifier, name, bib number, category membership, and status.
 - **Bib**: Event-scoped inventory row (`id` UUID written to chips, `event_id`, `bib_number` unique per event). At most one participant in the event may hold a given bib number.
 - **RFID Tag Association**: Binding between a physical tag (`tag_uid`) and a **bib** (`bib_id`); multiple associations per bib allowed; in v1 all associations remain active (no revocation). Scan path: tag → bib → participant by `(event_id, bib_number)`, with legacy dual-resolve for chips that still hold a participant UUID.

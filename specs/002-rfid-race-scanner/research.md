@@ -76,7 +76,7 @@
 
 ## R8 — Demo seed alignment (AYCEB 2026)
 
-**Decision**: Evolve `database/seed/generate_bluffet_seed.py` / `03-bluffet-2026.sql` to match clarified model: **3 races** (12h, 6h, 90-min kids), categories Intermediate/Advanced × Men/Women for 12h & 6h, Men/Women for kids, starts 08:00 / 08:00 / 15:00 America/Detroit, **100 participants** with sequential bibs and optional sample tag UIDs for e2e.
+**Decision**: Evolve `database/seed/generate_bluffet_seed.py` / `03-bluffet-2026.sql` to match clarified model: **3 races** (12h, 6h, 90-min kids), categories Intermediate/Expert × Men/Women for 12h & 6h, Men/Women for kids, starts 08:00 / 08:00 / 15:00 America/Detroit, **100 participants** with sequential bibs and optional sample tag UIDs for e2e.
 
 **Rationale**: Existing seed uses 5 races (Expert/Intermediate as races) and Youth age_group — conflicts with clarified spec.
 

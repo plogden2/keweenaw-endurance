@@ -38,9 +38,9 @@ TimingRecord (karaoke_bonus) ──> TimingRecord (source rfid_lap)
 ### Category
 | Field | Rules |
 |-------|--------|
-| name | e.g. Intermediate Men, Advanced Women, Men, Women |
+| name | e.g. Intermediate Men, Expert Women, Men, Women |
 | category_type / gender_filter | Existing fields; skill bands via name or `custom` |
-| Demo | 12h/6h: Intermediate×Men/Women + Advanced×Men/Women; kids: Men/Women |
+| Demo | 12h/6h: Intermediate×Men/Women + Expert×Men/Women; kids: Men/Women |
 
 ### Bib (event inventory)
 | Field | Rules |

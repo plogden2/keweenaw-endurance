@@ -33,8 +33,8 @@
 
 | Key / role | Color | Token family |
 |------------|-------|--------------|
-| `advanced_men` | `#1a3f3d` | ink |
-| `advanced_women` | `#2f6b5a` | accent-link |
+| `expert_men` | `#1a3f3d` | ink |
+| `expert_women` | `#2f6b5a` | accent-link |
 | `beginner_men` | `#9b654e` | copper |
 | `beginner_women` | `#a1b383` | sage |
 | fallback unknown | `#6b7a76` | muted |
@@ -332,14 +332,14 @@ import { resolveCategoryColor, DEFAULT_CATEGORY_COLORS } from './defaultLegend'
 
 describe('defaultLegend', () => {
   it('maps known keys to brand-family colors', () => {
-    expect(DEFAULT_CATEGORY_COLORS.advanced_men).toBe('#1a3f3d')
-    expect(DEFAULT_CATEGORY_COLORS.advanced_women).toBe('#2f6b5a')
+    expect(DEFAULT_CATEGORY_COLORS.expert_men).toBe('#1a3f3d')
+    expect(DEFAULT_CATEGORY_COLORS.expert_women).toBe('#2f6b5a')
     expect(DEFAULT_CATEGORY_COLORS.beginner_men).toBe('#9b654e')
     expect(DEFAULT_CATEGORY_COLORS.beginner_women).toBe('#a1b383')
   })
 
   it('overrides API blue chrome with brand colors for known keys', () => {
-    expect(resolveCategoryColor('advanced_men', '#1a5276')).toBe('#1a3f3d')
+    expect(resolveCategoryColor('expert_men', '#1a5276')).toBe('#1a3f3d')
   })
 
   it('falls back to muted for unknown keys without blue', () => {
@@ -357,8 +357,8 @@ describe('defaultLegend', () => {
 ```ts
 // frontend/src/themes/defaultLegend.ts
 export const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
-  advanced_men: '#1a3f3d',
-  advanced_women: '#2f6b5a',
+  expert_men: '#1a3f3d',
+  expert_women: '#2f6b5a',
   beginner_men: '#9b654e',
   beginner_women: '#a1b383',
 }

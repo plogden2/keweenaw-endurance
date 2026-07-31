@@ -4,7 +4,7 @@
 --
 -- Deterministic UUIDs (event/races match frontend/e2e/fixtures/rfid.ts BLUFFET)
 -- 3 races: 30 Minute (30m, 08:00), 15 Minute (15m, 08:00), 5-Minute Kids (5m, 15:00) America/Detroit
--- Categories: Intermediate/Advanced × Men/Women (12h/6h); Men/Women (kids)
+-- Categories: Intermediate/Expert × Men/Women (12h/6h); Men/Women (kids)
 -- 100 participants; event-unique bibs (12h: 1–N, 6h: 200+, kids: 400+)
 -- bibs + rfid_tag_associations.bib_id (migration 06); deterministic tag UUIDs (uuid5)
 -- Requires: migrations 04-rfid-scanner.sql + 06-bib-tag-association.sql
@@ -70,7 +70,7 @@ INSERT INTO events (id, name, description, event_date, location, website_url, lo
 VALUES (
     '1441674d-a011-471a-a601-722b88b117f5',
     'All You Can East Bluffet',
-    'Feast on the Copper Harbor Trails Club''s newest event - a brand new endurance enduro at East Bluff Bike Park. Spin the wheel, shred the trails, and push your limits all day long! Advanced, intermediate, and kids classes with 6- and 12-hour options plus a 90-minute kids race. Pedal to the top, spin the mountain bike wheel for your trail, punch your race plate, and repeat. Registration at copperharbortrails.org/bluffet.',
+    'Feast on the Copper Harbor Trails Club''s newest event - a brand new endurance enduro at East Bluff Bike Park. Spin the wheel, shred the trails, and push your limits all day long! Expert, intermediate, and kids classes with 6- and 12-hour options plus a 90-minute kids race. Pedal to the top, spin the mountain bike wheel for your trail, punch your race plate, and repeat. Registration at copperharbortrails.org/bluffet.',
     '2026-08-01',
     'East Bluff Bike Park, Mandan Road, Copper Harbor, MI 49918',
     'https://www.copperharbortrails.org/bluffet',
@@ -124,12 +124,12 @@ INSERT INTO categories (id, race_id, name, category_type, age_min, age_max, gend
 VALUES
     ('6d2d19e6-0552-5dca-ae67-d1189221fed9', '17da3ba1-2e09-4eb1-aeb3-d9dd5b6a394e', 'Intermediate Men', 'custom', NULL, NULL, 'male', 0),
     ('0b21d8e0-efa9-578d-a28d-d1577edb82a1', '17da3ba1-2e09-4eb1-aeb3-d9dd5b6a394e', 'Intermediate Women', 'custom', NULL, NULL, 'female', 1),
-    ('0955464d-0cfc-538a-acee-3f64881ee303', '17da3ba1-2e09-4eb1-aeb3-d9dd5b6a394e', 'Advanced Men', 'custom', NULL, NULL, 'male', 2),
-    ('67ab277e-1cea-5df2-bd09-f631c32ae219', '17da3ba1-2e09-4eb1-aeb3-d9dd5b6a394e', 'Advanced Women', 'custom', NULL, NULL, 'female', 3),
+    ('c6c300d6-1c19-5b0b-9356-bd445cafd68d', '17da3ba1-2e09-4eb1-aeb3-d9dd5b6a394e', 'Expert Men', 'custom', NULL, NULL, 'male', 2),
+    ('5fcddd89-2b73-5db9-b64f-b9fd54599aa0', '17da3ba1-2e09-4eb1-aeb3-d9dd5b6a394e', 'Expert Women', 'custom', NULL, NULL, 'female', 3),
     ('c671ab5b-b5b5-58c3-b836-115888c9d27c', '209769a1-f723-4f70-ae90-466a46338684', 'Intermediate Men', 'custom', NULL, NULL, 'male', 0),
     ('6221ba18-7fb8-50a2-8ed0-42d03cdecdc8', '209769a1-f723-4f70-ae90-466a46338684', 'Intermediate Women', 'custom', NULL, NULL, 'female', 1),
-    ('3f8a220c-928f-5e64-b6e4-69af3a5313ab', '209769a1-f723-4f70-ae90-466a46338684', 'Advanced Men', 'custom', NULL, NULL, 'male', 2),
-    ('fe373fcc-be7a-50ad-b874-2b0c4184e4cd', '209769a1-f723-4f70-ae90-466a46338684', 'Advanced Women', 'custom', NULL, NULL, 'female', 3),
+    ('335b231a-b711-5ab5-8078-fea1073ca3b0', '209769a1-f723-4f70-ae90-466a46338684', 'Expert Men', 'custom', NULL, NULL, 'male', 2),
+    ('536975ac-d0ca-5424-bbab-c1604be4d89d', '209769a1-f723-4f70-ae90-466a46338684', 'Expert Women', 'custom', NULL, NULL, 'female', 3),
     ('10af9e2e-31e2-50d4-b12c-88e651c36175', '0e45ee85-800c-4e1f-a95b-4b92462e790a', 'Men', 'male', NULL, NULL, 'male', 0),
     ('d5b178c5-abb4-5cee-ad88-fd151ecb151e', '0e45ee85-800c-4e1f-a95b-4b92462e790a', 'Women', 'female', NULL, NULL, 'female', 1);
 
@@ -287,7 +287,7 @@ VALUES
         'Copper Harbor, MI',
         'cb60c4cd-8c3e-5bbb-be05-e3f6f34c6313',
         'registered',
-        '0955464d-0cfc-538a-acee-3f64881ee303',
+        'c6c300d6-1c19-5b0b-9356-bd445cafd68d',
         'aa9c1ec5-c57f-5a07-a8db-e267f426558e'
     ),
     (
@@ -301,7 +301,7 @@ VALUES
         'Copper Harbor, MI',
         '5f5ce6ea-49fe-50f3-a456-292a9b7a7739',
         'registered',
-        '67ab277e-1cea-5df2-bd09-f631c32ae219',
+        '5fcddd89-2b73-5db9-b64f-b9fd54599aa0',
         'aa9c1ec5-c57f-5a07-a8db-e267f426558e'
     ),
     (
@@ -343,7 +343,7 @@ VALUES
         'Copper Harbor, MI',
         '5a588d9b-ce9e-565e-b463-4eaeeb594733',
         'registered',
-        '0955464d-0cfc-538a-acee-3f64881ee303',
+        'c6c300d6-1c19-5b0b-9356-bd445cafd68d',
         '6fdf673d-09d2-5ebc-b4f8-c9923ee1c391'
     ),
     (
@@ -357,7 +357,7 @@ VALUES
         'Copper Harbor, MI',
         'ec5b4e7a-477c-5efc-accf-92db43b16e44',
         'registered',
-        '67ab277e-1cea-5df2-bd09-f631c32ae219',
+        '5fcddd89-2b73-5db9-b64f-b9fd54599aa0',
         '6fdf673d-09d2-5ebc-b4f8-c9923ee1c391'
     ),
     (
@@ -399,7 +399,7 @@ VALUES
         'Copper Harbor, MI',
         'b8bddad2-debb-57d5-9680-0c340a632127',
         'registered',
-        '0955464d-0cfc-538a-acee-3f64881ee303',
+        'c6c300d6-1c19-5b0b-9356-bd445cafd68d',
         '62cf5a7e-06d8-5b61-8503-23be7f135730'
     ),
     (
@@ -413,7 +413,7 @@ VALUES
         'Copper Harbor, MI',
         'cbf6cc27-d767-5d28-a621-a6e6597b2986',
         'registered',
-        '67ab277e-1cea-5df2-bd09-f631c32ae219',
+        '5fcddd89-2b73-5db9-b64f-b9fd54599aa0',
         '62cf5a7e-06d8-5b61-8503-23be7f135730'
     ),
     (
@@ -455,7 +455,7 @@ VALUES
         'Copper Harbor, MI',
         '4a2f5aa2-f629-5a2f-8757-12272a388b8b',
         'registered',
-        '0955464d-0cfc-538a-acee-3f64881ee303',
+        'c6c300d6-1c19-5b0b-9356-bd445cafd68d',
         '7d8dafcd-0c61-5849-b80c-818ab0242cfa'
     ),
     (
@@ -469,7 +469,7 @@ VALUES
         'Copper Harbor, MI',
         '420d3a34-b045-57e2-8694-e760f53002a5',
         'registered',
-        '67ab277e-1cea-5df2-bd09-f631c32ae219',
+        '5fcddd89-2b73-5db9-b64f-b9fd54599aa0',
         '7d8dafcd-0c61-5849-b80c-818ab0242cfa'
     ),
     (
@@ -511,7 +511,7 @@ VALUES
         'Copper Harbor, MI',
         '2b7c8daf-abff-5d9d-b7ae-c4545b90e536',
         'registered',
-        '0955464d-0cfc-538a-acee-3f64881ee303',
+        'c6c300d6-1c19-5b0b-9356-bd445cafd68d',
         NULL
     ),
     (
@@ -525,7 +525,7 @@ VALUES
         'Copper Harbor, MI',
         '6f4400de-f2a5-5497-8fd5-4e01cf8c2bb4',
         'registered',
-        '67ab277e-1cea-5df2-bd09-f631c32ae219',
+        '5fcddd89-2b73-5db9-b64f-b9fd54599aa0',
         NULL
     ),
     (
@@ -567,7 +567,7 @@ VALUES
         'Copper Harbor, MI',
         'fcafa7d0-5957-5d3c-bba5-72a53917a16c',
         'registered',
-        '0955464d-0cfc-538a-acee-3f64881ee303',
+        'c6c300d6-1c19-5b0b-9356-bd445cafd68d',
         NULL
     ),
     (
@@ -581,7 +581,7 @@ VALUES
         'Copper Harbor, MI',
         'dbd73741-f43e-53b3-8409-36910c2d3c4a',
         'registered',
-        '67ab277e-1cea-5df2-bd09-f631c32ae219',
+        '5fcddd89-2b73-5db9-b64f-b9fd54599aa0',
         NULL
     ),
     (
@@ -623,7 +623,7 @@ VALUES
         'Copper Harbor, MI',
         'e910ce5c-4488-5d34-b0d7-54e92ccfa851',
         'registered',
-        '0955464d-0cfc-538a-acee-3f64881ee303',
+        'c6c300d6-1c19-5b0b-9356-bd445cafd68d',
         NULL
     ),
     (
@@ -637,7 +637,7 @@ VALUES
         'Copper Harbor, MI',
         '4d40ef7a-585e-5090-8280-55be5e510bc9',
         'registered',
-        '67ab277e-1cea-5df2-bd09-f631c32ae219',
+        '5fcddd89-2b73-5db9-b64f-b9fd54599aa0',
         NULL
     ),
     (
@@ -679,7 +679,7 @@ VALUES
         'Copper Harbor, MI',
         '4639c5f6-b420-5131-b4e4-e9529d1827ed',
         'registered',
-        '0955464d-0cfc-538a-acee-3f64881ee303',
+        'c6c300d6-1c19-5b0b-9356-bd445cafd68d',
         NULL
     ),
     (
@@ -693,7 +693,7 @@ VALUES
         'Copper Harbor, MI',
         'ab86f7cb-c39d-5ff3-8419-6f82ec458cb3',
         'registered',
-        '67ab277e-1cea-5df2-bd09-f631c32ae219',
+        '5fcddd89-2b73-5db9-b64f-b9fd54599aa0',
         NULL
     ),
     (
@@ -735,7 +735,7 @@ VALUES
         'Copper Harbor, MI',
         '57e1a0a8-147c-5d86-8db2-268d6ce1ae65',
         'registered',
-        '0955464d-0cfc-538a-acee-3f64881ee303',
+        'c6c300d6-1c19-5b0b-9356-bd445cafd68d',
         NULL
     ),
     (
@@ -749,7 +749,7 @@ VALUES
         'Copper Harbor, MI',
         '0e9afa61-b87e-5c82-96fd-76d5560ea4d8',
         'registered',
-        '67ab277e-1cea-5df2-bd09-f631c32ae219',
+        '5fcddd89-2b73-5db9-b64f-b9fd54599aa0',
         NULL
     ),
     (
@@ -791,7 +791,7 @@ VALUES
         'Copper Harbor, MI',
         'f95f0104-f460-5689-930a-33ad6205c556',
         'registered',
-        '0955464d-0cfc-538a-acee-3f64881ee303',
+        'c6c300d6-1c19-5b0b-9356-bd445cafd68d',
         NULL
     ),
     (
@@ -805,7 +805,7 @@ VALUES
         'Copper Harbor, MI',
         '8e8e9cea-6994-52c2-a0e5-4d30e35bcb7c',
         'registered',
-        '67ab277e-1cea-5df2-bd09-f631c32ae219',
+        '5fcddd89-2b73-5db9-b64f-b9fd54599aa0',
         NULL
     ),
     (
@@ -847,7 +847,7 @@ VALUES
         'Copper Harbor, MI',
         'a7cabc60-6dfd-5639-9c01-ce9d19dabe53',
         'registered',
-        '3f8a220c-928f-5e64-b6e4-69af3a5313ab',
+        '335b231a-b711-5ab5-8078-fea1073ca3b0',
         NULL
     ),
     (
@@ -861,7 +861,7 @@ VALUES
         'Copper Harbor, MI',
         '1bb23b31-2f76-5444-99b4-9fd66d157d4d',
         'registered',
-        'fe373fcc-be7a-50ad-b874-2b0c4184e4cd',
+        '536975ac-d0ca-5424-bbab-c1604be4d89d',
         NULL
     ),
     (
@@ -903,7 +903,7 @@ VALUES
         'Copper Harbor, MI',
         '64018171-b4b9-51c6-9001-e006adbda626',
         'registered',
-        '3f8a220c-928f-5e64-b6e4-69af3a5313ab',
+        '335b231a-b711-5ab5-8078-fea1073ca3b0',
         NULL
     ),
     (
@@ -917,7 +917,7 @@ VALUES
         'Copper Harbor, MI',
         '129fdbd5-e842-5ed9-a2b9-8e2caef3c1b0',
         'registered',
-        'fe373fcc-be7a-50ad-b874-2b0c4184e4cd',
+        '536975ac-d0ca-5424-bbab-c1604be4d89d',
         NULL
     ),
     (
@@ -959,7 +959,7 @@ VALUES
         'Copper Harbor, MI',
         '2c1700f9-cb3d-586b-b811-cdc0b5db1069',
         'registered',
-        '3f8a220c-928f-5e64-b6e4-69af3a5313ab',
+        '335b231a-b711-5ab5-8078-fea1073ca3b0',
         NULL
     ),
     (
@@ -973,7 +973,7 @@ VALUES
         'Copper Harbor, MI',
         '309f684f-7c61-562e-aa9a-c608153c7b58',
         'registered',
-        'fe373fcc-be7a-50ad-b874-2b0c4184e4cd',
+        '536975ac-d0ca-5424-bbab-c1604be4d89d',
         NULL
     ),
     (
@@ -1015,7 +1015,7 @@ VALUES
         'Copper Harbor, MI',
         '7cfc6e56-9e16-54c5-8655-1b9397e54bb3',
         'registered',
-        '3f8a220c-928f-5e64-b6e4-69af3a5313ab',
+        '335b231a-b711-5ab5-8078-fea1073ca3b0',
         NULL
     ),
     (
@@ -1029,7 +1029,7 @@ VALUES
         'Copper Harbor, MI',
         '55e47778-2454-5d9b-beeb-248053efa8e5',
         'registered',
-        'fe373fcc-be7a-50ad-b874-2b0c4184e4cd',
+        '536975ac-d0ca-5424-bbab-c1604be4d89d',
         NULL
     ),
     (
@@ -1071,7 +1071,7 @@ VALUES
         'Copper Harbor, MI',
         'f05ded88-ae84-5252-97a4-30ff1c2d77e4',
         'registered',
-        '3f8a220c-928f-5e64-b6e4-69af3a5313ab',
+        '335b231a-b711-5ab5-8078-fea1073ca3b0',
         NULL
     ),
     (
@@ -1085,7 +1085,7 @@ VALUES
         'Copper Harbor, MI',
         '5815c259-d464-556e-8633-c40a5ec1d890',
         'registered',
-        'fe373fcc-be7a-50ad-b874-2b0c4184e4cd',
+        '536975ac-d0ca-5424-bbab-c1604be4d89d',
         NULL
     ),
     (
@@ -1127,7 +1127,7 @@ VALUES
         'Copper Harbor, MI',
         '8d494da7-4651-52c4-a0f0-fb281303a185',
         'registered',
-        '3f8a220c-928f-5e64-b6e4-69af3a5313ab',
+        '335b231a-b711-5ab5-8078-fea1073ca3b0',
         NULL
     ),
     (
@@ -1141,7 +1141,7 @@ VALUES
         'Copper Harbor, MI',
         'f73432c9-e8e1-5542-b26c-1b175b37e6ca',
         'registered',
-        'fe373fcc-be7a-50ad-b874-2b0c4184e4cd',
+        '536975ac-d0ca-5424-bbab-c1604be4d89d',
         NULL
     ),
     (
@@ -1183,7 +1183,7 @@ VALUES
         'Copper Harbor, MI',
         'bc3f86b1-f8a0-518e-8620-202bba097e21',
         'registered',
-        '3f8a220c-928f-5e64-b6e4-69af3a5313ab',
+        '335b231a-b711-5ab5-8078-fea1073ca3b0',
         NULL
     ),
     (
@@ -1197,7 +1197,7 @@ VALUES
         'Copper Harbor, MI',
         '2106333e-3ef0-5e9c-8b45-4a4136c08149',
         'registered',
-        'fe373fcc-be7a-50ad-b874-2b0c4184e4cd',
+        '536975ac-d0ca-5424-bbab-c1604be4d89d',
         NULL
     ),
     (
@@ -1239,7 +1239,7 @@ VALUES
         'Copper Harbor, MI',
         'c283f5f4-4aba-5bad-a319-348ec608a716',
         'registered',
-        '3f8a220c-928f-5e64-b6e4-69af3a5313ab',
+        '335b231a-b711-5ab5-8078-fea1073ca3b0',
         NULL
     ),
     (
@@ -1253,7 +1253,7 @@ VALUES
         'Copper Harbor, MI',
         'eacd6f7d-ed70-5132-949e-72c29d46f2a2',
         'registered',
-        'fe373fcc-be7a-50ad-b874-2b0c4184e4cd',
+        '536975ac-d0ca-5424-bbab-c1604be4d89d',
         NULL
     ),
     (
@@ -1295,7 +1295,7 @@ VALUES
         'Copper Harbor, MI',
         '14266856-d80f-5c40-8ae9-c29b38534115',
         'registered',
-        '3f8a220c-928f-5e64-b6e4-69af3a5313ab',
+        '335b231a-b711-5ab5-8078-fea1073ca3b0',
         NULL
     ),
     (
@@ -1309,7 +1309,7 @@ VALUES
         'Copper Harbor, MI',
         '96b393d6-5ba8-55b8-9b7a-8f48e8260746',
         'registered',
-        'fe373fcc-be7a-50ad-b874-2b0c4184e4cd',
+        '536975ac-d0ca-5424-bbab-c1604be4d89d',
         NULL
     ),
     (
@@ -1351,7 +1351,7 @@ VALUES
         'Copper Harbor, MI',
         '070d31e1-0a75-529e-a7e1-ad9593dc7953',
         'registered',
-        '3f8a220c-928f-5e64-b6e4-69af3a5313ab',
+        '335b231a-b711-5ab5-8078-fea1073ca3b0',
         NULL
     ),
     (
@@ -1365,7 +1365,7 @@ VALUES
         'Copper Harbor, MI',
         'aa10abaa-679e-5468-a4ef-fc5a5e6bb73c',
         'registered',
-        'fe373fcc-be7a-50ad-b874-2b0c4184e4cd',
+        '536975ac-d0ca-5424-bbab-c1604be4d89d',
         NULL
     ),
     (
