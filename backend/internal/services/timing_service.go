@@ -161,7 +161,7 @@ func (s *TimingService) ListRecordsByEvent(eventID uuid.UUID, page, limit int, r
 	if err := query.
 		Preload("Participant.Race").
 		Preload("Checkpoint").
-		Order("timing_records.timestamp DESC").
+		Order("timing_records.timestamp DESC, timing_records.id DESC").
 		Offset(offset).
 		Limit(limit).
 		Find(&records).Error; err != nil {

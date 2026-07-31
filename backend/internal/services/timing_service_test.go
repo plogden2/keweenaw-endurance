@@ -202,6 +202,46 @@ func TestTimingService_ListRecordsByEvent(t *testing.T) {
 	assert.Equal(t, grace.ID, byBib[0].ParticipantID)
 }
 
+func TestTimingService_ListRecordsByEvent_UsesIDForEqualTimestamps(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	race, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Stable Order", RaceType: "time_based", DistanceKm: 5,
+	})
+	require.NoError(t, err)
+	finish := createCheckpoint(t, db, race.ID, "Finish", "finish")
+	participant, err := NewParticipantService(db).CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "11", FirstName: "Stable", LastName: "Sort",
+	})
+	require.NoError(t, err)
+
+	svc := NewTimingService(db)
+	timestamp := time.Date(2026, time.July, 30, 18, 0, 0, 0, time.UTC)
+	firstID := uuidutil.NewPublicUUID(uuid.MustParse("00000000-0000-0000-0000-000000000001"))
+	secondID := uuidutil.NewPublicUUID(uuid.MustParse("00000000-0000-0000-0000-000000000002"))
+	_, err = svc.CreateRecord(&models.TimingRecord{
+		ID: firstID, ParticipantID: participant.ID, CheckpointID: finish.ID, Timestamp: timestamp, LocalTimestamp: timestamp,
+	})
+	require.NoError(t, err)
+	_, err = svc.CreateRecord(&models.TimingRecord{
+		ID: secondID, ParticipantID: participant.ID, CheckpointID: finish.ID, Timestamp: timestamp, LocalTimestamp: timestamp,
+	})
+	require.NoError(t, err)
+
+	pageOne, total, err := svc.ListRecordsByEvent(event.ID.UUID(), 1, 1, nil, "")
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, total)
+	require.Len(t, pageOne, 1)
+	assert.Equal(t, secondID, pageOne[0].ID)
+
+	pageTwo, total, err := svc.ListRecordsByEvent(event.ID.UUID(), 2, 1, nil, "")
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, total)
+	require.Len(t, pageTwo, 1)
+	assert.Equal(t, firstID, pageTwo[0].ID)
+}
+
 func TestTimingService_CreateEventTap(t *testing.T) {
 	db := setupServiceTestDB(t)
 	event := createTestEvent(t, db)
