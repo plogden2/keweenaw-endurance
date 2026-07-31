@@ -11,7 +11,6 @@ import (
 )
 
 // ensureBibForParticipant finds or creates the event-scoped Bib for a participant's bib number.
-// Temporary helper until BibService lands (Task 2).
 func ensureBibForParticipant(db *gorm.DB, participant *models.Participant) (*models.Bib, error) {
 	if participant == nil {
 		return nil, fmt.Errorf("participant is required")
@@ -28,23 +27,7 @@ func ensureBibForParticipant(db *gorm.DB, participant *models.Participant) (*mod
 }
 
 func ensureBib(db *gorm.DB, eventID uuidutil.PublicUUID, bibNumber string) (*models.Bib, error) {
-	var bib models.Bib
-	err := db.Where("event_id = ? AND bib_number = ?", eventID, bibNumber).First(&bib).Error
-	if err == nil {
-		return &bib, nil
-	}
-	if err != gorm.ErrRecordNotFound {
-		return nil, err
-	}
-	bib = models.Bib{EventID: eventID, BibNumber: bibNumber}
-	if err := db.Create(&bib).Error; err != nil {
-		var existing models.Bib
-		if findErr := db.Where("event_id = ? AND bib_number = ?", eventID, bibNumber).First(&existing).Error; findErr == nil {
-			return &existing, nil
-		}
-		return nil, err
-	}
-	return &bib, nil
+	return NewBibService(db).EnsureBib(eventID.UUID(), bibNumber)
 }
 
 func participantForBib(db *gorm.DB, bib *models.Bib) (*models.Participant, error) {

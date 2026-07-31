@@ -33,6 +33,7 @@ func TestNewServices(t *testing.T) {
 	assert.NotNil(t, services.Events)
 	assert.NotNil(t, services.Races)
 	assert.NotNil(t, services.Participants)
+	assert.NotNil(t, services.Bibs)
 	assert.NotNil(t, services.Checkpoints)
 	assert.NotNil(t, services.Categories)
 	assert.NotNil(t, services.Timing)
