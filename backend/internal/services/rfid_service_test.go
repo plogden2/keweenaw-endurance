@@ -63,6 +63,170 @@ func TestRFIDService_LookupByUID(t *testing.T) {
 	assert.ErrorIs(t, err, ErrRFIDTagNotFound)
 }
 
+func TestRFIDService_AssociateTagToBib(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	bib, err := NewBibService(db).EnsureBib(race.EventID.UUID(), "42")
+	require.NoError(t, err)
+
+	svc := NewRFIDService(db, rfid.NewMockReader())
+
+	a1, err := svc.AssociateTagToBib(bib.ID.UUID(), "TAG-A")
+	require.NoError(t, err)
+	assert.Equal(t, bib.ID, a1.BibID)
+	assert.Equal(t, "TAG-A", a1.TagUID)
+	assert.True(t, a1.Active)
+
+	a2, err := svc.AssociateTagToBib(bib.ID.UUID(), "TAG-B")
+	require.NoError(t, err)
+	assert.Equal(t, bib.ID, a2.BibID)
+	assert.Equal(t, "TAG-B", a2.TagUID)
+
+	tags, err := NewBibService(db).ListBibTags(bib.ID.UUID())
+	require.NoError(t, err)
+	require.Len(t, tags, 2)
+}
+
+func TestRFIDService_AssociateTagToBib_RebindLastWriteWins(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	bibSvc := NewBibService(db)
+	bibA, err := bibSvc.EnsureBib(race.EventID.UUID(), "10")
+	require.NoError(t, err)
+	bibB, err := bibSvc.EnsureBib(race.EventID.UUID(), "20")
+	require.NoError(t, err)
+
+	svc := NewRFIDService(db, rfid.NewMockReader())
+	assoc, err := svc.AssociateTagToBib(bibA.ID.UUID(), "SHARED-TAG")
+	require.NoError(t, err)
+	assert.Equal(t, bibA.ID, assoc.BibID)
+
+	moved, err := svc.AssociateTagToBib(bibB.ID.UUID(), "SHARED-TAG")
+	require.NoError(t, err)
+	assert.Equal(t, assoc.ID, moved.ID)
+	assert.Equal(t, bibB.ID, moved.BibID)
+
+	tagsA, err := bibSvc.ListBibTags(bibA.ID.UUID())
+	require.NoError(t, err)
+	assert.Empty(t, tagsA)
+	tagsB, err := bibSvc.ListBibTags(bibB.ID.UUID())
+	require.NoError(t, err)
+	require.Len(t, tagsB, 1)
+	assert.Equal(t, "SHARED-TAG", tagsB[0].TagUID)
+}
+
+func TestRFIDService_WriteTagForBib(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	bib, err := NewBibService(db).EnsureBib(race.EventID.UUID(), "7")
+	require.NoError(t, err)
+
+	mock := rfid.NewMockReader()
+	svc := NewRFIDService(db, mock)
+	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: true}}, nil)
+
+	written, err := svc.WriteTagForBib(bib.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, bib.ID, written.ID)
+
+	logical := strings.ToLower(bib.ID.String())
+	uid, err := mock.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, logical, uid)
+
+	tags, err := NewBibService(db).ListBibTags(bib.ID.UUID())
+	require.NoError(t, err)
+	require.Len(t, tags, 1)
+	assert.Equal(t, logical, tags[0].TagUID)
+}
+
+func TestRFIDService_WriteTag_WritesBibUUID(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "7", FirstName: "Write", LastName: "Bib",
+	})
+	require.NoError(t, err)
+
+	mock := rfid.NewMockReader()
+	svc := NewRFIDService(db, mock)
+	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: true}}, nil)
+
+	updated, err := svc.WriteTag(participant.ID.UUID())
+	require.NoError(t, err)
+
+	bib, err := NewBibService(db).EnsureBib(race.EventID.UUID(), "7")
+	require.NoError(t, err)
+	logical := strings.ToLower(bib.ID.String())
+	assert.Equal(t, logical, updated.RFIDTagUID)
+	assert.Equal(t, []string{logical}, updated.TagUIDs)
+
+	uid, err := mock.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, logical, uid)
+}
+
+func TestRFIDService_ListParticipantTags_ViaCurrentBib(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "12", FirstName: "List", LastName: "Tags",
+	})
+	require.NoError(t, err)
+
+	bib, err := NewBibService(db).EnsureBib(race.EventID.UUID(), "12")
+	require.NoError(t, err)
+	svc := NewRFIDService(db, rfid.NewMockReader())
+	_, err = svc.AssociateTagToBib(bib.ID.UUID(), "TAG-1")
+	require.NoError(t, err)
+	_, err = svc.AssociateTagToBib(bib.ID.UUID(), "TAG-2")
+	require.NoError(t, err)
+
+	tags, err := svc.ListParticipantTags(participant.ID.UUID())
+	require.NoError(t, err)
+	require.Len(t, tags, 2)
+	assert.Equal(t, "TAG-1", tags[0].TagUID)
+	assert.Equal(t, "TAG-2", tags[1].TagUID)
+}
+
+func TestRFIDService_LookupByUID_ViaBibAssociation(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "33", FirstName: "Assoc", LastName: "Lookup",
+	})
+	require.NoError(t, err)
+
+	bib, err := NewBibService(db).EnsureBib(race.EventID.UUID(), "33")
+	require.NoError(t, err)
+	svc := NewRFIDService(db, rfid.NewMockReader())
+	_, err = svc.AssociateTagToBib(bib.ID.UUID(), "BIB-TAG-33")
+	require.NoError(t, err)
+
+	found, err := svc.LookupParticipantByUID("BIB-TAG-33")
+	require.NoError(t, err)
+	assert.Equal(t, participant.ID, found.ID)
+}
+
+func TestRFIDService_LookupByUID_ParticipantIDFallback(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "44", FirstName: "Legacy", LastName: "ID",
+	})
+	require.NoError(t, err)
+
+	svc := NewRFIDService(db, rfid.NewMockReader())
+	found, err := svc.LookupParticipantByUID(participant.ID.String())
+	require.NoError(t, err)
+	assert.Equal(t, participant.ID, found.ID)
+}
+
 func TestRFIDService_WriteTag(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)
@@ -82,14 +246,19 @@ func TestRFIDService_WriteTag(t *testing.T) {
 	require.NotEmpty(t, updated.RFIDTagUID)
 	_, parseErr := uuid.Parse(updated.RFIDTagUID)
 	require.NoError(t, parseErr)
-	assert.Equal(t, []string{updated.RFIDTagUID}, updated.TagUIDs)
+
+	bib, err := NewBibService(db).EnsureBib(race.EventID.UUID(), "7")
+	require.NoError(t, err)
+	logical := strings.ToLower(bib.ID.String())
+	assert.Equal(t, logical, updated.RFIDTagUID)
+	assert.Equal(t, []string{logical}, updated.TagUIDs)
 
 	uid, err := mock.Poll()
 	require.NoError(t, err)
-	assert.Equal(t, strings.ToLower(updated.RFIDTagUID), uid)
+	assert.Equal(t, logical, uid)
 }
 
-func TestWriteTag_ProgramsLogicalUUIDWithoutSilicon(t *testing.T) {
+func TestWriteTag_ProgramsBibUUIDWithoutSilicon(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)
 	partSvc := NewParticipantService(db)
@@ -101,16 +270,19 @@ func TestWriteTag_ProgramsLogicalUUIDWithoutSilicon(t *testing.T) {
 	mock := rfid.NewMockReader()
 	svc := NewRFIDService(db, mock)
 	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: true}}, nil)
-	logical := uuid.New().String()
-	_, err = svc.AssociateTag(p.ID.UUID(), logical)
+	_, err = svc.AssociateTag(p.ID.UUID(), "EXTRA-CHIP")
 	require.NoError(t, err)
 
 	_, err = svc.WriteTag(p.ID.UUID())
 	require.NoError(t, err)
 
+	bib, err := NewBibService(db).EnsureBib(race.EventID.UUID(), "99")
+	require.NoError(t, err)
+	logical := strings.ToLower(bib.ID.String())
+
 	got, err := mock.Poll()
 	require.NoError(t, err)
-	require.Equal(t, strings.ToLower(logical), got)
+	require.Equal(t, logical, got)
 
 	found, err := svc.LookupParticipantByUID(got)
 	require.NoError(t, err)
@@ -161,8 +333,13 @@ func TestRFIDService_MultiTagAssociationCRUD(t *testing.T) {
 		RaceID: race.ID, BibNumber: "13", FirstName: "Other", LastName: "Racer",
 	})
 	require.NoError(t, err)
-	_, err = svc.AssociateTag(other.ID.UUID(), "TAG-A")
-	assert.ErrorIs(t, err, ErrInvalidRFIDInput)
+	// Last-write-wins: rebind TAG-A from participant's bib to other's bib.
+	moved, err := svc.AssociateTag(other.ID.UUID(), "TAG-A")
+	require.NoError(t, err)
+	assert.Equal(t, a1.ID, moved.ID)
+	foundOther, err := svc.LookupParticipantByUID("TAG-A")
+	require.NoError(t, err)
+	assert.Equal(t, other.ID, foundOther.ID)
 
 	raceID := race.ID.UUID()
 	listed, _, err := partSvc.ListParticipants(1, 50, &raceID, "")
@@ -175,10 +352,15 @@ func TestRFIDService_MultiTagAssociationCRUD(t *testing.T) {
 		}
 	}
 	require.NotNil(t, multi)
-	assert.ElementsMatch(t, []string{"TAG-A", "TAG-B"}, multi.TagUIDs)
+	assert.ElementsMatch(t, []string{"TAG-B"}, multi.TagUIDs)
+
+	remaining, err := svc.ListParticipantTags(participant.ID.UUID())
+	require.NoError(t, err)
+	require.Len(t, remaining, 1)
+	assert.Equal(t, "TAG-B", remaining[0].TagUID)
 }
 
-func TestRFIDService_WriteTag_ReusesLegacyRFIDTagUID(t *testing.T) {
+func TestRFIDService_WriteTag_PrefersBibUUIDOverLegacyColumn(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)
 	partSvc := NewParticipantService(db)
@@ -196,12 +378,16 @@ func TestRFIDService_WriteTag_ReusesLegacyRFIDTagUID(t *testing.T) {
 
 	updated, err := svc.WriteTag(participant.ID.UUID())
 	require.NoError(t, err)
-	assert.Equal(t, legacyUID, updated.RFIDTagUID)
-	assert.Equal(t, []string{legacyUID}, updated.TagUIDs)
+
+	bib, err := NewBibService(db).EnsureBib(race.EventID.UUID(), "19")
+	require.NoError(t, err)
+	logical := strings.ToLower(bib.ID.String())
+	assert.Equal(t, logical, updated.RFIDTagUID)
+	assert.Contains(t, updated.TagUIDs, logical)
 
 	uid, err := mock.Poll()
 	require.NoError(t, err)
-	assert.Equal(t, strings.ToLower(legacyUID), uid)
+	assert.Equal(t, logical, uid)
 }
 
 func TestRFIDService_WriteTag_RetriesSameLogicalAfterWriteFailure(t *testing.T) {
@@ -218,23 +404,26 @@ func TestRFIDService_WriteTag_RetriesSameLogicalAfterWriteFailure(t *testing.T) 
 	svc := NewRFIDService(db, mock)
 	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: true}}, nil)
 
+	bib, err := NewBibService(db).EnsureBib(race.EventID.UUID(), "20")
+	require.NoError(t, err)
+	expectedLogical := strings.ToLower(bib.ID.String())
+
 	mock.WriteErr = errors.New("hardware write failed")
 	_, err = svc.WriteTag(participant.ID.UUID())
 	require.Error(t, err)
 
 	afterFail, err := partSvc.GetParticipant(participant.ID.UUID())
 	require.NoError(t, err)
-	require.NotEmpty(t, afterFail.RFIDTagUID)
-	firstLogical := afterFail.RFIDTagUID
+	require.Equal(t, expectedLogical, afterFail.RFIDTagUID)
 
 	mock.WriteErr = nil
 	written, err := svc.WriteTag(participant.ID.UUID())
 	require.NoError(t, err)
-	assert.Equal(t, firstLogical, written.RFIDTagUID)
+	assert.Equal(t, expectedLogical, written.RFIDTagUID)
 
 	uid, err := mock.Poll()
 	require.NoError(t, err)
-	assert.Equal(t, strings.ToLower(firstLogical), uid)
+	assert.Equal(t, expectedLogical, uid)
 }
 
 func TestRFIDService_WriteTag_HardwareUnavailable(t *testing.T) {
