@@ -5,6 +5,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
+# Source must live in the image — CI no longer bind-mounts ./frontend over /app
+# (that replaced image node_modules and broke Vite).
+COPY . .
+
 EXPOSE 3000
 
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
