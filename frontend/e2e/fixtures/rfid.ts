@@ -63,12 +63,53 @@ export const DEMO_TAG_12H = '23657b2d-aa08-5fe8-8553-e9e3affb4678' // tag:12-hou
 export const DEMO_TAG_6H = '2fe0e039-60a4-50a8-90af-e14ff61371fc' // tag:6-hour:1
 export const DEMO_TAG_KIDS = '7dca226d-4eb6-500d-916e-c1044c107ffd' // tag:90-minute-kids:1
 
+/** Seeded 12 Hour bib 1 — Alex Rivera (tag:12-hour:1 / DEMO_TAG_12H) */
+export const DEMO_BIB_12H = '1'
+export const DEMO_PARTICIPANT_12H_ID = '9fe78eeb-a21c-594a-acc2-7e1efe378201'
+
 /** Display names matched by seed generator for first tags — adjust if seed names change */
 export const DEMO_RACER_NAMES = {
-  twelveHour: /./, // any name until seed names are asserted in UI
+  twelveHour: /Alex\s+Rivera/i,
   sixHour: /./,
   kids: /./,
 } as const
+
+/**
+ * Seed reuses bib numbers across races. Inline taps require exactly one event-wide
+ * match — reassign colliding participants so `bib` resolves to `keepParticipantId`.
+ */
+export async function ensureUniqueEventBib(
+  request: APIRequestContext,
+  eventId: string,
+  bib: string,
+  keepParticipantId: string,
+): Promise<void> {
+  const token = await pinToken(request)
+  const res = await request.get(
+    `${API_BASE}/api/events/${eventId}/participants?q=${encodeURIComponent(bib)}&limit=50`,
+  )
+  if (!res.ok()) {
+    throw new Error(`list participants failed: ${res.status()} ${await res.text()}`)
+  }
+  const body = (await res.json()) as {
+    data?: Array<{ id: string; bib_number?: string }>
+  }
+  const collisions = (body.data ?? []).filter(
+    (p) => String(p.bib_number) === bib && p.id !== keepParticipantId,
+  )
+  for (let i = 0; i < collisions.length; i++) {
+    const nextBib = String(9900 + i)
+    const put = await request.put(`${API_BASE}/api/participants/${collisions[i].id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { bib_number: nextBib },
+    })
+    if (!put.ok()) {
+      throw new Error(
+        `reassign bib for ${collisions[i].id} failed: ${put.status()} ${await put.text()}`,
+      )
+    }
+  }
+}
 
 export type FinishDeviceId =
   | 'laptop-finish-1'

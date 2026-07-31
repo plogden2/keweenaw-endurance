@@ -1,12 +1,27 @@
 import { expect, test } from '@playwright/test'
-import { BLUFFET, getBluffetEvent, pinLogin } from './fixtures/rfid'
+import {
+  BLUFFET,
+  DEMO_BIB_12H,
+  DEMO_PARTICIPANT_12H_ID,
+  DEMO_RACER_NAMES,
+  ensureUniqueEventBib,
+  getBluffetEvent,
+  pinLogin,
+} from './fixtures/rfid'
 
 /**
- * Event taps editor — PIN → add tap → void → restore.
+ * Event taps editor — PIN → inline bib Enter → void → restore.
  */
 test.describe('Event taps editor', () => {
-  test('PIN unlock, add tap, void, then restore', async ({ page }) => {
+  test('PIN unlock, inline bib Enter, void, then restore', async ({ page }) => {
     const event = await getBluffetEvent(page.request)
+    // Seed reuses bibs across races; keep DEMO_BIB_12H → Alex Rivera only.
+    await ensureUniqueEventBib(
+      page.request,
+      event.id,
+      DEMO_BIB_12H,
+      DEMO_PARTICIPANT_12H_ID,
+    )
 
     await page.goto('/pin')
     await pinLogin(page)
@@ -17,26 +32,16 @@ test.describe('Event taps editor', () => {
 
     page.on('dialog', (dialog) => dialog.accept())
 
-    await page.getByTestId('add-tap-btn').click()
-    await expect(page.getByTestId('add-tap-dialog')).toBeVisible()
-
-    const search = page.getByTestId('tap-participant-search')
-    await search.fill('1')
-    await expect(page.getByTestId('tap-participant-option').first()).toBeVisible({
-      timeout: 10_000,
-    })
-    const option = page.getByTestId('tap-participant-option').first()
-    const optionText = (await option.innerText()).trim()
-    await option.click()
-    await expect(page.getByTestId('tap-participant-selected')).toContainText(optionText)
-
-    await page.getByTestId('add-tap-submit').click()
-    await expect(page.getByTestId('add-tap-dialog')).toHaveCount(0)
+    const bibInput = page.getByTestId('inline-bib-input')
+    await expect(bibInput).toBeVisible()
+    await bibInput.fill(DEMO_BIB_12H)
+    await bibInput.press('Enter')
 
     const table = page.getByTestId('event-taps-table')
-    await expect(table).toBeVisible()
     const firstRow = table.locator('tbody tr').first()
-    await expect(firstRow).toBeVisible()
+    await expect(firstRow).toBeVisible({ timeout: 10_000 })
+    await expect(firstRow).toContainText(DEMO_BIB_12H)
+    await expect(firstRow).toContainText(DEMO_RACER_NAMES.twelveHour)
     await expect(firstRow.getByTestId('voided-badge')).toHaveCount(0)
 
     await firstRow.getByTestId('void-tap-btn').click()

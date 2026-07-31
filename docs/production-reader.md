@@ -164,12 +164,10 @@ Website path — event-scoped **Taps** page (covers every race in the event, not
 
 1. Unlock with PIN.
 2. Open **Manual entry** (Manage → race → **Manual entry**, or live view → **Manual entry**, or event page). All of these open `/events/:eventId/taps`.
-3. Click **Add tap**.
-4. Search by bib or name and select the racer — their race is shown alongside their name, so no checkpoint picker is needed; the tap always records that racer's race finish.
-5. Leave **Karaoke bonus** off for a normal scored lap, or turn it on to add a standalone bonus lap with no underlying scored lap.
-6. Click **Add tap**.
+3. Type the **bib number** in the inline field and press **Enter**. No dialog — the tap records that racer's race finish immediately.
+4. Bibs must be unique across the event for Enter to resolve; if more than one racer shares the number, fix the duplicate on Racers first.
 
-The tap is stored with the current timestamp and shows in the taps table (sorted newest first).
+The tap is stored with the current timestamp and shows in the taps table (sorted newest first). There is no karaoke control on this page.
 
 **Karaoke bonus lap:** after a normal RFID lap popup, use the karaoke control on the scan popup to add one bonus lap (when available).
 
@@ -184,7 +182,7 @@ Unlock **PIN** first. Scored laps can be soft-voided (and restored) without wipi
 | Just scored the wrong lap | On the scan popup: **Discard lap** → confirm **Discard** |
 | Older bad lap / karaoke | Open **Manual entry** (event **Taps** page) → find the row → **Void** (or **Restore** if already voided) |
 | Accidental double-tap | Usually blocked by the **1-minute cooldown** — no action |
-| Missed tap | **reader-gui** manual entry or website **Add tap** on the event Taps page (section 5) |
+| Missed tap | **reader-gui** manual entry or website **Manual entry** (bib + Enter on the event Taps page, section 5) |
 | Need to wipe/rebuild timing data | Emergency only: footer **CSV recovery** (PIN required). This replaces event timing data — stop all scoring first |
 
 Voided laps stay in the database/CSV for audit but do not count toward standings or cooldown. Voiding an RFID lap also voids its karaoke bonus.
@@ -200,7 +198,7 @@ Do **not** call CSV import for normal outages. Offline scoring uses the device-b
 - [ ] Browser on https://www.keweenawendurance.com
 - [ ] Header shows **PIN** / **Station**; unlock PIN; arm station as finish / `laptop-finish-1`
 - [ ] From Manage, open **Racers** for a race; spot-check program + tap
-- [ ] Know **GUI Record lap** / website **Manual entry** (event Taps page → **Add tap**) for missed taps
+- [ ] Know **GUI Record lap** / website **Manual entry** (event Taps page → bib + **Enter**) for missed taps
 
 ---
 
