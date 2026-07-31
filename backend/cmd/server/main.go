@@ -84,6 +84,7 @@ func main() {
 			events.GET("/:id/live-csv", append(adminOnly, handlers.GetLiveCSV)...)
 			events.GET("/:id/live-csv/status", append(adminOnly, handlers.GetLiveCSVStatus)...)
 			events.POST("/:id/import.csv", append(adminOnly, handlers.ImportCSV)...)
+			events.GET("/:id/results.xlsx", append(adminOnly, handlers.GetEventResultsExcel)...)
 		}
 
 		// Station routes (current reader laptop config)

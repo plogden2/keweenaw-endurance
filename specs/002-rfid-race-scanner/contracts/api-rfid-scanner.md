@@ -154,6 +154,15 @@ Server → client on scored lap / karaoke bonus lap bump:
 
 Not sent for cooldown, unknown_tag, test_read, or checkpoint-only results.
 
+## Results export
+
+### GET `/api/events/{eventId}/results.xlsx` (PIN)
+Returns an Excel standings workbook for all non-cancelled races in the event.
+Response `200` is an attachment with:
+
+- `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- `Content-Disposition: attachment; filename="<event>-results-<date>.xlsx"`
+
 ## Participants (Racers)
 
 `/api/races/{raceId}/participants`:
