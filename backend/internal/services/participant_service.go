@@ -171,14 +171,8 @@ func (s *ParticipantService) CreateParticipant(input *models.Participant) (*mode
 		}
 	}
 
-	var existing int64
-	if err := s.db.Model(&models.Participant{}).
-		Where("race_id = ? AND bib_number = ?", input.RaceID, input.BibNumber).
-		Count(&existing).Error; err != nil {
+	if err := s.ensureBibUniqueInEvent(race.EventID.UUID(), input.BibNumber, nil); err != nil {
 		return nil, err
-	}
-	if existing > 0 {
-		return nil, fmt.Errorf("%w: bib_number must be unique within race", ErrInvalidParticipantInput)
 	}
 
 	if err := s.ensureRFIDAvailable(input.RFIDTagUID, nil); err != nil {
@@ -199,6 +193,10 @@ func (s *ParticipantService) CreateParticipant(input *models.Participant) (*mode
 		return nil, err
 	}
 
+	if _, err := NewBibService(s.db).EnsureBib(race.EventID.UUID(), participant.BibNumber); err != nil {
+		return nil, err
+	}
+
 	participant.TagUIDs = []string{}
 	return &participant, nil
 }
@@ -209,17 +207,19 @@ func (s *ParticipantService) UpdateParticipant(id uuid.UUID, input *models.Parti
 		return nil, err
 	}
 
+	bibChanged := false
+	var eventID uuid.UUID
 	if input.BibNumber != "" && input.BibNumber != participant.BibNumber {
-		var existing int64
-		if err := s.db.Model(&models.Participant{}).
-			Where("race_id = ? AND bib_number = ? AND id != ?", participant.RaceID, input.BibNumber, id).
-			Count(&existing).Error; err != nil {
+		var race models.Race
+		if err := s.db.Select("id", "event_id").First(&race, "id = ?", participant.RaceID).Error; err != nil {
 			return nil, err
 		}
-		if existing > 0 {
-			return nil, fmt.Errorf("%w: bib_number must be unique within race", ErrInvalidParticipantInput)
+		eventID = race.EventID.UUID()
+		if err := s.ensureBibUniqueInEvent(eventID, input.BibNumber, &id); err != nil {
+			return nil, err
 		}
 		participant.BibNumber = input.BibNumber
+		bibChanged = true
 	}
 	if input.FirstName != "" {
 		participant.FirstName = input.FirstName
@@ -280,6 +280,12 @@ func (s *ParticipantService) UpdateParticipant(id uuid.UUID, input *models.Parti
 		return nil, err
 	}
 
+	if bibChanged {
+		if _, err := NewBibService(s.db).EnsureBib(eventID, participant.BibNumber); err != nil {
+			return nil, err
+		}
+	}
+
 	uids, err := s.tagUIDsForParticipant(participant.ID)
 	if err != nil {
 		return nil, err
@@ -315,6 +321,24 @@ func (s *ParticipantService) NextSequentialBib(raceID uuid.UUID) (string, error)
 		}
 	}
 	return strconv.Itoa(max + 1), nil
+}
+
+// ensureBibUniqueInEvent rejects another participant in the same event with the same bib.
+func (s *ParticipantService) ensureBibUniqueInEvent(eventID uuid.UUID, bibNumber string, excludeID *uuid.UUID) error {
+	query := s.db.Model(&models.Participant{}).
+		Joins("JOIN races ON races.id = participants.race_id").
+		Where("races.event_id = ? AND participants.bib_number = ?", eventID, bibNumber)
+	if excludeID != nil {
+		query = query.Where("participants.id != ?", *excludeID)
+	}
+	var existing int64
+	if err := query.Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return fmt.Errorf("%w: bib_number must be unique within event", ErrInvalidParticipantInput)
+	}
+	return nil
 }
 
 func (s *ParticipantService) ensureCategoryOnRace(categoryID, raceID uuid.UUID) error {

@@ -60,6 +60,132 @@ func TestParticipantService_DuplicateBibNumber(t *testing.T) {
 		RaceID: race.ID, BibNumber: "101", FirstName: "B", LastName: "Two",
 	})
 	assert.ErrorIs(t, err, ErrInvalidParticipantInput)
+	assert.ErrorContains(t, err, "bib_number must be unique within event")
+}
+
+func TestParticipantService_DuplicateBibAcrossRacesSameEvent(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	raceA, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race A", RaceType: "time_based", DistanceKm: 5,
+	})
+	require.NoError(t, err)
+	raceB, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race B", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	svc := NewParticipantService(db)
+
+	_, err = svc.CreateParticipant(&models.Participant{
+		RaceID: raceA.ID, BibNumber: "7", FirstName: "A", LastName: "One",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.CreateParticipant(&models.Participant{
+		RaceID: raceB.ID, BibNumber: "7", FirstName: "B", LastName: "Two",
+	})
+	assert.ErrorIs(t, err, ErrInvalidParticipantInput)
+	assert.ErrorContains(t, err, "bib_number must be unique within event")
+}
+
+func TestParticipantService_DuplicateBibOnUpdateAcrossEvent(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	raceA, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race A", RaceType: "time_based", DistanceKm: 5,
+	})
+	require.NoError(t, err)
+	raceB, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race B", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	svc := NewParticipantService(db)
+
+	_, err = svc.CreateParticipant(&models.Participant{
+		RaceID: raceA.ID, BibNumber: "7", FirstName: "A", LastName: "One",
+	})
+	require.NoError(t, err)
+
+	other, err := svc.CreateParticipant(&models.Participant{
+		RaceID: raceB.ID, BibNumber: "8", FirstName: "B", LastName: "Two",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.UpdateParticipant(other.ID.UUID(), &models.Participant{BibNumber: "7"})
+	assert.ErrorIs(t, err, ErrInvalidParticipantInput)
+	assert.ErrorContains(t, err, "bib_number must be unique within event")
+}
+
+func TestParticipantService_SameBibAllowedAcrossEvents(t *testing.T) {
+	db := setupServiceTestDB(t)
+	svc := NewParticipantService(db)
+	raceA := createTestRace(t, db)
+	raceB := createTestRace(t, db)
+
+	_, err := svc.CreateParticipant(&models.Participant{
+		RaceID: raceA.ID, BibNumber: "7", FirstName: "A", LastName: "One",
+	})
+	require.NoError(t, err)
+
+	_, err = svc.CreateParticipant(&models.Participant{
+		RaceID: raceB.ID, BibNumber: "7", FirstName: "B", LastName: "Two",
+	})
+	require.NoError(t, err)
+}
+
+func TestParticipantService_EnsureBibOnCreateAndUpdate(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	svc := NewParticipantService(db)
+
+	created, err := svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "42", FirstName: "Jane", LastName: "Runner",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, created.TagUIDs)
+
+	var bib42 models.Bib
+	err = db.Where("event_id = ? AND bib_number = ?", race.EventID, "42").First(&bib42).Error
+	require.NoError(t, err)
+	assert.Equal(t, "42", bib42.BibNumber)
+
+	updated, err := svc.UpdateParticipant(created.ID.UUID(), &models.Participant{BibNumber: "99"})
+	require.NoError(t, err)
+	assert.Empty(t, updated.TagUIDs)
+
+	var bib99 models.Bib
+	err = db.Where("event_id = ? AND bib_number = ?", race.EventID, "99").First(&bib99).Error
+	require.NoError(t, err)
+	assert.Equal(t, "99", bib99.BibNumber)
+}
+
+func TestParticipantService_AttachTagUIDsViaBib(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	svc := NewParticipantService(db)
+
+	participant, err := svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "12", FirstName: "Tag", LastName: "Owner",
+	})
+	require.NoError(t, err)
+
+	bib, err := NewBibService(db).EnsureBib(race.EventID.UUID(), "12")
+	require.NoError(t, err)
+
+	_, err = NewRFIDService(db, nil).AssociateTagToBib(bib.ID.UUID(), "TAG-VIA-BIB-001")
+	require.NoError(t, err)
+
+	fetched, err := svc.GetParticipant(participant.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"TAG-VIA-BIB-001"}, fetched.TagUIDs)
+
+	raceID := race.ID.UUID()
+	listed, _, err := svc.ListParticipants(1, 10, &raceID, "")
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	assert.Equal(t, []string{"TAG-VIA-BIB-001"}, listed[0].TagUIDs)
 }
 
 func TestParticipantService_DuplicateRFID(t *testing.T) {
