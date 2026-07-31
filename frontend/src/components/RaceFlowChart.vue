@@ -832,7 +832,13 @@ function startLiveRefreshTimer(): void {
 }
 
 async function loadRecords(): Promise<void> {
-  loading.value = true
+  // Keep an already-drawn canvas mounted during background refresh. Flipping
+  // `loading` tears the <canvas> out of the DOM and Chart.js often stays blank
+  // afterward (especially around tab switches) until a hard refresh.
+  const showLoading = !hasData.value
+  if (showLoading) {
+    loading.value = true
+  }
   error.value = null
   try {
     const [live, participantsRes] = await Promise.all([
@@ -852,6 +858,38 @@ async function loadRecords(): Promise<void> {
 function destroyChart(): void {
   chartInstance.value?.destroy()
   chartInstance.value = null
+}
+
+/** Recover blank Chart.js canvases after browser tab hide/show or bfcache restore. */
+function restoreChartAfterVisible(): void {
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+    return
+  }
+  if (loading.value || !hasData.value) {
+    return
+  }
+
+  void nextTick(() => {
+    const chart = chartInstance.value
+    if (chart) {
+      chart.resize()
+      chart.update('none')
+      return
+    }
+    renderChart()
+  })
+}
+
+function handleVisibilityChange(): void {
+  if (document.visibilityState === 'visible') {
+    restoreChartAfterVisible()
+  }
+}
+
+function handlePageShow(event: PageTransitionEvent): void {
+  if (event.persisted) {
+    restoreChartAfterVisible()
+  }
 }
 
 function getLiveDisplayScale(): number {
@@ -1213,6 +1251,8 @@ function renderChart(): void {
 
 onMounted(async () => {
   document.addEventListener('click', handleDocumentClick)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('pageshow', handlePageShow)
   await loadRecords()
   startLiveRefreshTimer()
 })
@@ -1301,6 +1341,8 @@ watch(
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocumentClick)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('pageshow', handlePageShow)
   clearLiveRefreshTimer()
   destroyChart()
 })

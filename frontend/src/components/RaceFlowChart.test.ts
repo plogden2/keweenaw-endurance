@@ -16,6 +16,7 @@ vi.mock('chart.js', () => ({
       const instance = {
         destroy: vi.fn(),
         update: vi.fn(),
+        resize: vi.fn(),
         data: config?.data ?? { datasets: [] },
         options: config?.options ?? {},
         canvas: { style: { cursor: 'default' } as { cursor: string } },
@@ -1001,6 +1002,79 @@ describe('RaceFlowChart.vue', () => {
 
     wrapper.unmount()
     vi.useRealTimers()
+  })
+
+  it('resizes and redraws when the browser tab becomes visible again', async () => {
+    // Chrome/Safari often clear Chart.js canvases while the document is hidden;
+    // without a visibility restore the plot stays blank until a hard refresh.
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: sampleRecords },
+    })
+
+    const wrapper = mount(RaceFlowChart, {
+      props: { raceId: 'race-1' },
+    })
+    await flushPromises()
+
+    const chartInstance = (Chart as unknown as Mock).mock.results.at(-1)?.value as {
+      resize: Mock
+      update: Mock
+    }
+    chartInstance.resize.mockClear()
+    chartInstance.update.mockClear()
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(chartInstance.resize).not.toHaveBeenCalled()
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    expect(chartInstance.resize).toHaveBeenCalled()
+    expect(chartInstance.update).toHaveBeenCalled()
+
+    wrapper.unmount()
+  })
+
+  it('refreshes timing data without tearing down an already-rendered canvas', async () => {
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: sampleRecords },
+    })
+
+    const wrapper = mount(RaceFlowChart, {
+      props: { raceId: 'race-1' },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="race-flow-canvas"]').exists()).toBe(true)
+
+    let resolveLive!: (value: unknown) => void
+    ;(timingApi.getLive as Mock).mockReturnValue(
+      new Promise((resolve) => {
+        resolveLive = resolve
+      }),
+    )
+
+    const loadPromise = wrapper.vm.loadRecords()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-testid="race-flow-canvas"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Loading race flow')
+
+    resolveLive({ data: { race_id: 'race-1', records: sampleRecords } })
+    await loadPromise
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="race-flow-canvas"]').exists()).toBe(true)
+    wrapper.unmount()
   })
 
   it('caps x-axis and extrapolations to duration_minutes for active races', async () => {
