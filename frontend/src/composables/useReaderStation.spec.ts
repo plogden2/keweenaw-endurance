@@ -193,6 +193,54 @@ describe('useReaderStation', () => {
     stop()
   })
 
+  it('when event test mode is open, bridge scan_result records into the store and suppresses ScanPopup', async () => {
+    unlockReaderPin()
+    const station = useStationStore()
+    // Hosted + bridge often leave stations/current unset in the browser.
+    station.eventId = null
+    station.deviceId = 'laptop-finish-1'
+
+    const testMode = useEventTestModeStore()
+    testMode.open('evt-1', [
+      {
+        id: 'p1',
+        race_id: 'r1',
+        bib_number: '12',
+        first_name: 'Noah',
+        last_name: 'Patel',
+        status: 'registered',
+        tag_uids: ['3a2adbae-bridge-tag'],
+      },
+    ])
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop, lastScan } = useReaderStation()
+    start()
+
+    MockWebSocket.instances[0].emit({
+      type: 'scan_result',
+      tag_uid: '3a2adbae-bridge-tag',
+      read_at: '2026-08-01T12:00:01-04:00',
+      scan: {
+        result: 'test_read',
+        participant_name: 'Noah Patel',
+        bib_number: '12',
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(testMode.taps).toHaveLength(1)
+    })
+
+    expect(lastScan.value).toBeNull()
+    expect(scansApi.postScan).not.toHaveBeenCalled()
+    expect(testMode.lastFeedback?.ok).toBe(true)
+    expect(testMode.lastFeedback?.bib_number).toBe('12')
+    expect(testMode.lastFeedback?.participant_name).toBe('Noah Patel')
+
+    stop()
+  })
+
   it('applies scan_result from bridge without posting a second scan', async () => {
     unlockReaderPin()
     const station = useStationStore()

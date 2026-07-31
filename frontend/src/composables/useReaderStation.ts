@@ -64,7 +64,9 @@ function createReaderStation(): UseReaderStation {
     if (!station.eventId) return
 
     const testMode = useEventTestModeStore()
-    if (testMode.isActiveForEvent(station.eventId)) {
+    // While the dialog is open on this browser, keep taps ephemeral even if
+    // stations/current is unset/stale (common with hosted + bridge).
+    if (testMode.isOpen) {
       testMode.recordTagTap(tagUid, readAt)
       error.value = null
       return
@@ -100,20 +102,20 @@ function createReaderStation(): UseReaderStation {
   function onMessage(ev: MessageEvent) {
     try {
       const raw = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
-      const station = useStationStore()
       const testMode = useEventTestModeStore()
-      const testActive = Boolean(
-        station.eventId && testMode.isActiveForEvent(station.eventId),
-      )
 
       if (raw?.type === 'scan_result' && raw.scan) {
-        // Bridge already scored server-side; do not surface production
-        // ScanPopup feedback while this station's test mode is open.
-        if (testActive) {
+        const tagUid = String(raw.tag_uid || '')
+        // Bridge already scored server-side and fans out scan_result (not
+        // tag_read). While test mode is open, fold that into the ephemeral
+        // board and suppress production ScanPopup feedback.
+        if (testMode.isOpen) {
+          if (tagUid) {
+            testMode.recordTagTap(tagUid, raw.read_at)
+          }
           return
         }
         lastScan.value = raw.scan as ScanResult
-        const tagUid = String(raw.tag_uid || '')
         if (tagUid && raw.scan.result === 'lap') {
           void rememberScan(tagUid, raw.scan as ScanResult)
         }
