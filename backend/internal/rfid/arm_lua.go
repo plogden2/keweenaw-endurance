@@ -258,8 +258,8 @@ func (a *luaArmProcess) readLoop(r io.Reader) {
 			chunk.Reset()
 			continue
 		}
-		// Beep at the raw READ line — before ArmScan/emitRead/offline enqueue.
-		if !beeped && a.onTapBeep != nil && raw14aReadPattern.MatchString(line) {
+		// Beep at the first UUID payload line — before ArmScan/emitRead/offline enqueue.
+		if !beeped && a.onTapBeep != nil && (raw14aReadPattern.MatchString(line) || classicBlockPipePattern.MatchString(line)) {
 			beeped = true
 			a.onTapBeep()
 		}

@@ -3,6 +3,7 @@ package rfid
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -24,6 +25,9 @@ func TestCLIProxmarkReader_PollParsesFourPages(t *testing.T) {
 		Runner: func(command string) (string, error) {
 			if strings.HasPrefix(command, "hw sethfthresh") {
 				return "Thresholds set.", nil
+			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
 			}
 			assert.Equal(t, proxmarkReadLogicalUUIDCmd, command)
 			return combined, nil
@@ -57,6 +61,9 @@ func TestCLIProxmarkReader_PollParsesChainedRRGTables(t *testing.T) {
 			if strings.HasPrefix(command, "hw sethfthresh") {
 				return "Thresholds set.", nil
 			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
 			return combined, nil
 		},
 	})
@@ -76,6 +83,9 @@ func TestCLIProxmarkReader_PollParsesDataLine16Bytes(t *testing.T) {
 			if strings.HasPrefix(command, "hw sethfthresh") {
 				return "Thresholds set.", nil
 			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
 			assert.Equal(t, proxmarkReadLogicalUUIDCmd, command)
 			return "Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n", nil
 		},
@@ -94,6 +104,9 @@ func TestCLIProxmarkReader_PollEmptyDoesNotBeep(t *testing.T) {
 		Enabled: true,
 		Beeper:  beep,
 		Runner: func(command string) (string, error) {
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
 			return "Data : 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n", nil
 		},
 	})
@@ -101,6 +114,27 @@ func TestCLIProxmarkReader_PollEmptyDoesNotBeep(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got)
 	assert.Equal(t, 0, beep.calls)
+}
+
+func TestClassifyProxmarkWriteError_MultipleTags(t *testing.T) {
+	msg := classifyProxmarkWriteError("[#] Multiple tags detected. Collision after Bit 1\n", errors.New("exit"))
+	assert.Contains(t, msg, "Multiple tags")
+}
+
+func TestCLIProxmarkReader_WriteBlocksLuaArmRestart(t *testing.T) {
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Runner: func(command string) (string, error) {
+			return "ok", nil
+		},
+	})
+	reader.mu.Lock()
+	reader.writing = true
+	reader.mu.Unlock()
+
+	err := reader.ensureLuaArm(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "write in progress")
 }
 
 func TestCLIProxmarkReader_WriteLogicalUUIDWritesFourPages(t *testing.T) {
@@ -114,17 +148,21 @@ func TestCLIProxmarkReader_WriteLogicalUUIDWritesFourPages(t *testing.T) {
 			if strings.HasPrefix(command, "hw sethfthresh") {
 				return "Thresholds set.", nil
 			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
 			return "ok", nil
 		},
 	})
 
 	err := reader.WriteLogicalUUID(logicalUUID)
 	require.NoError(t, err)
-	require.Len(t, commands, 2)
+	require.GreaterOrEqual(t, len(commands), 3)
 	assert.Equal(t, "hw sethfthresh -t 3", commands[0])
+	assert.Equal(t, "hf 14a reader", commands[1])
 	assert.Equal(t,
 		"hf mfu wrbl -b 4 -d 1441674d; hf mfu wrbl -b 5 -d a011471a; hf mfu wrbl -b 6 -d a601722b; hf mfu wrbl -b 7 -d 88b117f5",
-		commands[1],
+		commands[2],
 	)
 }
 
@@ -132,6 +170,9 @@ func TestCLIProxmarkReader_PollEmptyPagesReturnsEmpty(t *testing.T) {
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
 			return "Data : 00 00 00 00", nil
 		},
 	})
@@ -196,6 +237,9 @@ func TestCLIProxmarkReader_PollParseFailure(t *testing.T) {
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
 			return "tag present but no hex dump", nil
 		},
 	})
@@ -263,12 +307,15 @@ func TestCLIProxmarkReader_IsAvailable(t *testing.T) {
 }
 
 func TestCLIProxmarkReader_WritePageCommandFormat(t *testing.T) {
-	// Guard against regressing to invalid --blk / 16-byte single-page writes.
+	// Guard against regressing Ultralight to invalid --blk / 16-byte single-page writes.
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
 			if strings.HasPrefix(command, "hw sethfthresh") {
 				return "Thresholds set.", nil
+			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
 			}
 			assert.NotContains(t, command, "--blk")
 			assert.Contains(t, command, "-b ")
@@ -302,14 +349,18 @@ func TestCLIProxmarkReader_PollPageCommandFormat(t *testing.T) {
 			if strings.HasPrefix(command, "hw sethfthresh") {
 				return "Thresholds set.", nil
 			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
 			return "Data : 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n", nil
 		},
 	})
 	_, err := reader.Poll()
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(cmds), 2)
+	require.GreaterOrEqual(t, len(cmds), 3)
 	assert.Equal(t, "hw sethfthresh -t 3", cmds[0])
-	assert.Equal(t, proxmarkReadLogicalUUIDCmd, cmds[1])
+	assert.Equal(t, "hf 14a reader", cmds[1])
+	assert.Equal(t, proxmarkReadLogicalUUIDCmd, cmds[2])
 }
 
 func TestCLIProxmarkReader_AppliesHFThreshBeforePoll(t *testing.T) {
@@ -322,14 +373,18 @@ func TestCLIProxmarkReader_AppliesHFThreshBeforePoll(t *testing.T) {
 			if strings.HasPrefix(command, "hw sethfthresh") {
 				return "Thresholds set.", nil
 			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
 			return "Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n", nil
 		},
 	})
 	_, err := r.Poll()
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(cmds), 2)
+	require.GreaterOrEqual(t, len(cmds), 3)
 	assert.Equal(t, "hw sethfthresh -t 3", cmds[0])
-	assert.Equal(t, proxmarkReadLogicalUUIDCmd, cmds[1])
+	assert.Equal(t, "hf 14a reader", cmds[1])
+	assert.Equal(t, proxmarkReadLogicalUUIDCmd, cmds[2])
 }
 
 func TestCLIProxmarkReader_SetHFGainReapplies(t *testing.T) {
@@ -341,6 +396,9 @@ func TestCLIProxmarkReader_SetHFGainReapplies(t *testing.T) {
 			cmds = append(cmds, command)
 			if strings.HasPrefix(command, "hw sethfthresh") {
 				return "Thresholds set.", nil
+			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
 			}
 			return "Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n", nil
 		},
@@ -365,12 +423,15 @@ func TestCLIProxmarkReader_SetHFGainReapplies(t *testing.T) {
 
 func TestCLIProxmarkReader_ArmScanUsesWaitForCard(t *testing.T) {
 	const logicalUUID = "23657b2d-aa08-5fe8-8553-e9e3affb4678"
-	var gotCmd string
+	var commands []string
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		HFGain:  57,
 		Runner: func(command string) (string, error) {
-			gotCmd = command
+			commands = append(commands, command)
+			if strings.Contains(command, "hf 14a reader -w") {
+				return detectUltralightStdout, nil
+			}
 			return strings.Join([]string{
 				"[=] 04/0x04 | 23 65 7B 2D | #e{-\n",
 				"[=] 05/0x05 | AA 08 5F E8 | .._.\n",
@@ -383,9 +444,10 @@ func TestCLIProxmarkReader_ArmScanUsesWaitForCard(t *testing.T) {
 	got, err := reader.ArmScan(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, logicalUUID, got)
-	assert.Contains(t, gotCmd, "hf 14a reader -w --skip")
-	assert.Contains(t, gotCmd, proxmarkReadLogicalUUIDCmd)
-	assert.Contains(t, gotCmd, "hw sethfthresh")
+	require.GreaterOrEqual(t, len(commands), 2)
+	assert.Contains(t, commands[0], "hf 14a reader -w --skip")
+	assert.Contains(t, commands[0], "hw sethfthresh")
+	assert.Equal(t, proxmarkReadLogicalUUIDCmd, commands[1])
 }
 
 func TestParseRaw14aRead16(t *testing.T) {
@@ -399,4 +461,183 @@ func TestParseRaw14aRead16(t *testing.T) {
 	uid, err := DecodeLogicalUUID(raw)
 	require.NoError(t, err)
 	assert.Equal(t, "23657b2d-aa08-5fe8-8553-e9e3affb4678", uid)
+}
+
+const (
+	detectUltralightStdout = "[+] UID: 04 12 34 56 78 9A 80\n[+] ATQA: 00 44\n[+] SAK: 00\n"
+	detectClassicStdout    = "[+] UID: 11 22 33 44\n[+] ATQA: 00 04\n[+] SAK: 08\n"
+	detectDESFireStdout    = "[+] UID: AA BB CC DD\n[+] ATQA: 03 44\n[+] SAK: 20\n"
+)
+
+func TestCLIProxmarkReader_WriteLogicalUUID_DispatchesClassic(t *testing.T) {
+	const logicalUUID = "1441674d-a011-471a-a601-722b88b117f5"
+	var commands []string
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Runner: func(command string) (string, error) {
+			commands = append(commands, command)
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
+			if command == "hf 14a reader" {
+				return detectClassicStdout, nil
+			}
+			if strings.HasPrefix(command, "hf mf wrbl") {
+				return "ok", nil
+			}
+			if command == classicReadBlock1Cmd() {
+				return "[=] 01/0x01 | 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5 | ....\n", nil
+			}
+			return "ok", nil
+		},
+	})
+
+	err := reader.WriteLogicalUUID(logicalUUID)
+	require.NoError(t, err)
+	var writeCmd string
+	for _, c := range commands {
+		if strings.HasPrefix(c, "hf mf wrbl") {
+			writeCmd = c
+			break
+		}
+	}
+	require.NotEmpty(t, writeCmd)
+	assert.Equal(t, classicWriteBlock1Cmd("1441674da011471aa601722b88b117f5"), writeCmd)
+	assert.NotContains(t, writeCmd, "hf mfu")
+}
+
+func TestCLIProxmarkReader_WriteLogicalUUID_DispatchesUltralight(t *testing.T) {
+	const logicalUUID = "1441674d-a011-471a-a601-722b88b117f5"
+	var commands []string
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Runner: func(command string) (string, error) {
+			commands = append(commands, command)
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
+			return "ok", nil
+		},
+	})
+
+	require.NoError(t, reader.WriteLogicalUUID(logicalUUID))
+	var writeCmd string
+	for _, c := range commands {
+		if strings.Contains(c, "hf mfu wrbl") {
+			writeCmd = c
+			break
+		}
+	}
+	require.NotEmpty(t, writeCmd)
+	assert.Contains(t, writeCmd, "hf mfu wrbl -b 4")
+	assert.NotContains(t, writeCmd, "hf mf wrbl")
+}
+
+func TestCLIProxmarkReader_WriteLogicalUUID_UnsupportedTag(t *testing.T) {
+	var unexpected []string
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Runner: func(command string) (string, error) {
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
+			if command == "hf 14a reader" {
+				return detectDESFireStdout, nil
+			}
+			unexpected = append(unexpected, command)
+			return "", errors.New("should not write unsupported tag")
+		},
+	})
+
+	err := reader.WriteLogicalUUID("1441674d-a011-471a-a601-722b88b117f5")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported tag type")
+	assert.Contains(t, err.Error(), "20")
+	assert.NotContains(t, err.Error(), "BCC")
+	assert.Empty(t, unexpected)
+}
+
+func TestCLIProxmarkReader_Poll_DispatchesClassic(t *testing.T) {
+	const logicalUUID = "1441674d-a011-471a-a601-722b88b117f5"
+	var commands []string
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Runner: func(command string) (string, error) {
+			commands = append(commands, command)
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
+			if command == "hf 14a reader" {
+				return detectClassicStdout, nil
+			}
+			if command == classicReadBlock1Cmd() {
+				return "[=] 01/0x01 | 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5 | ....\n", nil
+			}
+			t.Fatalf("unexpected poll command: %s", command)
+			return "", nil
+		},
+	})
+
+	got, err := reader.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, logicalUUID, got)
+	assert.Contains(t, commands, classicReadBlock1Cmd())
+	assert.NotContains(t, commands, proxmarkReadLogicalUUIDCmd)
+}
+
+func TestCLIProxmarkReader_Poll_DispatchesUltralight(t *testing.T) {
+	const logicalUUID = "1441674d-a011-471a-a601-722b88b117f5"
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Runner: func(command string) (string, error) {
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
+			assert.Equal(t, proxmarkReadLogicalUUIDCmd, command)
+			return "Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n", nil
+		},
+	})
+
+	got, err := reader.Poll()
+	require.NoError(t, err)
+	assert.Equal(t, logicalUUID, got)
+}
+
+func TestCLIProxmarkReader_ArmScan_DispatchesClassicAfterWait(t *testing.T) {
+	const logicalUUID = "1441674d-a011-471a-a601-722b88b117f5"
+	var commands []string
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		HFGain:  57,
+		Runner: func(command string) (string, error) {
+			commands = append(commands, command)
+			if strings.Contains(command, "hf 14a reader -w") {
+				return detectClassicStdout, nil
+			}
+			if command == classicReadBlock1Cmd() {
+				return "[=] 01/0x01 | 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5 | ....\n", nil
+			}
+			return "", fmt.Errorf("unexpected: %s", command)
+		},
+	})
+
+	got, err := reader.ArmScan(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, logicalUUID, got)
+	require.GreaterOrEqual(t, len(commands), 2)
+	assert.Contains(t, commands[0], "hf 14a reader -w --skip")
+	assert.Equal(t, classicReadBlock1Cmd(), commands[1])
+}
+
+func TestParsePollUUID_ClassicBlockDump(t *testing.T) {
+	stdout := detectClassicStdout + "[=] 01/0x01 | 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5 | ....\n"
+	got, err := parsePollUUID(stdout)
+	require.NoError(t, err)
+	assert.Equal(t, "1441674d-a011-471a-a601-722b88b117f5", got)
 }

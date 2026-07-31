@@ -25,9 +25,11 @@ const (
 	proxmarkCLIExecTimeout      = 15 * time.Second
 	// Current RRG pm3 returns one 4-byte page per `hf mfu rdbl`; chain four reads.
 	proxmarkReadLogicalUUIDCmd = "hf mfu rdbl -b 4; hf mfu rdbl -b 5; hf mfu rdbl -b 6; hf mfu rdbl -b 7"
-	// Continuous arm: block in the Proxmark client until a tag enters the field,
-	// then read logical UUID pages. Keeps RF scanning without spawn-per-poll.
-	proxmarkArmScanCmd = "hf 14a reader -w --skip; " + proxmarkReadLogicalUUIDCmd
+	// Continuous arm wait: block until a tag enters the field; family-specific
+	// read follows after SAK classification.
+	proxmarkArmWaitCmd = "hf 14a reader -w --skip"
+	// Legacy chained arm (Ultralight-only); kept for reference/tests.
+	proxmarkArmScanCmd = proxmarkArmWaitCmd + "; " + proxmarkReadLogicalUUIDCmd
 )
 
 // CLICommandRunner executes the Proxmark3 CLI with the given pm3 subcommand string.
@@ -322,13 +324,88 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 	if err != nil {
 		return err
 	}
-	r.cancelArmAndWait()
+	// Mark writing BEFORE cancelling the arm so runContinuousArm cannot reopen
+	// Lua/COM between cancel and the write (that race causes BCC0 aborts).
 	r.mu.Lock()
 	r.writing = true
+	r.mu.Unlock()
 	defer func() {
+		r.mu.Lock()
 		r.writing = false
 		r.mu.Unlock()
 	}()
+
+	r.cancelArmAndWait()
+	// Let USB-CDC / RF field settle after killing the continuous arm process.
+	time.Sleep(500 * time.Millisecond)
+
+	r.mu.Lock()
+	ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionWriteTimeout)
+	detectOut, detectErr := r.runLocked(ctx, "hf 14a reader")
+	cancel()
+	fam, classErr := ClassifyISO14443A(detectOut)
+	if classErr != nil {
+		r.mu.Unlock()
+		return classErr
+	}
+	switch fam {
+	case TagFamilyNone:
+		if msg := classifyProxmarkWriteError(detectOut, detectErr); msg != "" {
+			r.mu.Unlock()
+			return errors.New(msg)
+		}
+		r.mu.Unlock()
+		return errors.New(noTagSelectedMessage())
+	case TagFamilyUnsupported:
+		r.mu.Unlock()
+		return errors.New(unsupportedTagTypeMessageFromStdout(detectOut))
+	}
+	cmd := writeCmdForFamily(fam, raw)
+	r.mu.Unlock()
+
+	var stdout string
+	var writeErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			time.Sleep(400 * time.Millisecond)
+		}
+		r.mu.Lock()
+		ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionWriteTimeout)
+		stdout, writeErr = r.runLocked(ctx, cmd)
+		cancel()
+		if writeErr == nil {
+			r.mu.Unlock()
+			return nil
+		}
+		// Proxmark CLI often exits -10 (0xfffffff6) even when the device ran the
+		// script; confirm by reading user memory before failing the operator.
+		if pm3DeviceResponded(stdout) {
+			if verifyErr := r.verifyLogicalUUIDLocked(logicalUUID, fam); verifyErr == nil {
+				r.mu.Unlock()
+				return nil
+			}
+		}
+		r.mu.Unlock()
+		if classified := classifyProxmarkWriteError(stdout, writeErr); strings.Contains(classified, "Multiple tags") {
+			return errors.New(classified)
+		}
+	}
+	if msg := classifyProxmarkWriteError(stdout, writeErr); msg != "" {
+		return errors.New(msg)
+	}
+	if fam == TagFamilyClassic1K {
+		return fmt.Errorf("write classic block %d: %w", classicLogicalUUIDBlock, writeErr)
+	}
+	return fmt.Errorf("write pages %d-%d: %w",
+		proxmarkUserMemoryStartPage,
+		proxmarkUserMemoryStartPage+proxmarkLogicalUUIDPages-1,
+		writeErr)
+}
+
+func writeCmdForFamily(fam TagFamily, raw []byte) string {
+	if fam == TagFamilyClassic1K {
+		return classicWriteBlock1Cmd(fmt.Sprintf("%x", raw))
+	}
 	parts := make([]string, 0, proxmarkLogicalUUIDPages)
 	for i := 0; i < proxmarkLogicalUUIDPages; i++ {
 		page := proxmarkUserMemoryStartPage + i
@@ -336,35 +413,45 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 		hexData := fmt.Sprintf("%x", raw[off:off+proxmarkPageSize])
 		parts = append(parts, fmt.Sprintf("hf mfu wrbl -b %d -d %s", page, hexData))
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionWriteTimeout)
-	defer cancel()
-	stdout, writeErr := r.runLocked(ctx, strings.Join(parts, "; "))
-	if writeErr != nil {
-		// Proxmark CLI often exits -10 (0xfffffff6) even when the device ran the
-		// script; confirm by reading user memory before failing the operator.
-		if pm3DeviceResponded(stdout) {
-			if verifyErr := r.verifyLogicalUUIDLocked(logicalUUID); verifyErr == nil {
-				return nil
-			}
-		}
-		return fmt.Errorf("write pages %d-%d: %w",
-			proxmarkUserMemoryStartPage,
-			proxmarkUserMemoryStartPage+proxmarkLogicalUUIDPages-1,
-			writeErr)
-	}
-	return nil
+	return strings.Join(parts, "; ")
 }
 
-// verifyLogicalUUIDLocked reads pages 4–7 and checks they decode to logicalUUID.
-// Caller must hold r.mu.
-func (r *CLIProxmarkReader) verifyLogicalUUIDLocked(logicalUUID string) error {
+func readCmdForFamily(fam TagFamily) string {
+	if fam == TagFamilyClassic1K {
+		return classicReadBlock1Cmd()
+	}
+	return proxmarkReadLogicalUUIDCmd
+}
+
+// classifyProxmarkWriteError turns Proxmark stdout into a short operator-facing message.
+func classifyProxmarkWriteError(stdout string, writeErr error) string {
+	lower := strings.ToLower(stdout)
+	switch {
+	case strings.Contains(lower, "multiple tags"):
+		return "Multiple tags on antenna — leave only one chip and retry"
+	case strings.Contains(lower, "can't select card"), strings.Contains(lower, "no known/supported"):
+		return "No tag selected — hold one chip steady on the antenna and retry"
+	case strings.Contains(lower, "bcc0 incorrect"), strings.Contains(lower, "bcc1 incorrect"):
+		return "Tag collision/BCC error — use one chip only, hold steady, retry"
+	case strings.Contains(lower, "hf field is off") && writeErr != nil:
+		return "Proxmark HF field off during write — retry write"
+	case strings.Contains(lower, "invalid serial port"), strings.Contains(lower, "error: serial"):
+		return "COM port busy — Kill orphans, then retry"
+	default:
+		return ""
+	}
+}
+
+// verifyLogicalUUIDLocked reads family-specific user memory and checks it
+// decodes to logicalUUID. Caller must hold r.mu.
+func (r *CLIProxmarkReader) verifyLogicalUUIDLocked(logicalUUID string, fam TagFamily) error {
 	ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionPollTimeout)
 	defer cancel()
-	stdout, err := r.runLocked(ctx, proxmarkReadLogicalUUIDCmd)
+	stdout, err := r.runLocked(ctx, readCmdForFamily(fam))
 	if err != nil && !pm3DeviceResponded(stdout) {
 		return err
 	}
-	raw, parseErr := parseLogicalUUIDBytes(stdout)
+	raw, parseErr := parseUUIDBytesForFamily(stdout, fam)
 	if parseErr != nil {
 		return parseErr
 	}
@@ -394,13 +481,21 @@ func (r *CLIProxmarkReader) Poll() (string, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionPollTimeout)
 	defer cancel()
-	stdout, err := r.runLocked(ctx, proxmarkReadLogicalUUIDCmd)
+	detectOut, err := r.runLocked(ctx, "hf 14a reader")
+	if err != nil && !pm3DeviceResponded(detectOut) {
+		return "", nil
+	}
+	fam, _ := ClassifyISO14443A(detectOut)
+	switch fam {
+	case TagFamilyNone, TagFamilyUnsupported:
+		// Soft-fail empty tick so the poll loop keeps running.
+		return "", nil
+	}
+	stdout, err := r.runLocked(ctx, readCmdForFamily(fam))
 	if err != nil {
-		// Continuous poll loop: never fail the tick hard — empty means "try again".
 		_ = stdout
 		return "", nil
 	}
-
 	return parsePollUUID(stdout)
 }
 
@@ -454,8 +549,8 @@ func (r *CLIProxmarkReader) ArmScan(ctx context.Context) (string, error) {
 		return r.armScanLua(armCtx)
 	}
 
-	cmd := hfThreshCommand(gain) + "; " + proxmarkArmScanCmd
-	var stdout string
+	waitCmd := hfThreshCommand(gain) + "; " + proxmarkArmWaitCmd
+	var detectOut string
 	var err error
 	switch {
 	case useSession:
@@ -471,29 +566,59 @@ func (r *CLIProxmarkReader) ArmScan(ctx context.Context) (string, error) {
 			err = ensErr
 			break
 		}
-		stdout, err = sess.Run(armCtx, cmd)
-		if err != nil && !pm3DeviceResponded(stdout) {
+		detectOut, err = sess.Run(armCtx, waitCmd)
+		if err != nil && !pm3DeviceResponded(detectOut) {
 			r.mu.Lock()
 			_ = r.closeSessionLocked()
 			r.scheduleRetryLocked()
 			r.mu.Unlock()
 		}
 	case injected:
-		stdout, err = r.runner(cmd)
+		detectOut, err = r.runner(waitCmd)
 	default:
-		stdout, err = execProxmarkCLI(armCtx, r.cliPath, r.port, cmd)
+		detectOut, err = execProxmarkCLI(armCtx, r.cliPath, r.port, waitCmd)
 	}
 	if armCtx.Err() != nil {
 		return "", armCtx.Err()
 	}
-	if err != nil && !pm3DeviceResponded(stdout) {
+	if err != nil && !pm3DeviceResponded(detectOut) {
 		return "", err
 	}
-	return parsePollUUID(stdout)
+	fam, _ := ClassifyISO14443A(detectOut)
+	switch fam {
+	case TagFamilyNone:
+		return "", nil
+	case TagFamilyUnsupported:
+		return "", errors.New(unsupportedTagTypeMessageFromStdout(detectOut))
+	}
+
+	readCmd := readCmdForFamily(fam)
+	var readOut string
+	switch {
+	case useSession:
+		r.mu.Lock()
+		sess := r.session
+		r.mu.Unlock()
+		if sess == nil {
+			return "", errors.New("proxmark session closed after arm wait")
+		}
+		readOut, err = sess.Run(armCtx, readCmd)
+	case injected:
+		readOut, err = r.runner(readCmd)
+	default:
+		readOut, err = execProxmarkCLI(armCtx, r.cliPath, r.port, readCmd)
+	}
+	if armCtx.Err() != nil {
+		return "", armCtx.Err()
+	}
+	if err != nil && !pm3DeviceResponded(readOut) {
+		return "", err
+	}
+	return parsePollUUID(readOut)
 }
 
 func parsePollUUID(stdout string) (string, error) {
-	raw, parseErr := parseLogicalUUIDBytes(stdout)
+	raw, parseErr := parseUUIDBytesForFamily(stdout, familyFromStdout(stdout))
 	if parseErr != nil {
 		// Partial/one-page dumps from older clients: treat as empty tick, not hard error.
 		return "", nil
@@ -509,6 +634,26 @@ func parsePollUUID(stdout string) (string, error) {
 	// accepted taps. write-tag scores via emitRead without Polling, so a Poll-only
 	// beep would miss the dress-rehearsal / program-and-score path.
 	return uid, nil
+}
+
+// parseUUIDBytesForFamily extracts 16 logical-UUID bytes for the given family.
+// When family is unknown, tries Ultralight parsers then Classic block-1.
+func parseUUIDBytesForFamily(stdout string, fam TagFamily) ([]byte, error) {
+	switch fam {
+	case TagFamilyClassic1K:
+		return parseClassicBlockDump(stdout)
+	case TagFamilyUltralight:
+		return parseLogicalUUIDBytes(stdout)
+	default:
+		raw, err := parseLogicalUUIDBytes(stdout)
+		if err == nil && len(raw) == 16 && !isZeroBlock(raw) {
+			return raw, nil
+		}
+		if craw, cerr := parseClassicBlockDump(stdout); cerr == nil && len(craw) == 16 {
+			return craw, nil
+		}
+		return raw, err
+	}
 }
 
 func (r *CLIProxmarkReader) cancelArmAndWait() {

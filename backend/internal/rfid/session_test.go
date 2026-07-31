@@ -57,9 +57,10 @@ func TestCLIProxmarkReader_PersistentSessionPollAndReconnect(t *testing.T) {
 		if len(sessions) == 0 {
 			s.outputs = []string{
 				"Thresholds set.",
+				detectUltralightStdout,
 				"Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n",
 			}
-			s.errs = []error{nil, nil}
+			s.errs = []error{nil, nil, nil}
 		} else if len(sessions) == 1 {
 			// Dead session on first Run after recreate path exercised below.
 			s.outputs = []string{"Thresholds set.", ""}
@@ -67,9 +68,10 @@ func TestCLIProxmarkReader_PersistentSessionPollAndReconnect(t *testing.T) {
 		} else {
 			s.outputs = []string{
 				"Thresholds set.",
+				detectUltralightStdout,
 				"Data : 14 41 67 4D A0 11 47 1A A6 01 72 2B 88 B1 17 F5\n",
 			}
-			s.errs = []error{nil, nil}
+			s.errs = []error{nil, nil, nil}
 		}
 		sessions = append(sessions, s)
 		return s, nil
@@ -86,7 +88,7 @@ func TestCLIProxmarkReader_PersistentSessionPollAndReconnect(t *testing.T) {
 	assert.Equal(t, logicalUUID, got)
 	assert.Equal(t, 0, beep.calls) // tone is in bridgeapp.emitRead
 	require.Len(t, sessions, 1)
-	assert.Equal(t, []string{"hw sethfthresh -t 3", proxmarkReadLogicalUUIDCmd}, sessions[0].commands)
+	assert.Equal(t, []string{"hw sethfthresh -t 3", "hf 14a reader", proxmarkReadLogicalUUIDCmd}, sessions[0].commands)
 
 	// Force session death on next poll.
 	reader.mu.Lock()
@@ -132,8 +134,9 @@ func TestCLIProxmarkReader_KeepsSessionOnCardMiss(t *testing.T) {
 			outputs: []string{
 				"Thresholds set.",
 				"[#] can't select card\n[usb] pm3 -->\n",
+				"[#] can't select card\n[usb] pm3 -->\n",
 			},
-			errs: []error{nil, errors.New("exit status 1")},
+			errs: []error{nil, errors.New("exit status 1"), errors.New("exit status 1")},
 		}
 		sessions = append(sessions, s)
 		return s, nil
