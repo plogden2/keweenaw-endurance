@@ -24,6 +24,21 @@ const (
 	DefaultOrganizerPIN = "1738"
 )
 
+// CanonicalEventID expands known short public IDs to full UUIDs used for local store paths.
+// Other short IDs are returned unchanged (API accepts them; local store accepts them too).
+func CanonicalEventID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return id
+	}
+	lower := strings.ToLower(id)
+	if lower == BluffetEventIDShort ||
+		(len(lower) == len(BluffetEventIDShort) && strings.HasSuffix(BluffetEventIDFull, lower)) {
+		return BluffetEventIDFull
+	}
+	return id
+}
+
 // BluffetRace is one Bluffet distance with its finish (Lap Check) checkpoint.
 type BluffetRace struct {
 	Name           string
@@ -57,7 +72,6 @@ func ApplyBluffetDefaults(cfg *Config) {
 		return
 	}
 	seed := SeedBluffetDetails()
-	firstLaunch := strings.TrimSpace(cfg.EventID) == ""
 	cfg.HostedAPIURL = "https://www.keweenawendurance.com"
 	if cfg.OrganizerPIN == "" {
 		cfg.OrganizerPIN = DefaultOrganizerPIN
@@ -81,8 +95,8 @@ func ApplyBluffetDefaults(cfg *Config) {
 	if cfg.ProxmarkPort == "" {
 		cfg.ProxmarkPort = "COM3"
 	}
-	// First launch only: enable Proxmark hardware by default.
-	if firstLaunch && !cfg.BridgeMock {
+	// Race-day reader: Proxmark on unless mock mode is explicitly selected.
+	if !cfg.BridgeMock {
 		cfg.RFIDHardware = true
 	}
 	normalizeConfig(cfg)

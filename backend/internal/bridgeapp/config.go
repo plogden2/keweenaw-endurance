@@ -69,6 +69,7 @@ func DefaultConfig() Config {
 		PartitionSignal: filepath.Join(os.TempDir(), "keweenaw-bridge-partition.signal"),
 		ProxmarkCLI:     "pm3",
 		ProxmarkPort:    "COM3",
+		RFIDHardware:    true,
 		HFGain:          rfid.HFGainDefault,
 		PollInterval:    500 * time.Millisecond,
 		PollMS:          500,
@@ -297,7 +298,7 @@ func normalizeConfig(cfg *Config) {
 	cfg.BridgeToken = strings.TrimSpace(cfg.BridgeToken)
 	cfg.OrganizerPIN = strings.TrimSpace(cfg.OrganizerPIN)
 	cfg.DeviceID = strings.TrimSpace(cfg.DeviceID)
-	cfg.EventID = strings.TrimSpace(cfg.EventID)
+	cfg.EventID = CanonicalEventID(cfg.EventID)
 	cfg.RaceID = strings.TrimSpace(cfg.RaceID)
 	cfg.CheckpointID = strings.TrimSpace(cfg.CheckpointID)
 	cfg.DataDir = strings.TrimSpace(cfg.DataDir)

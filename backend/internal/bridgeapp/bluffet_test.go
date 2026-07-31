@@ -10,6 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCanonicalEventID_ExpandsBluffetShort(t *testing.T) {
+	assert.Equal(t, BluffetEventIDFull, CanonicalEventID(BluffetEventIDShort))
+	assert.Equal(t, BluffetEventIDFull, CanonicalEventID("B117F5"))
+	assert.Equal(t, BluffetEventIDFull, CanonicalEventID(BluffetEventIDFull))
+	assert.Equal(t, "a1b2c3", CanonicalEventID("a1b2c3"))
+}
+
+func TestNormalizeConfig_ExpandsBluffetShortEventID(t *testing.T) {
+	cfg := Config{EventID: BluffetEventIDShort, HostedAPIURL: "https://example.com", DeviceID: "d1", DataDir: t.TempDir()}
+	normalizeConfig(&cfg)
+	assert.Equal(t, BluffetEventIDFull, cfg.EventID)
+}
+
 func TestApplyBluffetDefaults(t *testing.T) {
 	cfg := Config{}
 	ApplyBluffetDefaults(&cfg)

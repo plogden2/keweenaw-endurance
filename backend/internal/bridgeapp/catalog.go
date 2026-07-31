@@ -59,7 +59,7 @@ func FetchCatalogEvents(auth *bridge.HostedAuth, client *http.Client) ([]Catalog
 			if name == "" {
 				name = e.ID
 			}
-			out = append(out, CatalogEvent{ID: e.ID, Name: name})
+			out = append(out, CatalogEvent{ID: CanonicalEventID(e.ID), Name: name})
 		}
 		if page*200 >= wrapped.Total || len(wrapped.Data) == 0 {
 			break

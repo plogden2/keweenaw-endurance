@@ -12,6 +12,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestLocalStore_AcceptsPublicShortEventID(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewLocalStore(dir, "b117f5")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(dir, "events", "b117f5"), filepath.Dir(store.CSVPath()))
+}
+
+func TestLocalStore_RejectsGarbageEventID(t *testing.T) {
+	_, err := NewLocalStore(t.TempDir(), "not-an-id")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid event id")
+}
+
 func TestLocalStore_EnqueueAppendsCSVAndPending(t *testing.T) {
 	dir := t.TempDir()
 	eventID := uuid.New().String()

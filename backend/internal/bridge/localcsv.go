@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 )
 
 const pendingFileName = "pending.jsonl"
@@ -46,8 +47,12 @@ func NewLocalStore(dataDir, eventID string) (*LocalStore, error) {
 	if eventID == "" {
 		return nil, errors.New("event id is required")
 	}
-	if _, err := uuid.Parse(eventID); err != nil {
+	// Hosted API exposes PublicUUID short suffixes (6 hex chars); accept those too.
+	if _, err := uuidutil.Parse(eventID); err != nil {
 		return nil, fmt.Errorf("invalid event id: %w", err)
+	}
+	if len(eventID) == uuidutil.SuffixLength {
+		eventID = strings.ToLower(eventID)
 	}
 
 	eventDir := filepath.Join(dataDir, "events", eventID)
