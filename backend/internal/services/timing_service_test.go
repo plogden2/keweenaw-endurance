@@ -136,6 +136,147 @@ func TestTimingService_ListByRace(t *testing.T) {
 	assert.Len(t, records, 1)
 }
 
+func TestTimingService_ListRecordsByEvent(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	raceOne, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Morning", RaceType: "time_based", DistanceKm: 5,
+	})
+	require.NoError(t, err)
+	raceTwo, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Afternoon", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	finishOne := createCheckpoint(t, db, raceOne.ID, "Finish", "finish")
+	finishTwo := createCheckpoint(t, db, raceTwo.ID, "Finish", "finish")
+
+	participants := NewParticipantService(db)
+	ada, err := participants.CreateParticipant(&models.Participant{
+		RaceID: raceOne.ID, BibNumber: "101", FirstName: "Ada", LastName: "Lovelace",
+	})
+	require.NoError(t, err)
+	grace, err := participants.CreateParticipant(&models.Participant{
+		RaceID: raceTwo.ID, BibNumber: "202", FirstName: "Grace", LastName: "Hopper",
+	})
+	require.NoError(t, err)
+
+	svc := NewTimingService(db)
+	now := time.Now().UTC().Truncate(time.Second)
+	oldest, err := svc.CreateRecord(&models.TimingRecord{
+		ParticipantID: ada.ID, CheckpointID: finishOne.ID, Timestamp: now.Add(-2 * time.Minute), LocalTimestamp: now.Add(-2 * time.Minute),
+	})
+	require.NoError(t, err)
+	_, err = svc.CreateRecord(&models.TimingRecord{
+		ParticipantID: grace.ID, CheckpointID: finishTwo.ID, Timestamp: now, LocalTimestamp: now,
+	})
+	require.NoError(t, err)
+	_, _, err = svc.VoidRecord(oldest.ID.UUID())
+	require.NoError(t, err)
+
+	pageOne, total, err := svc.ListRecordsByEvent(event.ID.UUID(), 1, 1, nil, "")
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, total)
+	require.Len(t, pageOne, 1)
+	assert.Equal(t, grace.ID, pageOne[0].ParticipantID)
+	assert.Equal(t, raceTwo.ID, pageOne[0].Participant.RaceID)
+	assert.Equal(t, raceTwo.Name, pageOne[0].Participant.Race.Name)
+
+	pageTwo, total, err := svc.ListRecordsByEvent(event.ID.UUID(), 2, 1, nil, "")
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, total)
+	require.Len(t, pageTwo, 1)
+	assert.Equal(t, oldest.ID, pageTwo[0].ID)
+	assert.NotNil(t, pageTwo[0].VoidedAt)
+
+	filtered, total, err := svc.ListRecordsByEvent(event.ID.UUID(), 1, 50, ptrUUID(raceOne.ID.UUID()), "ADA")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, total)
+	require.Len(t, filtered, 1)
+	assert.Equal(t, ada.ID, filtered[0].ParticipantID)
+
+	byBib, total, err := svc.ListRecordsByEvent(event.ID.UUID(), 1, 50, nil, "202")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, total)
+	require.Len(t, byBib, 1)
+	assert.Equal(t, grace.ID, byBib[0].ParticipantID)
+}
+
+func TestTimingService_CreateEventTap(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	race, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Tap Race", RaceType: "time_based", DistanceKm: 5,
+	})
+	require.NoError(t, err)
+	finish := createCheckpoint(t, db, race.ID, "Finish", "finish")
+	participant, err := NewParticipantService(db).CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "7", FirstName: "Manual", LastName: "Tap",
+	})
+	require.NoError(t, err)
+
+	svc := NewTimingService(db)
+	timestamp := time.Date(2026, time.July, 30, 18, 0, 0, 0, time.UTC)
+	lap, err := svc.CreateEventTap(CreateEventTapInput{
+		EventID: event.ID.UUID(), ParticipantID: participant.ID.UUID(), Timestamp: &timestamp,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "rfid_lap", lap.RecordType)
+	assert.Equal(t, finish.ID, lap.CheckpointID)
+	assert.Nil(t, lap.SourceLapID)
+	assert.Equal(t, timestamp, lap.Timestamp)
+	assert.Equal(t, "manual-event-taps", lap.DeviceID)
+	assert.Equal(t, "synced", lap.SyncStatus)
+
+	bonus, err := svc.CreateEventTap(CreateEventTapInput{
+		EventID: event.ID.UUID(), ParticipantID: participant.ID.UUID(), KaraokeBonus: true, DeviceID: "tablet-1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "karaoke_bonus", bonus.RecordType)
+	assert.Equal(t, finish.ID, bonus.CheckpointID)
+	assert.Nil(t, bonus.SourceLapID)
+	assert.Equal(t, "tablet-1", bonus.DeviceID)
+}
+
+func TestTimingService_CreateEventTap_RejectsInvalidEventParticipantAndMissingFinish(t *testing.T) {
+	db := setupServiceTestDB(t)
+	firstEvent := createTestEvent(t, db)
+	secondEvent := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	otherRace, err := raceSvc.CreateRace(&models.Race{
+		EventID: secondEvent.ID, Name: "Other Race", RaceType: "time_based", DistanceKm: 5,
+	})
+	require.NoError(t, err)
+	otherParticipant, err := NewParticipantService(db).CreateParticipant(&models.Participant{
+		RaceID: otherRace.ID, BibNumber: "8", FirstName: "Other", LastName: "Event",
+	})
+	require.NoError(t, err)
+
+	svc := NewTimingService(db)
+	_, err = svc.CreateEventTap(CreateEventTapInput{
+		EventID: firstEvent.ID.UUID(), ParticipantID: otherParticipant.ID.UUID(),
+	})
+	assert.Error(t, err)
+
+	raceWithoutFinish, err := raceSvc.CreateRace(&models.Race{
+		EventID: firstEvent.ID, Name: "No Finish", RaceType: "time_based", DistanceKm: 5,
+	})
+	require.NoError(t, err)
+	participant, err := NewParticipantService(db).CreateParticipant(&models.Participant{
+		RaceID: raceWithoutFinish.ID, BibNumber: "9", FirstName: "No", LastName: "Finish",
+	})
+	require.NoError(t, err)
+	_, err = svc.CreateEventTap(CreateEventTapInput{
+		EventID: firstEvent.ID.UUID(), ParticipantID: participant.ID.UUID(),
+	})
+	assert.Error(t, err)
+}
+
+func ptrUUID(id uuid.UUID) *uuid.UUID {
+	return &id
+}
+
 func TestTimingService_VoidRecord_CascadesKaraoke(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)
