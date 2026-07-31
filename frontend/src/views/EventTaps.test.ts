@@ -209,7 +209,7 @@ describe('EventTaps.vue', () => {
     expect(error.text().toLowerCase()).toMatch(/not found|no match/)
   })
 
-  it('shows error and does not create when multiple exact matches', async () => {
+  it('shows a match dropdown and does not create when multiple exact matches', async () => {
     authenticate()
     ;(eventParticipantsApi.list as Mock).mockResolvedValue({
       data: {
@@ -225,7 +225,51 @@ describe('EventTaps.vue', () => {
     await submitBib(wrapper, '42')
 
     expect(eventTapsApi.create).not.toHaveBeenCalled()
-    expect(wrapper.find('[data-testid="inline-bib-error"]').exists()).toBe(true)
+    const select = wrapper.find('[data-testid="inline-bib-match-select"]')
+    expect(select.exists()).toBe(true)
+    expect(select.text()).toContain('12 Hour')
+    expect(select.text()).toContain('100 Mile')
+    expect(wrapper.find('[data-testid="inline-bib-error"]').exists()).toBe(false)
+  })
+
+  it('creates a tap for the selected match after multiple matches', async () => {
+    authenticate()
+    ;(eventParticipantsApi.list as Mock).mockResolvedValue({
+      data: {
+        data: [
+          sampleParticipant,
+          { ...sampleParticipant, id: 'p1b', race_id: 'race-2', race: { ...race, id: 'race-2', name: '100 Mile' } },
+        ],
+        total: 2,
+      },
+    })
+    const wrapper = await mountEventTaps()
+
+    await submitBib(wrapper, '42')
+    await wrapper.find('[data-testid="inline-bib-match-select"]').setValue('p1b')
+    await wrapper.find('[data-testid="inline-bib-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(eventTapsApi.create).toHaveBeenCalledWith('e1', {
+      participant_id: 'p1b',
+      karaoke_bonus: false,
+    })
+  })
+
+  it('records a tap via the Submit button', async () => {
+    authenticate()
+    const wrapper = await mountEventTaps()
+
+    expect(wrapper.find('[data-testid="inline-bib-submit"]').exists()).toBe(true)
+    const input = wrapper.find('[data-testid="inline-bib-input"]')
+    await input.setValue('42')
+    await wrapper.find('[data-testid="inline-bib-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(eventTapsApi.create).toHaveBeenCalledWith('e1', {
+      participant_id: 'p1',
+      karaoke_bonus: false,
+    })
   })
 
   it('clears the input and refreshes taps after a successful create', async () => {

@@ -26,6 +26,15 @@
               @input="onBibInput"
             />
           </label>
+          <button
+            type="button"
+            class="btn"
+            data-testid="inline-bib-submit"
+            :disabled="submitting || !bibInput.trim()"
+            @click="submitBib"
+          >
+            Submit
+          </button>
           <label class="karaoke-toggle">
             <input
               v-model="karaokeBonus"
@@ -36,6 +45,25 @@
             Karaoke
           </label>
         </div>
+        <label v-if="bibMatches.length > 1" class="inline-bib-match">
+          <span class="sr-only">Select participant</span>
+          <select
+            v-model="selectedMatchId"
+            class="inline-bib-match-select"
+            data-testid="inline-bib-match-select"
+            :disabled="submitting"
+          >
+            <option disabled value="">Select race / participant…</option>
+            <option
+              v-for="match in bibMatches"
+              :key="match.id"
+              :value="match.id"
+            >
+              Bib {{ match.bib_number }} — {{ match.first_name }} {{ match.last_name }}
+              ({{ match.race?.name ?? 'Unknown race' }})
+            </option>
+          </select>
+        </label>
         <p
           v-if="inlineSuccess"
           class="inline-bib-success"
@@ -147,7 +175,7 @@ import { eventParticipantsApi, eventTapsApi, timingRecordsApi } from '@/services
 import { useEventTestModeStore } from '@/stores/eventTestMode'
 import { useEventsStore } from '@/stores/events'
 import { usePinAuthStore } from '@/stores/pinAuth'
-import type { TimingRecord } from '@/types/models'
+import type { Participant, TimingRecord } from '@/types/models'
 import { formatDateTime } from '@/utils/datetime'
 import { getErrorMessage } from '@/utils/error'
 
@@ -181,6 +209,8 @@ const karaokeBonus = ref(false)
 const submitting = ref(false)
 const inlineError = ref<string | null>(null)
 const inlineSuccess = ref<string | null>(null)
+const bibMatches = ref<Participant[]>([])
+const selectedMatchId = ref('')
 let successTimer: ReturnType<typeof setTimeout> | null = null
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_LIMIT)))
@@ -200,8 +230,15 @@ function clearSuccessTimer(): void {
   }
 }
 
+function clearBibMatches(): void {
+  bibMatches.value = []
+  selectedMatchId.value = ''
+}
+
 function onBibInput(): void {
   inlineSuccess.value = null
+  inlineError.value = null
+  clearBibMatches()
   clearSuccessTimer()
 }
 
@@ -227,6 +264,21 @@ function setEphemeralSuccess(message: string): void {
   }, SUCCESS_CLEAR_MS)
 }
 
+async function createTapForParticipant(match: Participant): Promise<void> {
+  const isKaraoke = karaokeBonus.value
+  await eventTapsApi.create(eventId.value, {
+    participant_id: match.id,
+    karaoke_bonus: isKaraoke,
+  })
+
+  bibInput.value = ''
+  clearBibMatches()
+  const kind = isKaraoke ? 'Karaoke' : 'Lap'
+  setEphemeralSuccess(`${kind} #${match.bib_number} ${match.first_name} ${match.last_name}`)
+  focusBibInput()
+  await loadTaps()
+}
+
 async function submitBib(): Promise<void> {
   const bib = bibInput.value.trim()
   if (!bib || submitting.value) return
@@ -243,34 +295,34 @@ async function submitBib(): Promise<void> {
   clearSuccessTimer()
 
   try {
+    if (bibMatches.value.length > 1) {
+      const selected = bibMatches.value.find((p) => p.id === selectedMatchId.value)
+      if (!selected) {
+        inlineError.value = 'Select a participant'
+        return
+      }
+      await createTapForParticipant(selected)
+      return
+    }
+
     const { data } = await eventParticipantsApi.list(eventId.value, { q: bib, limit: 20 })
     const matches = (data.data ?? []).filter((p) => String(p.bib_number) === bib)
 
     if (matches.length === 0) {
+      clearBibMatches()
       inlineError.value = 'Bib not found'
       selectBibInput()
       return
     }
     if (matches.length > 1) {
-      inlineError.value = 'Multiple matches'
-      selectBibInput()
+      bibMatches.value = matches
+      selectedMatchId.value = ''
+      inlineError.value = null
       return
     }
 
-    const match = matches[0]
-    const isKaraoke = karaokeBonus.value
-    await eventTapsApi.create(eventId.value, {
-      participant_id: match.id,
-      karaoke_bonus: isKaraoke,
-    })
-
-    bibInput.value = ''
-    const kind = isKaraoke ? 'Karaoke' : 'Lap'
-    setEphemeralSuccess(
-      `${kind} #${match.bib_number} ${match.first_name} ${match.last_name}`,
-    )
-    focusBibInput()
-    await loadTaps()
+    clearBibMatches()
+    await createTapForParticipant(matches[0])
   } catch (err) {
     inlineError.value = getErrorMessage(err, 'Failed to record tap')
     selectBibInput()
@@ -424,6 +476,27 @@ watch(eventId, async () => {
 }
 
 .inline-bib-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.inline-bib-match {
+  display: block;
+  margin-top: 0.5rem;
+  max-width: 28rem;
+}
+
+.inline-bib-match-select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.inline-bib-match-select:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
