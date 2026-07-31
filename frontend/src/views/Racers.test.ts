@@ -84,7 +84,7 @@ describe('Racers.vue', () => {
       },
     })
     ;(raceParticipantsApi.list as Mock).mockResolvedValue({
-      data: { data: sampleRacers, total: 2 },
+      data: { data: structuredClone(sampleRacers), total: 2 },
     })
     ;(raceTeamsApi.list as Mock).mockResolvedValue({
       data: { data: [{ id: 'team-a', race_id: 'race-1', name: 'East Bluff A' }], total: 1 },
@@ -93,6 +93,7 @@ describe('Racers.vue', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   async function mountRacers() {
@@ -158,8 +159,9 @@ describe('Racers.vue', () => {
   })
 
   it('shows bib save only when dirty and persists on save', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
     ;(raceParticipantsApi.update as Mock).mockResolvedValue({
-      data: { ...sampleRacers[0], bib_number: '9999' },
+      data: { ...sampleRacers[0], bib_number: '9999', tag_uids: ['TAG-A'] },
     })
     const wrapper = await mountRacers()
     const row = wrapper.find('[data-testid="racer-row"]')
@@ -176,6 +178,51 @@ describe('Racers.vue', () => {
     await wrapper.find('[data-testid="bib-save"]').trigger('click')
     await flushPromises()
     expect(raceParticipantsApi.update).toHaveBeenCalledWith('p1', { bib_number: '9999' })
+  })
+
+  it('warns after bib save when returned tag_uids are empty', async () => {
+    ;(raceParticipantsApi.update as Mock).mockResolvedValue({
+      data: { ...sampleRacers[1], bib_number: '42', tag_uids: [] },
+    })
+    const wrapper = await mountRacers()
+    const rows = wrapper.findAll('[data-testid="racer-row"]')
+    await rows[1].find('[data-testid="bib-edit"]').trigger('click')
+    await nextTick()
+
+    await wrapper.find('[data-testid="bib-edit-input"]').setValue('42')
+    await nextTick()
+    await wrapper.find('[data-testid="bib-save"]').trigger('click')
+    await flushPromises()
+
+    expect(raceParticipantsApi.update).toHaveBeenCalledWith('p2', { bib_number: '42' })
+    const warn = wrapper.find('[data-testid="bib-no-tags-warn"]')
+    expect(warn.exists()).toBe(true)
+    expect(warn.text().length).toBeGreaterThan(0)
+  })
+
+  it('confirms before changing bib when racer has tags; cancel leaves old bib', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    ;(raceParticipantsApi.update as Mock).mockResolvedValue({
+      data: { ...sampleRacers[0], bib_number: '9999' },
+    })
+    const wrapper = await mountRacers()
+    const row = wrapper.find('[data-testid="racer-row"]')
+    await row.find('[data-testid="bib-edit"]').trigger('click')
+    await nextTick()
+
+    await wrapper.find('[data-testid="bib-edit-input"]').setValue('9999')
+    await nextTick()
+    await wrapper.find('[data-testid="bib-save"]').trigger('click')
+    await flushPromises()
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(raceParticipantsApi.update).not.toHaveBeenCalled()
+    // Exit edit without saving — display still shows original bib
+    if (wrapper.find('[data-testid="bib-edit-input"]').exists()) {
+      await wrapper.find('[data-testid="bib-edit-input"]').trigger('keydown.escape')
+      await nextTick()
+    }
+    expect(row.find('[data-testid="bib-edit"]').text()).toContain('12')
   })
 
   it('programs tag via writeTag without silicon UID input', async () => {

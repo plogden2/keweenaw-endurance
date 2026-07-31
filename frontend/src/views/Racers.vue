@@ -155,6 +155,14 @@
         <span class="muted">({{ filteredRacers.length }} shown)</span>
       </h2>
       <p v-if="loadError" class="error" role="alert">{{ loadError }}</p>
+      <p
+        v-if="bibNoTagsWarn"
+        class="warn"
+        role="status"
+        data-testid="bib-no-tags-warn"
+      >
+        {{ bibNoTagsWarn }}
+      </p>
       <table data-testid="racers-list">
         <thead>
           <tr>
@@ -340,6 +348,7 @@ const editingBibId = ref<string | null>(null)
 const bibOriginal = ref('')
 const bibDraft = ref('')
 const bibDirty = computed(() => bibDraft.value.trim() !== bibOriginal.value)
+const bibNoTagsWarn = ref<string | null>(null)
 
 const programmingId = ref<string | null>(null)
 const programming = ref(false)
@@ -427,11 +436,27 @@ async function saveBib(racer: Participant) {
     return
   }
   const next = bibDraft.value.trim() || bibOriginal.value
+  const hasTags = Boolean(racer.tag_uids?.length)
+  const raceActive = race.value?.status === 'active'
+  if (hasTags || raceActive) {
+    const reason = hasTags
+      ? 'This racer already has programmed tags. Tags stay with the bib number.'
+      : 'This race is active.'
+    const ok = window.confirm(
+      `${reason} Change bib from ${bibOriginal.value} to ${next}?`,
+    )
+    if (!ok) return
+  }
   try {
     const { data } = await raceParticipantsApi.update(racer.id, { bib_number: next })
     const idx = racers.value.findIndex((r) => r.id === racer.id)
     if (idx >= 0) {
       racers.value[idx] = { ...racers.value[idx], ...data, bib_number: data.bib_number ?? next }
+    }
+    if (!(data.tag_uids?.length)) {
+      bibNoTagsWarn.value = `Bib ${data.bib_number ?? next} has no programmed tags yet. Program a tag from this row when ready.`
+    } else {
+      bibNoTagsWarn.value = null
     }
     cancelBibEdit()
   } catch (err) {
@@ -844,5 +869,14 @@ tr.programming {
 
 .error {
   color: var(--signal);
+}
+
+.warn {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--signal) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--signal) 35%, var(--line));
+  border-radius: 4px;
+  padding: 0.55rem 0.75rem;
+  margin: 0 0 0.75rem;
 }
 </style>
