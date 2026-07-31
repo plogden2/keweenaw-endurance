@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="KE">
+  <!-- Teal rounded square; rx ~19% of side -->
+  <rect width="32" height="32" rx="6" fill="#1a3f3d"/>
+  <!-- Condensed bold geometric KE (path-based, no webfont) -->
+  <g fill="#ffffff">
+    <!-- K -->
+    <path d="M6.2 7.2h3.4v7.05l4.55-7.05h4.05L12.9 15.85 18.55 24.8h-4.1l-4.85-7.55V24.8H6.2V7.2z"/>
+    <!-- E -->
+    <path d="M19.4 7.2H27v3.15h-4.2v3.05H26.5v3.05h-3.7v5.2H27V24.8h-7.6V7.2z"/>
+  </g>
+</svg>
