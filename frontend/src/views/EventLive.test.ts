@@ -354,6 +354,15 @@ describe('EventLive.vue', () => {
     expect(downloadEventResultsExcel).toHaveBeenCalledWith('evt-1', 'All You Can East Bluffet')
   })
 
+  it('shows Bibs ops link when PIN-unlocked', async () => {
+    const wrapper = await mountReaderLive()
+    const bibsLink = wrapper.find('[data-testid="live-open-bibs"]')
+
+    expect(bibsLink.exists()).toBe(true)
+    expect(bibsLink.attributes('href')).toBe('/events/evt-1/bibs')
+    expect(bibsLink.text()).toBe('Bibs')
+  })
+
   async function mountReaderLive() {
     const { usePinAuthStore } = await import('@/stores/pinAuth')
     const pin = usePinAuthStore()

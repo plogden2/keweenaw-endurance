@@ -106,16 +106,24 @@
           {{ exportingResults ? 'Exporting…' : 'Export Excel' }}
         </button>
         <div
-          v-if="isReaderSession && activeRaceId"
+          v-if="isReaderSession"
           class="ops-links"
           data-testid="live-ops-links"
         >
           <router-link
+            v-if="activeRaceId"
             class="ops-link"
             :to="`/races/${activeRaceId}/racers`"
             data-testid="live-open-racers"
           >
             Racers
+          </router-link>
+          <router-link
+            class="ops-link"
+            :to="`/events/${eventId}/bibs`"
+            data-testid="live-open-bibs"
+          >
+            Bibs
           </router-link>
           <router-link
             class="ops-link"
