@@ -177,6 +177,7 @@ func respondServiceError(c *gin.Context, err error) {
 		errors.Is(err, services.ErrTeamNotFound),
 		errors.Is(err, services.ErrTimingRecordNotFound),
 		errors.Is(err, services.ErrRFIDTagNotFound),
+		errors.Is(err, services.ErrBibNotFound),
 		errors.Is(err, services.ErrStationNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrLiveCSVNotFound):
@@ -191,6 +192,7 @@ func respondServiceError(c *gin.Context, err error) {
 		errors.Is(err, services.ErrInvalidTeamInput),
 		errors.Is(err, services.ErrInvalidTimingInput),
 		errors.Is(err, services.ErrInvalidRFIDInput),
+		errors.Is(err, services.ErrInvalidBibInput),
 		errors.Is(err, services.ErrInvalidStationInput),
 		errors.Is(err, uuidutil.ErrInvalidID),
 		errors.Is(err, uuidutil.ErrAmbiguousID):

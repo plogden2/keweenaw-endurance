@@ -22,6 +22,29 @@ func (h *Handlers) WriteRFIDTag(c *gin.Context) {
 		return
 	}
 
+	if strings.TrimSpace(req.BibID) != "" {
+		bibID, err := h.resolveBibID(req.BibID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid bib_id"})
+			return
+		}
+		bib, err := h.services.RFID.WriteTagForBib(bibID)
+		if err != nil {
+			c.Error(err)
+			respondServiceError(c, err)
+			return
+		}
+		logical := strings.ToLower(bib.ID.String())
+		h.refreshLiveCSV(bib.EventID.UUID())
+		c.JSON(http.StatusOK, bibTagResponse(bib.ID.UUID(), logical, h.services.Bibs))
+		return
+	}
+
+	if strings.TrimSpace(req.ParticipantID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "participant_id or bib_id is required"})
+		return
+	}
+
 	participantID, err := h.resolveParticipantID(req.ParticipantID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid participant_id"})

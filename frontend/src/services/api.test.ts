@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import {
   apiClient,
   downloadEventResultsExcel,
+  eventBibsApi,
   eventsApi,
+  localBridgeAcceptsWriteTag,
   racesApi,
   participantsApi,
   raceParticipantsApi,
@@ -228,6 +230,34 @@ describe('raceTeamsApi', () => {
   })
 })
 
+describe('eventBibsApi', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('lists bibs, bulk-creates, and manages tags', async () => {
+    ;(apiClient.get as Mock).mockResolvedValue({ data: { data: [] } })
+    ;(apiClient.post as Mock).mockResolvedValue({ data: [] })
+
+    await eventBibsApi.list('evt-1')
+    await eventBibsApi.bulkCreate('evt-1', 1, 100)
+    await eventBibsApi.listTags('evt-1', 'bib-1')
+    await eventBibsApi.addTag('evt-1', 'bib-1')
+    await eventBibsApi.addTag('evt-1', 'bib-1', { tag_uid: 'TAG-A' })
+
+    expect(apiClient.get).toHaveBeenCalledWith('/api/events/evt-1/bibs')
+    expect(apiClient.post).toHaveBeenCalledWith('/api/events/evt-1/bibs/bulk', {
+      from: 1,
+      to: 100,
+    })
+    expect(apiClient.get).toHaveBeenCalledWith('/api/events/evt-1/bibs/bib-1/tags')
+    expect(apiClient.post).toHaveBeenCalledWith('/api/events/evt-1/bibs/bib-1/tags', {})
+    expect(apiClient.post).toHaveBeenCalledWith('/api/events/evt-1/bibs/bib-1/tags', {
+      tag_uid: 'TAG-A',
+    })
+  })
+})
+
 describe('raceParticipantsApi', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -295,6 +325,24 @@ describe('RFID scanner APIs', () => {
     await rfidApi.writeTag({ participant_id: 'p-1' })
     expect(apiClient.post).toHaveBeenCalledWith('/api/rfid/write-tag', {
       participant_id: 'p-1',
+    })
+  })
+
+  it('writes tag with bib_id via hosted API when local bridge cannot accept it', async () => {
+    updateLastBridgeSnapshot({
+      navigatorOnline: true,
+      hosted: { connected: false, pending_count: 2, syncing: false },
+      local: { connected: false, pending_count: 2, syncing: false, mode: 'offline' },
+    })
+    expect(shouldRouteWriteTagLocal()).toBe(true)
+    expect(localBridgeAcceptsWriteTag({ bib_id: 'bib-1' })).toBe(false)
+
+    ;(apiClient.post as Mock).mockResolvedValue({
+      data: { bib_id: 'bib-1', tag_uid: 'uuid-1', tag_uids: ['uuid-1'] },
+    })
+    await rfidApi.writeTag({ bib_id: 'bib-1' })
+    expect(apiClient.post).toHaveBeenCalledWith('/api/rfid/write-tag', {
+      bib_id: 'bib-1',
     })
   })
 

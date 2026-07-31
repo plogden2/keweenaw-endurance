@@ -1438,7 +1438,7 @@ func TestBibHandlers_BulkCreateAndListShowsAssignment(t *testing.T) {
 	}
 	assigned := byNumber["2"]
 	require.NotNil(t, assigned.ParticipantID)
-	assert.Equal(t, participant.ID, *assigned.ParticipantID)
+	assert.Equal(t, participant.ID.Short(), assigned.ParticipantID.Short())
 	assert.Equal(t, "Ada Lovelace", assigned.ParticipantName)
 	assert.Nil(t, byNumber["1"].ParticipantID)
 }
@@ -1545,11 +1545,11 @@ func TestParticipantHandlers_EventWideBibClashReturns400(t *testing.T) {
 	})
 	require.NoError(t, err)
 	catA, err := svc.Categories.CreateCategory(&models.Category{
-		RaceID: raceA.ID, Name: "Open", CategoryType: "open",
+		RaceID: raceA.ID, Name: "Open", CategoryType: "overall",
 	})
 	require.NoError(t, err)
 	catB, err := svc.Categories.CreateCategory(&models.Category{
-		RaceID: raceB.ID, Name: "Open", CategoryType: "open",
+		RaceID: raceB.ID, Name: "Open", CategoryType: "overall",
 	})
 	require.NoError(t, err)
 

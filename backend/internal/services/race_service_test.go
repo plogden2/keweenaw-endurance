@@ -126,8 +126,10 @@ func TestRaceService_AutoStartDueRaces(t *testing.T) {
 	event := createTestEvent(t, db)
 	svc := NewRaceService(db)
 
-	pastStart := time.Now().Add(-2 * time.Minute)
-	futureStart := time.Now().Add(2 * time.Hour)
+	// Use UTC wall times to match AutoStartDueRaces (compares against now.UTC())
+	// and timestamp-without-tz storage; local offsets can make a "future" start look due.
+	pastStart := time.Now().UTC().Add(-2 * time.Minute)
+	futureStart := time.Now().UTC().Add(2 * time.Hour)
 
 	due, err := svc.CreateRace(&models.Race{
 		EventID:         event.ID,

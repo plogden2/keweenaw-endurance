@@ -71,19 +71,19 @@ After a racer completes a normal RFID lap scan and reports that they sang a song
 
 ### User Story 3 - Racers Page: Search, Add, Bibs, and Tag Programming (Priority: P1)
 
-Race staff use a Racers page to manage participants for a race: search the full racer list, add a racer, adjust bib numbers (defaulting to sequential assignment), and program one or more Proxmark3-compatible RFID tags with the racer’s unique identifier so lost tags can be replaced without changing identity.
+Race staff use a Racers page to manage participants for a race: search the full racer list, add a racer, adjust bib numbers (defaulting to sequential assignment; unique across the whole event), and program one or more Proxmark3-compatible RFID tags against the racer’s current **event bib** (chip stores the **bib UUID**) so lost tags can be replaced without changing identity. Night-before bulk inventoring and programming also happens on the Event → Bibs page; Racers is the morning assignment and ad-hoc write surface.
 
 **Why this priority**: Without enrollment and tag programming, live scanning cannot attribute laps to people.
 
-**Independent Test**: Open Racers for a race, add/search racers, change bibs, program multiple tags for one racer, and verify those tags all resolve to the same racer on scan.
+**Independent Test**: Open Racers for a race, add/search racers, change bibs (event-unique), program multiple tags for one racer’s bib, and verify those tags all resolve to the same racer on scan via tag → bib → participant.
 
 **Acceptance Scenarios**:
 
 1. **Given** a race exists, **When** staff open the Racers page, **Then** they see a searchable list of all racers in that race.
-2. **Given** the Racers page is open, **When** staff add a new racer with required identity details, **Then** the racer appears in the list with a unique racer identifier and a default sequential bib number.
-3. **Given** a racer exists, **When** staff change the bib number to a valid unused value for that race, **Then** the new bib is saved and shown in lists and race-day displays.
-4. **Given** a racer is selected for tag programming, **When** staff write a tag via the Proxmark3 writer, **Then** the tag stores/associates the racer’s unique identifier and subsequent reads identify that racer.
-5. **Given** a racer already has one programmed tag, **When** staff program an additional tag for the same racer, **Then** both tags identify the same racer and either can record laps (previous tags are not deactivated).
+2. **Given** the Racers page is open, **When** staff add a new racer with required identity details, **Then** the racer appears in the list with a unique racer identifier and a default sequential bib number (ensuring an event-scoped Bib exists).
+3. **Given** a racer exists, **When** staff change the bib number to a valid unused value for that **event**, **Then** the new bib is saved and shown in lists and race-day displays.
+4. **Given** a racer is selected for tag programming, **When** staff write a tag via the Proxmark3 writer, **Then** the tag stores/associates the racer’s current **bib UUID** (not the racer UUID as the primary payload) and subsequent reads identify that racer through the bib assignment.
+5. **Given** a racer’s bib already has one programmed tag, **When** staff program an additional tag for the same bib/racer, **Then** both tags identify the same racer and either can record laps (previous tags are not deactivated).
 6. **Given** staff type in the Racers search field, **When** the debounce interval elapses, **Then** the list filters immediately without requiring a Search button click.
 
 ---
@@ -196,7 +196,7 @@ Before the feature is considered complete, a full suite of end-to-end tests cove
 - Unknown or unprogrammed tag tapped at a reader: no lap recorded; volunteer sees a clear “unknown tag” message; no Mario Kart sound for success.
 - Tag associated with a racer whose race is not active at the configured event: reject or warn; do not attribute a lap. If the race is merely not yet started, show a test-read identification instead of a successful lap.
 - Pre-start / test read: no Mario Kart success sound for a race lap; feedback clearly indicates test/identification mode rather than a scored lap.
-- Duplicate bib assignment attempted: prevent save and explain the conflict.
+- Duplicate bib assignment attempted within the same event (including across races): prevent save and explain the conflict.
 - Rapid double-tap / bounce on the same physical tag within cooldown: only the first valid lap counts.
 - Karaoke bonus clicked after the scan popup was dismissed: bonus is not available for that scan unless the volunteer re-opens the last-scan context (if provided); otherwise they must wait for the next valid scan.
 - Offline for extended periods on multiple stations: on reconnect, merge preserves distinct taps; cooldown-window duplicates for the same racer are reconciled without inventing extra laps.
@@ -217,9 +217,9 @@ Before the feature is considered complete, a full suite of end-to-end tests cove
 - **FR-003a**: Racers search MUST update the list as the user types using debounce (no separate Search button required).
 - **FR-003b**: Bib numbers on the Racers list MUST display as plain text until clicked to edit; a save control MUST appear only after the bib value has changed.
 - **FR-003c**: Tag programming MUST be initiated from the racer row (inline), not a separate standalone Program RFID section.
-- **FR-004**: System MUST assign bib numbers sequentially by default when a racer is added, and MUST allow staff to adjust a racer’s bib number to another valid value for that race.
-- **FR-005**: System MUST assign each racer a stable unique racer identifier and MUST program RFID tags with that identifier (not solely the bib number).
-- **FR-006**: System MUST allow multiple RFID tags to be programmed and associated with the same racer so lost tags can be replaced or duplicated. In v1, all programmed associations remain active (no deactivate/revoke); any associated tag can record laps for that racer.
+- **FR-004**: System MUST assign bib numbers sequentially by default when a racer is added, and MUST allow staff to adjust a racer’s bib number to another valid value that is unique within the event.
+- **FR-005**: System MUST assign each racer a stable unique racer identifier, MUST maintain an event-scoped Bib for the racer’s bib number, and MUST program new RFID tags with that **bib’s UUID** (not the racer UUID and not solely the printable bib number). Legacy chips that still hold a participant UUID MUST continue to resolve via dual-resolve.
+- **FR-006**: System MUST allow multiple RFID tags to be programmed and associated with the same **bib** so lost tags can be replaced or duplicated; tags resolve to the participant who currently holds that bib number. In v1, all programmed associations remain active (no deactivate/revoke); any associated tag can record laps for that racer.
 - **FR-007**: When a laptop is configured as a reader for an event, the system MUST accept and process tag reads continuously regardless of which site page is currently displayed, and MUST attribute each valid tap to the racer’s race among any active races at that event.
 - **FR-008**: On a valid tag tap for a racer whose race is **active/started**, the system MUST record a new lap with the tap timestamp for that racer (on the race in which the racer is enrolled).
 - **FR-008a**: On a valid tag tap for a racer whose race is **not yet started**, the system MUST treat the tap as a test read (show racer identity for hardware/check-in confirmation) and MUST NOT record a race lap.
@@ -249,7 +249,7 @@ Before the feature is considered complete, a full suite of end-to-end tests cove
 - **FR-022**: Live leaderboard and placement shown on scan popup MUST default to combined overall standings (with category color coding and legend), reflecting lap totals including karaoke bonus laps, using deterministic tie-breaking when lap counts are equal. Category-filtered boards MUST remain available.
 - **FR-022a**: Live event view MUST provide tabs for 12 Hour, 6 Hour, and 90 Minute races; MUST allow overlapping races to be viewed on a single chart; and MUST offer a fullscreen rotating view that cycles race flow and leaderboard side-by-side for active races.
 - **FR-023**: System MUST reject unknown tags with clear feedback and MUST NOT record a successful lap for unrecognized identifiers.
-- **FR-024**: System MUST prevent duplicate bib numbers within the same race.
+- **FR-024**: System MUST prevent duplicate bib numbers within the same **event** (bib numbers are unique across all races under that event, not only within a single race).
 - **FR-025**: Karaoke bonus one-click MUST be available after a completed RFID lap recorded at a finish-mode station (or after a checkpoint sequence that completes a lap); intermediate checkpoint taps that do not complete a lap MUST NOT offer karaoke bonus.
 - **FR-026**: System MUST protect management actions (race create/delete, racer add/edit, bib changes, RFID tag programming, reader station configuration, CSV import/copy tools, and similar setup controls) behind a shared organizer PIN login. The default PIN is `1738`.
 - **FR-027**: The live race flow and leaderboard MUST be viewable without entering the PIN (public/read-only).
@@ -262,7 +262,8 @@ Before the feature is considered complete, a full suite of end-to-end tests cove
 - **Race**: A lap-format contest under an event with duration, start time, status (scheduled/active/finished), and category structure.
 - **Category**: A scoring/placement bucket within a race (e.g., Intermediate Men, Advanced Women, Kids Men).
 - **Racer**: A participant in a race with unique identifier, name, bib number, category membership, and status.
-- **RFID Tag Association**: Binding between a physical tag and a racer’s unique identifier; multiple associations per racer allowed; in v1 all associations remain active (no revocation).
+- **Bib**: Event-scoped inventory row (`id` UUID written to chips, `event_id`, `bib_number` unique per event). At most one participant in the event may hold a given bib number.
+- **RFID Tag Association**: Binding between a physical tag (`tag_uid`) and a **bib** (`bib_id`); multiple associations per bib allowed; in v1 all associations remain active (no revocation). Scan path: tag → bib → participant by `(event_id, bib_number)`, with legacy dual-resolve for chips that still hold a participant UUID.
 - **Lap Record**: A timed lap attributed to a racer, with timestamp, source station, sync state, and type (standard RFID lap vs karaoke bonus).
 - **Reader Station**: A laptop configured to read for a specific event, accepting taps for racers in any active race under that event, with a mode of **finish** (default) or **checkpoint**, online/offline status, and local datastore.
 - **Checkpoint Progress**: Per-racer progress through an ordered checkpoint sequence when checkpoint-mode readers are in use; completing the sequence yields one lap.

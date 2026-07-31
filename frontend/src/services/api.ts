@@ -1,5 +1,8 @@
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import type {
+  Bib,
+  BibListItem,
+  BibTagWriteResponse,
   Checkpoint,
   CreateEventPayload,
   CreateEventTapPayload,
@@ -161,6 +164,20 @@ export const eventParticipantsApi = {
     apiClient.get<PaginatedResponse<Participant>>(`/api/events/${eventId}/participants`, { params }),
 }
 
+export const eventBibsApi = {
+  list: (eventId: string) =>
+    apiClient.get<{ data: BibListItem[] }>(`/api/events/${eventId}/bibs`),
+  bulkCreate: (eventId: string, from: number, to: number) =>
+    apiClient.post<Bib[]>(`/api/events/${eventId}/bibs/bulk`, { from, to }),
+  listTags: (eventId: string, bibId: string) =>
+    apiClient.get<{ data: RfidTagAssociation[] }>(`/api/events/${eventId}/bibs/${bibId}/tags`),
+  addTag: (eventId: string, bibId: string, body?: { tag_uid?: string }) =>
+    apiClient.post<BibTagWriteResponse>(
+      `/api/events/${eventId}/bibs/${bibId}/tags`,
+      body ?? {},
+    ),
+}
+
 export const racesApi = createResourceApi<
   Race,
   CreateRacePayload,
@@ -231,17 +248,28 @@ export const timingApi = {
 }
 
 export interface WriteTagPayload {
-  participant_id: string
+  participant_id?: string
+  bib_id?: string
   race_id?: string
   logical_uuid?: string
 }
 
+/**
+ * Local bridge resolves logical_uuid or participant_id (+ race_id offline).
+ * bib_id-only writes must use hosted /api/rfid/write-tag.
+ */
+export function localBridgeAcceptsWriteTag(payload: WriteTagPayload): boolean {
+  if (payload.logical_uuid?.trim()) return true
+  if (payload.participant_id?.trim()) return true
+  return false
+}
+
 async function writeTagLocal(
   payload: WriteTagPayload,
-): Promise<AxiosResponse<Participant>> {
-  const body: Record<string, string> = {
-    participant_id: payload.participant_id,
-  }
+): Promise<AxiosResponse<Participant | BibTagWriteResponse>> {
+  const body: Record<string, string> = {}
+  if (payload.participant_id) body.participant_id = payload.participant_id
+  if (payload.bib_id) body.bib_id = payload.bib_id
   if (payload.race_id) body.race_id = payload.race_id
   if (payload.logical_uuid) body.logical_uuid = payload.logical_uuid
   const res = await fetch(`${bridgeLocalUrl}/write-tag`, {
@@ -257,24 +285,24 @@ async function writeTagLocal(
         : `Local bridge write-tag failed (${res.status})`,
     )
   }
-  const data = (await res.json()) as Participant
-  return { data } as AxiosResponse<Participant>
+  const data = (await res.json()) as Participant | BibTagWriteResponse
+  return { data } as AxiosResponse<Participant | BibTagWriteResponse>
 }
 
 export const rfidApi = {
   scan: (uid: string) =>
     apiClient.get<Participant>(`/api/rfid/scan/${encodeURIComponent(uid)}`),
   writeTag: async (payload: WriteTagPayload) => {
-    if (shouldRouteWriteTagLocal()) {
+    if (shouldRouteWriteTagLocal() && localBridgeAcceptsWriteTag(payload)) {
       return writeTagLocal(payload)
     }
     if (isBridgeSnapshotUnknown()) {
       await refreshBridgeSnapshotForWriteTag()
     }
-    if (shouldRouteWriteTagLocal()) {
+    if (shouldRouteWriteTagLocal() && localBridgeAcceptsWriteTag(payload)) {
       return writeTagLocal(payload)
     }
-    return apiClient.post<Participant>('/api/rfid/write-tag', payload)
+    return apiClient.post<Participant | BibTagWriteResponse>('/api/rfid/write-tag', payload)
   },
   manualEntry: (payload: ManualTimingEntryPayload) =>
     apiClient.post<TimingRecord>('/api/rfid/manual-entry', payload),

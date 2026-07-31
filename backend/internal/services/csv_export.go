@@ -373,7 +373,6 @@ func (s *CSVExportService) BuildCSV(eventID uuid.UUID) ([]byte, error) {
 		return nil, err
 	}
 
-	// Bibs section (Task 7 owns full round-trip hardening / contract tests).
 	bibRows := make([][]string, 0, len(bibs))
 	for _, b := range bibs {
 		bibRows = append(bibRows, []string{
@@ -568,14 +567,24 @@ func (s *CSVExportService) ImportCSV(eventID uuid.UUID, data []byte) (*CSVImport
 				return err
 			}
 		}
+		// Bibs before tags (and before EnsureBib for participants) so exported IDs win.
+		if len(bibs) > 0 {
+			if err := tx.Create(&bibs).Error; err != nil {
+				return err
+			}
+		}
 		if len(participants) > 0 {
 			if err := tx.Create(&participants).Error; err != nil {
 				return err
 			}
-		}
-		if len(bibs) > 0 {
-			if err := tx.Create(&bibs).Error; err != nil {
-				return err
+			bibSvc := NewBibService(tx)
+			for _, p := range participants {
+				if strings.TrimSpace(p.BibNumber) == "" {
+					continue
+				}
+				if _, err := bibSvc.EnsureBib(eventID, p.BibNumber); err != nil {
+					return err
+				}
 			}
 		}
 		if len(tags) > 0 {
@@ -936,7 +945,7 @@ func parseTagRows(rows []map[string]string) ([]models.RFIDTagAssociation, error)
 		}
 		bibIDRaw := strings.TrimSpace(row["bib_id"])
 		if bibIDRaw == "" {
-			// Legacy CSV column until Task 6 rewrites export/import fully.
+			// Legacy snapshots used participant_id; prefer bib_id.
 			bibIDRaw = strings.TrimSpace(row["participant_id"])
 		}
 		bibID, err := parseUUID(bibIDRaw)

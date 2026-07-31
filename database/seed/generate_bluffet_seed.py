@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Emit All You Can East Bluffet 2026 seed SQL (3 races, 100 racers, demo tags).
 
-Requires migration 04-rfid-scanner.sql columns/tables:
+Requires migration 04-rfid-scanner.sql + 06-bib-tag-association.sql columns/tables:
   - participants.category_id
   - participants.rfid_tag_uid
-  - rfid_tag_associations (id, participant_id, tag_uid, created_at, active)
+  - bibs (event-scoped, unique bib_number)
+  - rfid_tag_associations (id, bib_id, tag_uid, created_at, active)
+
+Bib numbers are unique across the event (disjoint ranges per race guidance):
+  12 Hour: 1–N, 6 Hour: 200+, Kids: 400+.
 
 UUIDs are deterministic (fixed event/race IDs + uuid5 children) so e2e fixtures
 in frontend/e2e/fixtures/rfid.ts stay stable across regenerations.
@@ -27,13 +31,20 @@ RACE_12H_ID = "17da3ba1-2e09-4eb1-aeb3-d9dd5b6a394e"
 RACE_6H_ID = "209769a1-f723-4f70-ae90-466a46338684"
 RACE_KIDS_ID = "0e45ee85-800c-4e1f-a95b-4b92462e790a"
 
-# Namespace for uuid5 child IDs (checkpoints, categories, participants, tags)
+# Namespace for uuid5 child IDs (checkpoints, categories, participants, tags, bibs)
 _NS = uuid.UUID(EVENT_ID)
 
 # America/Detroit wall times on 2026-08-01 (EDT = UTC-4)
 START_12H = "2026-08-01 08:00:00-04"
 START_6H = "2026-08-01 08:00:00-04"
 START_KIDS = "2026-08-01 15:00:00-04"
+
+# Event-unique bib bases (docs/seed guidance: disjoint ranges per race)
+BIB_BASE = {
+    "12-hour": 1,
+    "6-hour": 200,
+    "90-minute-kids": 400,
+}
 
 FIRST_NAMES = [
     "Alex", "Jordan", "Sam", "Casey", "Riley", "Morgan", "Taylor", "Quinn",
@@ -126,12 +137,14 @@ def main() -> None:
     checkpoint_rows: list[str] = []
     category_rows: list[str] = []
     team_rows: list[str] = []
-    # (participant_id, race_id, bib, first, last, gender, age, tag_uid, category_id, team_id|None)
-    participants: list[tuple[str, str, str, str, str, str, int, str, str, str | None]] = []
+    # (participant_id, race_id, bib, first, last, gender, age, tag_uid, category_id, team_id|None, bib_id)
+    participants: list[tuple[str, str, str, str, str, str, int, str, str, str | None, str]] = []
+    bib_rows: list[str] = []
     association_rows: list[str] = []
 
     name_idx = 0
     all_tag_uids: list[str] = []
+    all_bib_numbers: list[str] = []
     # 12 Hour only: 4 teams × 4 members (East Bluff A–D)
     TEAM_NAMES = ("East Bluff A", "East Bluff B", "East Bluff C", "East Bluff D")
     team_ids_12h: list[str] = []
@@ -168,28 +181,35 @@ def main() -> None:
                 )
 
         count = race["participant_count"]
+        bib_base = BIB_BASE[race_key]
         for i in range(count):
             cat_id, gender = cat_ids[i % len(cat_ids)]
             pid = stable_uuid(f"participant:{race_key}:{i + 1}")
-            bib = str(i + 1)
+            bib = str(bib_base + i)
+            bib_id = stable_uuid(f"bib:{bib}")
             first = FIRST_NAMES[name_idx % len(FIRST_NAMES)]
             last = LAST_NAMES[(name_idx * 3) % len(LAST_NAMES)]
             name_idx += 1
             age = 10 + (i % 8) if race_key == "90-minute-kids" else 25 + (i % 30)
             tag_uid = stable_uuid(f"tag:{race_key}:{i + 1}")
             all_tag_uids.append(tag_uid)
+            all_bib_numbers.append(bib)
             team_id: str | None = None
             if race_key == "12-hour" and i < 16 and team_ids_12h:
                 team_id = team_ids_12h[i // 4]
             participants.append(
-                (pid, race_id, bib, first, last, gender, age, tag_uid, cat_id, team_id)
+                (pid, race_id, bib, first, last, gender, age, tag_uid, cat_id, team_id, bib_id)
+            )
+            bib_rows.append(
+                f"    ('{bib_id}', '{event_id}', {sql_str(bib)})"
             )
             association_rows.append(
-                f"    ('{stable_uuid(f'tag-assoc:{tag_uid}')}', '{pid}', "
+                f"    ('{stable_uuid(f'tag-assoc:{tag_uid}')}', '{bib_id}', "
                 f"{sql_str(tag_uid)}, true)"
             )
 
     assert len(participants) == 100, f"expected 100 participants, got {len(participants)}"
+    assert len(set(all_bib_numbers)) == len(all_bib_numbers), "bib numbers must be unique in event"
     uuid_re = re.compile(
         r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     )
@@ -212,6 +232,11 @@ def main() -> None:
         "SELECT p.id FROM participants p\n"
         f"    WHERE p.race_id IN (\n    {race_subq}\n    )"
     )
+    bib_subq = (
+        "SELECT b.id FROM bibs b\n"
+        "    JOIN events e ON b.event_id = e.id\n"
+        f"    WHERE {event_filter}"
+    )
 
     lines = [
         "-- All You Can East Bluffet 2026 (2026-08-01, East Bluff Bike Park, Copper Harbor, MI)",
@@ -222,8 +247,9 @@ def main() -> None:
         f"-- 3 races: {names[0]} ({durs[0]}m, 08:00), {names[1]} ({durs[1]}m, 08:00), "
         f"{names[2]} ({durs[2]}m, 15:00) America/Detroit",
         "-- Categories: Intermediate/Advanced × Men/Women (12h/6h); Men/Women (kids)",
-        "-- 100 participants with category_id + deterministic tag UUIDs (uuid5)",
-        "-- Requires: database/migrations/04-rfid-scanner.sql (category_id, rfid_tag_associations)",
+        "-- 100 participants; event-unique bibs (12h: 1–N, 6h: 200+, kids: 400+)",
+        "-- bibs + rfid_tag_associations.bib_id (migration 06); deterministic tag UUIDs (uuid5)",
+        "-- Requires: migrations 04-rfid-scanner.sql + 06-bib-tag-association.sql",
         "",
         "BEGIN;",
         "",
@@ -242,11 +268,15 @@ def main() -> None:
         "DELETE FROM timing_records WHERE participant_id IN (",
         f"    {participant_subq}",
         ");",
-        "DELETE FROM rfid_tag_associations WHERE participant_id IN (",
-        f"    {participant_subq}",
+        "DELETE FROM rfid_tag_associations WHERE bib_id IN (",
+        f"    {bib_subq}",
         ");",
         "DELETE FROM participants WHERE race_id IN (",
         f"    {race_subq}",
+        ");",
+        "DELETE FROM bibs WHERE event_id IN (",
+        "    SELECT e.id FROM events e",
+        f"    WHERE {event_filter}",
         ");",
         "DELETE FROM teams WHERE race_id IN (",
         f"    {race_subq}",
@@ -318,7 +348,16 @@ def main() -> None:
         lines.append(",\n".join(team_rows) + ";")
         lines.append("")
     lines.append(
-        "-- participants.category_id + rfid_tag_uid (migration 04); team_id (migration 05); associations"
+        "-- bibs (migration 06): event-scoped inventory; associations point at bib_id"
+    )
+    lines.append(
+        "INSERT INTO bibs (id, event_id, bib_number)"
+    )
+    lines.append("VALUES")
+    lines.append(",\n".join(bib_rows) + ";")
+    lines.append("")
+    lines.append(
+        "-- participants.category_id + rfid_tag_uid (migration 04); team_id (migration 05)"
     )
     lines.append(
         "INSERT INTO participants (id, race_id, bib_number, first_name, last_name, gender, age, location, rfid_tag_uid, status, category_id, team_id)"
@@ -326,7 +365,7 @@ def main() -> None:
     lines.append("VALUES")
 
     participant_rows = []
-    for pid, race_id, bib, first, last, gender, age, tag_uid, cat_id, team_id in participants:
+    for pid, race_id, bib, first, last, gender, age, tag_uid, cat_id, team_id, _bib_id in participants:
         participant_rows.append(
             "    (\n"
             f"        '{pid}',\n"
@@ -346,7 +385,7 @@ def main() -> None:
     lines.append(",\n".join(participant_rows) + ";")
     lines.append("")
     lines.append(
-        "INSERT INTO rfid_tag_associations (id, participant_id, tag_uid, active)"
+        "INSERT INTO rfid_tag_associations (id, bib_id, tag_uid, active)"
     )
     lines.append("VALUES")
     lines.append(",\n".join(association_rows) + ";")
@@ -358,7 +397,8 @@ def main() -> None:
     print(
         f"Wrote {output_sql} "
         f"({len(races)} races, {len(category_rows)} categories, {len(team_rows)} teams, "
-        f"{len(participants)} participants, {len(association_rows)} tag associations)"
+        f"{len(bib_rows)} bibs, {len(participants)} participants, "
+        f"{len(association_rows)} tag associations)"
     )
 
 

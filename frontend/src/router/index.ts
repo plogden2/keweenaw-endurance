@@ -63,6 +63,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/EventTaps.vue'),
   },
   {
+    path: '/events/:eventId/bibs',
+    name: 'event-bibs',
+    component: () => import('@/views/EventBibs.vue'),
+  },
+  {
     path: '/timing/live/:raceId',
     name: 'live-timing',
     component: () => import('@/views/LiveTimingRedirect.vue'),
