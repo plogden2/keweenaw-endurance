@@ -58,16 +58,15 @@ export function isBridgeSnapshotUnknown(snapshot: BridgeStatusSnapshot = lastBri
 }
 
 export function shouldRouteWriteTagLocal(snapshot: BridgeStatusSnapshot = lastBridgeSnapshot): boolean {
-  // Prefer the on-laptop bridge whenever it is reachable — writes need COM/USB
-  // and hosted 500s hide the Proxmark error text.
-  if (snapshot.local?.connected) {
+  // Prefer the on-laptop bridge whenever /status answered — writes need COM/USB
+  // and hosted errors often hide Proxmark detail behind a generic 500.
+  if (snapshot.local != null) {
     return true
   }
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     return true
   }
-  const { hosted, local } = snapshot
-  if (local?.mode === 'offline') return true
+  const { hosted } = snapshot
   if (hosted && !hosted.connected && hosted.pending_count > 0) return true
   return false
 }

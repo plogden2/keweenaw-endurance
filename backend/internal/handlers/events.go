@@ -198,7 +198,9 @@ func respondServiceError(c *gin.Context, err error) {
 	case errors.Is(err, services.ErrKaraokeSourceStillVoided):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, services.ErrHardwareUnavailable),
-		errors.Is(err, services.ErrBridgeUnavailable):
+		errors.Is(err, services.ErrBridgeUnavailable),
+		errors.Is(err, services.ErrBridgeWriteTimeout),
+		errors.Is(err, services.ErrBridgeWriteFailed):
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})

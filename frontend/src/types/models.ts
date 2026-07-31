@@ -200,6 +200,7 @@ export interface BridgeStatusResponse {
 
 export interface LocalBridgeStatusResponse extends BridgeStatusResponse {
   mode?: 'offline' | 'syncing' | 'online_synced' | string
+  running?: boolean
 }
 
 export interface ManualTimingEntryPayload {

@@ -18,6 +18,7 @@ const (
 var (
 	ErrBridgeUnavailable  = errors.New("bridge unavailable")
 	ErrBridgeWriteTimeout = errors.New("bridge write timed out")
+	ErrBridgeWriteFailed  = errors.New("bridge write failed")
 )
 
 // BridgeConn is the subset of websocket.Conn used by BridgeHub.
@@ -219,9 +220,9 @@ func (h *BridgeHub) RequestWrite(deviceID, logicalUUID string, timeout time.Dura
 			return nil
 		}
 		if res.errMsg != "" {
-			return fmt.Errorf("bridge write failed: %s", res.errMsg)
+			return fmt.Errorf("%w: %s", ErrBridgeWriteFailed, res.errMsg)
 		}
-		return fmt.Errorf("bridge write failed")
+		return ErrBridgeWriteFailed
 	case <-time.After(timeout):
 		h.cancelPending(deviceID, requestID)
 		return ErrBridgeWriteTimeout
