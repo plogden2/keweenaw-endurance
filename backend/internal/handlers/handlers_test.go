@@ -98,6 +98,9 @@ func setupHandlerTest(t *testing.T) (*gin.Engine, *services.Services) {
 		api.GET("/events/:id/live", h.GetEventLive)
 		api.GET("/events/:id/live/stream", h.StreamEventLive)
 		api.POST("/events/:id/scans", h.ProcessEventScan)
+		api.GET("/events/:id/taps", h.ListEventTaps)
+		api.GET("/events/:id/participants", h.ListEventParticipants)
+		api.POST("/events/:id/taps", append(timerWrite, h.CreateEventTap)...)
 		api.GET("/events/:id/live-csv", append(adminOnly, h.GetLiveCSV)...)
 		api.GET("/events/:id/live-csv/status", append(adminOnly, h.GetLiveCSVStatus)...)
 		api.POST("/events/:id/import.csv", append(adminOnly, h.ImportCSV)...)
@@ -1253,4 +1256,102 @@ func TestRFIDStream_WebSocketReceivesInject(t *testing.T) {
 	require.NoError(t, conn.ReadJSON(&msg))
 	assert.Equal(t, "tag_read", msg["type"])
 	assert.Equal(t, "WS-TAG-1", msg["tag_uid"])
+}
+
+func TestEventTaps_ListAndParticipantsArePaginated(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Event taps", EventDate: time.Now().AddDate(0, 0, 1),
+	})
+	require.NoError(t, err)
+	race, err := svc.Races.CreateRace(&models.Race{
+		EventID: event.ID, Name: "12 Hour", RaceType: "lap_based", DurationMinutes: 720,
+	})
+	require.NoError(t, err)
+	_, err = svc.Checkpoints.CreateCheckpoint(&models.TimingCheckpoint{
+		RaceID: race.ID, Name: "Finish", CheckpointType: "finish",
+	})
+	require.NoError(t, err)
+	ada, err := svc.Participants.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "101", FirstName: "Ada", LastName: "Rider",
+	})
+	require.NoError(t, err)
+	ben, err := svc.Participants.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "102", FirstName: "Ben", LastName: "Rider",
+	})
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	_, err = svc.Timing.CreateEventTap(services.CreateEventTapInput{
+		EventID: event.ID.UUID(), ParticipantID: ada.ID.UUID(), Timestamp: &now,
+	})
+	require.NoError(t, err)
+	older := now.Add(-time.Minute)
+	_, err = svc.Timing.CreateEventTap(services.CreateEventTapInput{
+		EventID: event.ID.UUID(), ParticipantID: ben.ID.UUID(), Timestamp: &older,
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/events/"+event.ID.Short()+"/taps?page=1&limit=1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	var taps map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &taps))
+	assert.Equal(t, float64(2), taps["total"])
+	assert.Equal(t, float64(1), taps["page"])
+	assert.Equal(t, float64(1), taps["limit"])
+	assert.Len(t, taps["data"], 1)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/events/"+event.ID.Short()+"/participants?page=1&limit=1&q=ada", nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	var participants map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &participants))
+	assert.Equal(t, float64(1), participants["total"])
+	assert.Len(t, participants["data"], 1)
+}
+
+func TestEventTaps_CreateRequiresTimerJWTAndSupportsKaraoke(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+	eventID, _ := seedScanHandlerFixture(t, svc, "active")
+	var participant models.Participant
+	require.NoError(t, svc.DB.First(&participant).Error)
+
+	payload, err := json.Marshal(map[string]interface{}{
+		"participant_id": participant.ID.Short(),
+		"karaoke_bonus":  false,
+	})
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/api/events/"+eventID+"/taps", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	assert.True(t, w.Code == http.StatusUnauthorized || w.Code == http.StatusForbidden)
+
+	req = httptest.NewRequest(http.MethodPost, "/api/events/"+eventID+"/taps", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", timerAuthHeader(t, svc))
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+	var lap map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &lap))
+	assert.Equal(t, "rfid_lap", lap["record_type"])
+
+	payload, err = json.Marshal(map[string]interface{}{
+		"participant_id": participant.ID.Short(),
+		"karaoke_bonus":  true,
+	})
+	require.NoError(t, err)
+	req = httptest.NewRequest(http.MethodPost, "/api/events/"+eventID+"/taps", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", pinBearerToken(t, router))
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusCreated, w.Code)
+	var bonus map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &bonus))
+	assert.Equal(t, "karaoke_bonus", bonus["record_type"])
+	assert.NotContains(t, bonus, "source_lap_id")
 }
