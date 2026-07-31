@@ -13,9 +13,8 @@ services:
       # Baking http://localhost:8080 breaks when the app is opened as http://127.0.0.1:3000.
       - VITE_PROXY_TARGET=http://backend:8080
       - CHOKIDAR_USEPOLLING=true
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+    # Do not bind-mount ./frontend over /app — that replaces image node_modules and
+    # can exit the Vite container in CI. Rebuild the image after frontend changes.
     depends_on:
       - backend
     networks:
