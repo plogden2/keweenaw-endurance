@@ -25,7 +25,7 @@ Short setup and ops guide for the finish-line laptop against live production.
 | **Export Excel** | PIN-unlocked live race flow toolbar |
 | **Add racer** / **Program tag** / **Write tag** | On the Racers page for that race |
 | **Save & arm reader** | Station page |
-| **Record time** | Event Taps page (**Add tap**) · or reader GUI |
+| **Record time** | Event Taps page (bib + **Enter**) · or reader GUI |
 | **Online · Synced** chip | Live race flow page (when PIN unlocked) |
 
 ---
