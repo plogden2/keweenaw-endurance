@@ -36,12 +36,17 @@
 ### SECTION `participants`
 | Column | Notes |
 |--------|--------|
-| id, race_id, bib_number, first_name, last_name, gender, status, category_id | |
+| id, race_id, bib_number, first_name, last_name, gender, status, category_id, team_id | |
+
+### SECTION `bibs`
+| Column | Notes |
+|--------|--------|
+| id, event_id, bib_number, created_at | Event-scoped bib inventory (including unassigned / pre-programmed bibs) |
 
 ### SECTION `tags`
 | Column | Notes |
 |--------|--------|
-| id, participant_id, tag_uid, created_at | |
+| id, bib_id, tag_uid, created_at | Tag → bib link (not participant). Import creates bibs before tags; participant rows still carry `bib_number` and EnsureBib on restore. |
 
 ### SECTION `checkpoints`
 | Column | Notes |

@@ -89,12 +89,79 @@ func TestCSVExport_WriteLiveSnapshotContainsSections(t *testing.T) {
 	assert.Contains(t, text, "#SECTION,categories")
 	assert.Contains(t, text, "#SECTION,teams")
 	assert.Contains(t, text, "#SECTION,participants")
+	assert.Contains(t, text, "#SECTION,bibs")
+	assert.Contains(t, text, "id,event_id,bib_number,created_at")
 	assert.Contains(t, text, "#SECTION,tags")
+	assert.Contains(t, text, "id,bib_id,tag_uid,created_at")
+	assert.NotContains(t, text, "id,participant_id,tag_uid,created_at")
 	assert.Contains(t, text, "#SECTION,checkpoints")
 	assert.Contains(t, text, "#SECTION,timing_records")
 	assert.Contains(t, text, "DEMO-TAG-0001")
 	assert.Contains(t, text, "Ada")
 	assert.Contains(t, text, event.ID.String())
+}
+
+func TestCSVExport_RoundTripPreservesBibsAndTagBibLinks(t *testing.T) {
+	db := setupServiceTestDB(t)
+	dir := t.TempDir()
+	svc := NewCSVExportService(db, dir, "")
+	bibSvc := NewBibService(db)
+	rfidSvc := NewRFIDService(db, rfid.NewMockReader())
+
+	event := createTestEvent(t, db)
+	race := createTestRaceForEvent(t, db, event)
+
+	assignedBib, err := bibSvc.EnsureBib(event.ID.UUID(), "7")
+	require.NoError(t, err)
+	unassignedBib, err := bibSvc.EnsureBib(event.ID.UUID(), "99")
+	require.NoError(t, err)
+
+	part := createTestParticipant(t, db, race.ID, "7")
+	_, err = rfidSvc.AssociateTagToBib(assignedBib.ID.UUID(), "TAG-ASSIGNED")
+	require.NoError(t, err)
+	_, err = rfidSvc.AssociateTagToBib(unassignedBib.ID.UUID(), "TAG-UNASSIGNED")
+	require.NoError(t, err)
+
+	csvBytes, err := svc.BuildCSV(event.ID.UUID())
+	require.NoError(t, err)
+	text := string(csvBytes)
+	assert.Contains(t, text, "#SECTION,bibs")
+	assert.Contains(t, text, assignedBib.ID.String())
+	assert.Contains(t, text, unassignedBib.ID.String())
+	assert.Contains(t, text, "id,bib_id,tag_uid,created_at")
+	assert.Contains(t, text, assignedBib.ID.String()+",TAG-ASSIGNED")
+	assert.Contains(t, text, unassignedBib.ID.String()+",TAG-UNASSIGNED")
+	assert.NotContains(t, text, "id,participant_id,tag_uid")
+
+	summary, err := svc.ImportCSV(event.ID.UUID(), csvBytes)
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.Racers)
+	assert.Equal(t, 2, summary.TagAssociations)
+
+	var bibs []models.Bib
+	require.NoError(t, db.Where("event_id = ?", event.ID).Order("bib_number ASC").Find(&bibs).Error)
+	require.Len(t, bibs, 2)
+	assert.Equal(t, assignedBib.ID, bibs[0].ID)
+	assert.Equal(t, "7", bibs[0].BibNumber)
+	assert.Equal(t, unassignedBib.ID, bibs[1].ID)
+	assert.Equal(t, "99", bibs[1].BibNumber)
+
+	var tags []models.RFIDTagAssociation
+	require.NoError(t, db.Order("tag_uid ASC").Find(&tags).Error)
+	require.Len(t, tags, 2)
+	assert.Equal(t, "TAG-ASSIGNED", tags[0].TagUID)
+	assert.Equal(t, assignedBib.ID, tags[0].BibID)
+	assert.Equal(t, "TAG-UNASSIGNED", tags[1].TagUID)
+	assert.Equal(t, unassignedBib.ID, tags[1].BibID)
+
+	var restoredPart models.Participant
+	require.NoError(t, db.First(&restoredPart, "id = ?", part.ID).Error)
+	assert.Equal(t, "7", restoredPart.BibNumber)
+
+	// Participant bib_number still EnsureBibs after import (idempotent on existing row).
+	ensured, err := bibSvc.EnsureBib(event.ID.UUID(), "7")
+	require.NoError(t, err)
+	assert.Equal(t, assignedBib.ID, ensured.ID)
 }
 
 func TestCSVExport_LiveSnapshotUpdatesOnRefresh(t *testing.T) {
