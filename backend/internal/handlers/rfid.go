@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/keweenaw-endurance/backend/internal/services"
 )
@@ -128,11 +130,18 @@ func (h *Handlers) ManualTimingEntry(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race_id"})
 		return
 	}
-	checkpointID, err := h.resolveCheckpointID(req.CheckpointID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid checkpoint_id"})
-		return
+
+	// checkpoint_id is optional: when omitted, the service autofills the
+	// race's finish checkpoint for Bluffet races (and errors for others).
+	var checkpointID uuid.UUID
+	if strings.TrimSpace(req.CheckpointID) != "" {
+		checkpointID, err = h.resolveCheckpointID(req.CheckpointID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid checkpoint_id"})
+			return
+		}
 	}
+
 	timestamp, err := parseTimestamp(req.Timestamp)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid timestamp format, use RFC3339"})

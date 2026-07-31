@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/config"
+	"github.com/keweenaw-endurance/backend/internal/eventpolicy"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
 	"github.com/keweenaw-endurance/backend/internal/uuidutil"
@@ -251,11 +252,17 @@ func (s *RFIDService) ManualEntry(input *ManualEntryInput) (*models.TimingRecord
 	if input.RaceID == uuid.Nil {
 		return nil, fmt.Errorf("%w: race_id is required", ErrInvalidRFIDInput)
 	}
-	if input.CheckpointID == uuid.Nil {
-		return nil, fmt.Errorf("%w: checkpoint_id is required", ErrInvalidRFIDInput)
-	}
 	if input.Timestamp.IsZero() {
 		return nil, fmt.Errorf("%w: timestamp is required", ErrInvalidRFIDInput)
+	}
+
+	checkpointID := input.CheckpointID
+	if checkpointID == uuid.Nil {
+		resolved, err := s.resolveBluffetFinishCheckpoint(input.RaceID)
+		if err != nil {
+			return nil, err
+		}
+		checkpointID = resolved
 	}
 
 	bib := strings.TrimSpace(input.BibNumber)
@@ -286,13 +293,40 @@ func (s *RFIDService) ManualEntry(input *ManualEntryInput) (*models.TimingRecord
 
 	record := &models.TimingRecord{
 		ParticipantID:  participant.ID,
-		CheckpointID:   uuidutil.NewPublicUUID(input.CheckpointID),
+		CheckpointID:   uuidutil.NewPublicUUID(checkpointID),
 		Timestamp:      input.Timestamp,
 		LocalTimestamp: input.Timestamp,
 		DeviceID:       input.DeviceID,
 		SyncStatus:     input.SyncStatus,
 	}
 	return s.timing.CreateRecord(record)
+}
+
+// resolveBluffetFinishCheckpoint autofills the race's finish ("Lap Check")
+// checkpoint when the manual entry omitted checkpoint_id and the race
+// belongs to the Bluffet event (single finish-only station, no checkpoint
+// picker). Non-Bluffet races still require an explicit checkpoint_id.
+func (s *RFIDService) resolveBluffetFinishCheckpoint(raceID uuid.UUID) (uuid.UUID, error) {
+	var race models.Race
+	if err := s.db.First(&race, "id = ?", raceID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return uuid.Nil, ErrRaceNotFound
+		}
+		return uuid.Nil, err
+	}
+	if !eventpolicy.IsBluffetEventID(race.EventID.String()) {
+		return uuid.Nil, fmt.Errorf("%w: checkpoint_id is required", ErrInvalidRFIDInput)
+	}
+
+	var finish models.TimingCheckpoint
+	err := s.db.Where("race_id = ? AND checkpoint_type = ?", raceID, "finish").First(&finish).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return uuid.Nil, fmt.Errorf("%w: no finish checkpoint for race", ErrInvalidRFIDInput)
+	}
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return finish.ID.UUID(), nil
 }
 
 func (s *RFIDService) GetSyncStatus() (*SyncStatusResponse, error) {

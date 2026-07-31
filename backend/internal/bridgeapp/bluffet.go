@@ -9,13 +9,18 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/keweenaw-endurance/backend/internal/eventpolicy"
 )
 
 // Canonical All You Can East Bluffet 2026 IDs (seed + production short forms).
+// Aliased from eventpolicy (the leaf package) so existing callers of these
+// constants keep working without an import cycle (eventpolicy cannot import
+// bridgeapp or services).
 const (
-	BluffetEventIDFull = "1441674d-a011-471a-a601-722b88b117f5"
-	BluffetEventIDShort = "b117f5"
-	BluffetEventName   = "All You Can East Bluffet"
+	BluffetEventIDFull  = eventpolicy.BluffetEventIDFull
+	BluffetEventIDShort = eventpolicy.BluffetEventIDShort
+	BluffetEventName    = "All You Can East Bluffet"
 	DefaultOrganizerPIN = "1738"
 )
 

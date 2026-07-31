@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/keweenaw-endurance/backend/internal/eventpolicy"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 	"gorm.io/gorm"
@@ -127,6 +128,11 @@ func (s *ScanService) ProcessScan(eventID uuid.UUID, tagUID, deviceID string, lo
 	mode := "finish"
 	if station != nil && station.Mode != "" {
 		mode = station.Mode
+	}
+	// Bluffet is finish-only mid-event safety: an already-armed checkpoint
+	// station must not keep mis-scoring, even if the DB still says checkpoint.
+	if eventpolicy.IsBluffetEventID(eventID.String()) {
+		mode = "finish"
 	}
 
 	if mode == "checkpoint" {

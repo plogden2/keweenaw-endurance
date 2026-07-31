@@ -147,8 +147,11 @@ type injectRFIDTagRequest struct {
 }
 
 type manualTimingEntryRequest struct {
-	RaceID       string `json:"race_id" binding:"required"`
-	CheckpointID string `json:"checkpoint_id" binding:"required"`
+	RaceID string `json:"race_id" binding:"required"`
+	// CheckpointID is optional: Bluffet races autofill their finish
+	// checkpoint when omitted (see RFIDService.ManualEntry). Non-Bluffet
+	// races still require it, enforced in the service layer.
+	CheckpointID string `json:"checkpoint_id"`
 	BibNumber    string `json:"bib_number"`
 	RFIDTagUID   string `json:"rfid_tag_uid"`
 	Timestamp    string `json:"timestamp" binding:"required"`

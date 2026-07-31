@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/keweenaw-endurance/backend/internal/eventpolicy"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 	"gorm.io/gorm"
@@ -70,6 +71,9 @@ func (s *StationService) PutCurrent(input *StationConfigInput) (*models.ReaderSt
 	}
 	if mode != "finish" && mode != "checkpoint" {
 		return nil, fmt.Errorf("%w: mode must be finish or checkpoint", ErrInvalidStationInput)
+	}
+	if mode == "checkpoint" && eventpolicy.IsBluffetEventID(event.ID.String()) {
+		return nil, fmt.Errorf("%w: All You Can East Bluffet supports finish station only", ErrInvalidStationInput)
 	}
 	if mode == "checkpoint" && (input.CheckpointID == nil || *input.CheckpointID == uuid.Nil) {
 		return nil, fmt.Errorf("%w: checkpoint_id is required when mode is checkpoint", ErrInvalidStationInput)

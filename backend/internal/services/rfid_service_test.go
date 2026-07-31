@@ -8,11 +8,38 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/config"
+	"github.com/keweenaw-endurance/backend/internal/eventpolicy"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
+
+// createBluffetRace creates a race under an event whose ID is the well-known
+// Bluffet event UUID, so eventpolicy.IsBluffetEventID(race.EventID) matches.
+func createBluffetRace(t *testing.T, db *gorm.DB) *models.Race {
+	t.Helper()
+	bluffetID, err := uuid.Parse(eventpolicy.BluffetEventIDFull)
+	require.NoError(t, err)
+	event := &models.Event{
+		ID:        uuidutil.NewPublicUUID(bluffetID),
+		Name:      "All You Can East Bluffet",
+		EventDate: time.Now().AddDate(0, 0, 1),
+		Status:    "upcoming",
+	}
+	require.NoError(t, db.Create(event).Error)
+
+	race, err := NewRaceService(db).CreateRace(&models.Race{
+		EventID:         event.ID,
+		Name:            "12 Hour",
+		RaceType:        "lap_based",
+		DurationMinutes: 720,
+	})
+	require.NoError(t, err)
+	return race
+}
 
 func TestRFIDService_LookupByUID(t *testing.T) {
 	db := setupServiceTestDB(t)
@@ -280,6 +307,98 @@ func TestRFIDService_ManualEntry_ByRFID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, participant.ID, record.ParticipantID)
 	assert.Equal(t, "pending_sync", record.SyncStatus)
+}
+
+func TestRFIDService_ManualEntry_AutofillsFinishCheckpointForBluffet(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createBluffetRace(t, db)
+	finish := createCheckpoint(t, db, race.ID, "Lap Check", "finish")
+
+	partSvc := NewParticipantService(db)
+	participant, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "12", FirstName: "Bluffet", LastName: "Racer",
+	})
+	require.NoError(t, err)
+
+	svc := NewRFIDService(db, rfid.NewMockReader())
+	now := time.Now().UTC().Truncate(time.Second)
+
+	record, err := svc.ManualEntry(&ManualEntryInput{
+		RaceID:    race.ID.UUID(),
+		BibNumber: "12",
+		Timestamp: now,
+		// CheckpointID intentionally omitted (uuid.Nil).
+	})
+	require.NoError(t, err)
+	assert.Equal(t, participant.ID, record.ParticipantID)
+	assert.Equal(t, finish.ID, record.CheckpointID)
+}
+
+func TestRFIDService_ManualEntry_BluffetMissingFinishCheckpointErrors(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createBluffetRace(t, db)
+	// No finish checkpoint created for this race.
+
+	partSvc := NewParticipantService(db)
+	_, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "13", FirstName: "No", LastName: "Finish",
+	})
+	require.NoError(t, err)
+
+	svc := NewRFIDService(db, rfid.NewMockReader())
+	_, err = svc.ManualEntry(&ManualEntryInput{
+		RaceID:    race.ID.UUID(),
+		BibNumber: "13",
+		Timestamp: time.Now().UTC(),
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidRFIDInput)
+	assert.Contains(t, err.Error(), "no finish checkpoint")
+}
+
+func TestRFIDService_ManualEntry_NonBluffetRequiresCheckpointID(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+
+	partSvc := NewParticipantService(db)
+	_, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "14", FirstName: "Needs", LastName: "Checkpoint",
+	})
+	require.NoError(t, err)
+
+	svc := NewRFIDService(db, rfid.NewMockReader())
+	_, err = svc.ManualEntry(&ManualEntryInput{
+		RaceID:    race.ID.UUID(),
+		BibNumber: "14",
+		Timestamp: time.Now().UTC(),
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidRFIDInput)
+	assert.Contains(t, err.Error(), "checkpoint_id is required")
+}
+
+func TestRFIDService_ManualEntry_NonEmptyInvalidCheckpointIsNotAutofilled(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createBluffetRace(t, db)
+	createCheckpoint(t, db, race.ID, "Lap Check", "finish")
+
+	partSvc := NewParticipantService(db)
+	_, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "15", FirstName: "Bad", LastName: "Checkpoint",
+	})
+	require.NoError(t, err)
+
+	svc := NewRFIDService(db, rfid.NewMockReader())
+	bogus := uuid.New()
+	_, err = svc.ManualEntry(&ManualEntryInput{
+		RaceID:       race.ID.UUID(),
+		CheckpointID: bogus,
+		BibNumber:    "15",
+		Timestamp:    time.Now().UTC(),
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidTimingInput)
+	assert.Contains(t, err.Error(), "checkpoint not found")
 }
 
 func TestRFIDService_ManualEntry_Validation(t *testing.T) {
