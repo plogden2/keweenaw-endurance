@@ -78,9 +78,9 @@ describe('App theme class', () => {
     expect(pin.attributes('href')).toBe('/pin')
   })
 
-  it('exposes Station and CSV recovery in the footer', async () => {
+  it('exposes CSV recovery in the footer (Station lives under PIN management)', async () => {
     const wrapper = await mountApp()
-    expect(wrapper.get('[data-testid="footer-station"]').attributes('href')).toBe('/station')
+    expect(wrapper.find('[data-testid="footer-station"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="footer-csv"]').attributes('href')).toMatch(/^\/csv/)
   })
 })

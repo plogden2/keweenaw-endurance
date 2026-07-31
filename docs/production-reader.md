@@ -84,7 +84,7 @@ Then in Chrome:
 
 1. Open https://www.keweenawendurance.com
 2. Top header → **PIN** → enter organizer PIN → **Unlock management**
-3. Top header → **Station** → event, **Finish station**, Device ID `laptop-finish-1` → **Save & arm reader**
+3. PIN page → **Station config** (Other management) → event, **Finish station**, Device ID `laptop-finish-1` → **Save & arm reader**
 4. Work the race from **Manage** / live race flow
 
 If Proxmark misses a finish: in the GUI, type the **bib** → **Record lap** (works offline too — queues and syncs later).

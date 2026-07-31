@@ -29,9 +29,6 @@
           <router-link class="footer-link" to="/pin" data-testid="footer-pin">
             {{ pinAuth.isAuthenticated ? 'PIN · Unlocked' : 'PIN' }}
           </router-link>
-          <router-link class="footer-link" to="/station" data-testid="footer-station">
-            Station
-          </router-link>
           <router-link
             class="footer-link"
             :to="csvPath"

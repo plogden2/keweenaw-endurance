@@ -16,9 +16,6 @@
       <div class="nav-links">
         <router-link to="/" class="nav-link">Home</router-link>
         <router-link to="/timing" class="nav-link">Timing</router-link>
-        <router-link to="/station" class="nav-link" data-testid="nav-station">
-          Station
-        </router-link>
         <router-link to="/pin" class="nav-link" data-testid="nav-pin">
           {{ pinAuth.isAuthenticated ? 'Manage' : 'PIN' }}
         </router-link>

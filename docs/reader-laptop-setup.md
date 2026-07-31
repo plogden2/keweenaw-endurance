@@ -40,7 +40,7 @@ Contents installed:
 4. **Save config** → **Test Proxmark** → **Start bridge**.
 5. Status: `ONLINE_SYNCED` / `online_synced`.
 
-Then in the browser: unlock PIN → **Station** → arm finish with the same Device ID.
+Then in the browser: unlock PIN → **Station config** → arm finish with the same Device ID.
 
 Missed finish: type **bib** in the GUI → **Record lap**.
 

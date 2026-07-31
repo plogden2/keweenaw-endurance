@@ -271,7 +271,13 @@
       <section class="panel">
         <h2>Other management</h2>
         <div class="row">
-          <router-link class="btn secondary" to="/station">Station config</router-link>
+          <router-link
+            class="btn secondary"
+            to="/station"
+            data-testid="mgmt-station-config"
+          >
+            Station config
+          </router-link>
           <router-link
             class="btn secondary"
             :to="managementEventId ? `/csv?eventId=${managementEventId}` : '/csv'"
