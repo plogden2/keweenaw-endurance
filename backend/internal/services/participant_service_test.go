@@ -162,6 +162,18 @@ func TestParticipantService_ListParticipantsByEvent(t *testing.T) {
 	require.Equal(t, int64(1), total)
 	require.Len(t, participants, 1)
 	assert.Equal(t, "Alex", participants[0].FirstName)
+
+	participants, total, err = svc.ListParticipantsByEvent(event.ID.UUID(), 1, 10, "jamie")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, participants, 1)
+	assert.Equal(t, "202", participants[0].BibNumber)
+
+	participants, total, err = svc.ListParticipantsByEvent(event.ID.UUID(), 1, 10, "rivera")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, participants, 1)
+	assert.Equal(t, "101", participants[0].BibNumber)
 }
 
 func TestParticipantService_SequentialBibDefault(t *testing.T) {
