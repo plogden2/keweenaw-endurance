@@ -103,6 +103,25 @@ describe('ScanPopup.vue', () => {
     expect(wrapper.find('[data-testid="scan-popup"]').exists()).toBe(false)
   })
 
+  it('shows unassigned bib toast with message and bib number', () => {
+    const wrapper = mount(ScanPopup, {
+      props: {
+        scan: {
+          result: 'unassigned_bib',
+          bib_number: '77',
+          message: 'Bib has no assigned racer',
+        },
+      },
+    })
+
+    const toast = wrapper.find('[data-testid="unassigned-bib-message"]')
+    expect(toast.exists()).toBe(true)
+    expect(toast.text()).toMatch(/unassigned bib/i)
+    expect(toast.text()).toContain('77')
+    expect(wrapper.find('[data-testid="scan-popup"]').exists()).toBe(false)
+    expect(playMock).not.toHaveBeenCalled()
+  })
+
   it('shows karaoke button when karaoke_available and recorded state after click', async () => {
     const wrapper = mount(ScanPopup, {
       props: { scan: lapScan({ karaoke_available: true }) },

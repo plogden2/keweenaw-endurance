@@ -314,6 +314,7 @@ export type ScanResultKind =
   | 'test_read'
   | 'cooldown'
   | 'unknown_tag'
+  | 'unassigned_bib'
   | 'out_of_order'
   | 'checkpoint_pass'
 
