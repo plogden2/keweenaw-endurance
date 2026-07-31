@@ -3,6 +3,7 @@
 package rfid
 
 import (
+	_ "embed"
 	"encoding/binary"
 	"math"
 	"sync"
@@ -15,6 +16,9 @@ const (
 	sndNoDefault = 0x0002
 	sndMemory    = 0x0004
 )
+
+//go:embed assets/tap-coin.wav
+var tapCoinWAV []byte
 
 var (
 	modWinmm       = syscall.NewLazyDLL("winmm.dll")
@@ -38,12 +42,12 @@ func defaultBeeper() Beeper {
 	return windowsBeeper{}
 }
 
-// PlayTapBeep plays the finish-line tap tone via the sound card (WAV).
+// PlayTapBeep plays the Mario coin tap tone via the sound card (embedded WAV).
 // kernel32.Beep / MessageBeep are often silent on modern Windows sound schemes.
 //
 // SND_ASYNC|SND_MEMORY is unreliable on Windows (often plays synchronously and
-// can delay the caller). Always synthesize once, then play from a goroutine so
-// the RFID path never waits on the audio stack.
+// can delay the caller). Always play from a goroutine so the RFID path never
+// waits on the audio stack.
 func PlayTapBeep() {
 	PrewarmTapBeep()
 	if len(beepWAV) == 0 {
@@ -53,11 +57,11 @@ func PlayTapBeep() {
 	go playTapBeepWAV()
 }
 
-// PrewarmTapBeep synthesizes the WAV so the first tap does not pay synth cost
-// on the critical path. A short silent PlaySound primes winmm once at startup.
+// PrewarmTapBeep binds the embedded coin WAV and primes winmm once at startup
+// so the first tap does not pay DLL/init cost on the critical path.
 func PrewarmTapBeep() {
 	beepWAVOnce.Do(func() {
-		beepWAV = synthBeepWAV(1200, 120, 22050)
+		beepWAV = tapCoinWAV
 		beepSilent = synthBeepWAV(1200, 30, 22050)
 		for i := 44; i < len(beepSilent); i++ {
 			beepSilent[i] = 0
@@ -74,7 +78,7 @@ func PrewarmTapBeep() {
 }
 
 func playTapBeepWAV() {
-	// Buffer must stay alive for SND_MEMORY — package-level beepWAV.
+	// Buffer must stay alive for SND_MEMORY — package-level beepWAV / embed.
 	r1, _, _ := procPlaySoundA.Call(
 		uintptr(unsafe.Pointer(&beepWAV[0])),
 		0,
