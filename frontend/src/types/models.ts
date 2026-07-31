@@ -70,9 +70,32 @@ export interface Category {
   display_order?: number
 }
 
+export interface Bib {
+  id: string
+  event_id: string
+  bib_number: string
+  created_at?: string
+}
+
+export interface BibListItem {
+  id: string
+  bib_number: string
+  tag_count: number
+  tag_uids?: string[]
+  participant_id?: string
+  participant_name?: string
+  race_id?: string
+}
+
+export interface BibTagWriteResponse {
+  bib_id: string
+  tag_uid: string
+  tag_uids?: string[]
+}
+
 export interface RfidTagAssociation {
   id: string
-  participant_id: string
+  bib_id: string
   tag_uid: string
   active: boolean
   created_at?: string
