@@ -520,3 +520,244 @@ func TestProcessCheckpoint_OrderedCheckpointsError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "ordered checkpoints query failed")
 }
+
+func TestScoreSnapshot_SuccessAndErrors(t *testing.T) {
+	fx := seedActiveLapFixture(t, "active")
+	svc := NewScanService(fx.db, nil)
+
+	_, _, _, _, err := svc.ScoreSnapshot(uuid.New())
+	assert.Error(t, err)
+
+	_, err = svc.ProcessScan(fx.event.ID.UUID(), fx.tagUID, "laptop-finish-1", time.Now().UTC())
+	require.NoError(t, err)
+
+	var seen uuid.UUID
+	svc.SetOnEventChange(func(eventID uuid.UUID) { seen = eventID })
+
+	laps, place, placeCat, eventID, err := svc.ScoreSnapshot(fx.participant.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, 1, laps)
+	assert.Equal(t, 1, place)
+	assert.Equal(t, 1, placeCat)
+	assert.Equal(t, fx.event.ID.UUID(), eventID)
+	assert.Equal(t, fx.event.ID.UUID(), seen)
+
+	require.NoError(t, fx.db.Callback().Query().Before("gorm:query").Register("fail_score_snap_laps", func(tx *gorm.DB) {
+		if tx.Statement.Table == "timing_records" {
+			_ = tx.AddError(errors.New("lap count failed"))
+		}
+	}))
+	_, _, _, _, err = svc.ScoreSnapshot(fx.participant.ID.UUID())
+	assert.Error(t, err)
+	require.NoError(t, fx.db.Callback().Query().Remove("fail_score_snap_laps"))
+
+	participantQueries := 0
+	require.NoError(t, fx.db.Callback().Query().Before("gorm:query").Register("fail_score_snap_placements", func(tx *gorm.DB) {
+		if tx.Statement.Table != "participants" {
+			return
+		}
+		participantQueries++
+		if participantQueries > 1 {
+			_ = tx.AddError(errors.New("placements list failed"))
+		}
+	}))
+	t.Cleanup(func() { _ = fx.db.Callback().Query().Remove("fail_score_snap_placements") })
+	_, _, _, _, err = svc.ScoreSnapshot(fx.participant.ID.UUID())
+	assert.Error(t, err)
+}
+
+func TestTeamPlacement_NoTeamAndScoredTeam(t *testing.T) {
+	fx := seedActiveLapFixture(t, "active")
+	svc := NewScanService(fx.db, nil)
+
+	place, avg, err := svc.teamPlacement(fx.race.ID.UUID(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, place)
+	assert.Equal(t, 0.0, avg)
+
+	place, avg, err = svc.teamPlacement(fx.race.ID.UUID(), fx.participant)
+	require.NoError(t, err)
+	assert.Equal(t, 0, place)
+	assert.Equal(t, 0.0, avg)
+
+	orphanTeamID := uuidutil.NewPublicUUID(uuid.New())
+	fx.participant.TeamID = &orphanTeamID
+	place, avg, err = svc.teamPlacement(uuid.New(), fx.participant)
+	assert.Error(t, err)
+	assert.Equal(t, 0, place)
+	assert.Equal(t, 0.0, avg)
+
+	team := &models.Team{RaceID: fx.race.ID, Name: "Zebra"}
+	require.NoError(t, fx.db.Create(team).Error)
+	teamID := team.ID
+	fx.participant.TeamID = &teamID
+	require.NoError(t, fx.db.Save(fx.participant).Error)
+
+	// Solo team (<2 members) is skipped → not found in scoredResults.
+	place, avg, err = svc.teamPlacement(fx.race.ID.UUID(), fx.participant)
+	require.NoError(t, err)
+	assert.Equal(t, 0, place)
+	assert.Equal(t, 0.0, avg)
+
+	mate := &models.Participant{
+		RaceID:    fx.race.ID,
+		TeamID:    &teamID,
+		BibNumber: "13",
+		FirstName: "Bo",
+		LastName:  "Mate",
+		Status:    "started",
+	}
+	require.NoError(t, fx.db.Create(mate).Error)
+
+	teamB := &models.Team{RaceID: fx.race.ID, Name: "Alpha"}
+	require.NoError(t, fx.db.Create(teamB).Error)
+	teamBID := teamB.ID
+	for i, bib := range []string{"20", "21"} {
+		p := &models.Participant{
+			RaceID:    fx.race.ID,
+			TeamID:    &teamBID,
+			BibNumber: bib,
+			FirstName: "T",
+			LastName:  bib,
+			Status:    "started",
+		}
+		require.NoError(t, fx.db.Create(p).Error)
+		_ = i
+	}
+
+	_, err = svc.ProcessScan(fx.event.ID.UUID(), fx.tagUID, "laptop-finish-1", time.Now().UTC())
+	require.NoError(t, err)
+
+	require.NoError(t, fx.db.Preload("Team").Preload("Category").Preload("Race").
+		First(fx.participant, "id = ?", fx.participant.ID).Error)
+
+	place, avg, err = svc.teamPlacement(fx.race.ID.UUID(), fx.participant)
+	require.NoError(t, err)
+	assert.Equal(t, 1, place)
+	assert.InDelta(t, 0.5, avg, 0.01)
+
+	result, err := svc.ProcessScan(fx.event.ID.UUID(), fx.tagUID, "laptop-finish-1", time.Now().UTC().Add(2*time.Minute))
+	require.NoError(t, err)
+	assert.Equal(t, "Zebra", result.TeamName)
+	require.NotNil(t, result.TeamID)
+	assert.Equal(t, teamID.UUID(), result.TeamID.UUID())
+	assert.Equal(t, 1, result.TeamPlacement)
+
+	require.NoError(t, fx.db.Callback().Query().Before("gorm:query").Register("fail_teams_list", func(tx *gorm.DB) {
+		if tx.Statement.Table == "teams" {
+			_ = tx.AddError(errors.New("teams list failed"))
+		}
+	}))
+	_, _, err = svc.teamPlacement(fx.race.ID.UUID(), fx.participant)
+	assert.Error(t, err)
+	require.NoError(t, fx.db.Callback().Query().Remove("fail_teams_list"))
+
+	require.NoError(t, fx.db.Callback().Query().Before("gorm:query").Register("fail_team_members", func(tx *gorm.DB) {
+		if tx.Statement.Table == "participants" {
+			_ = tx.AddError(errors.New("members list failed"))
+		}
+	}))
+	_, _, err = svc.teamPlacement(fx.race.ID.UUID(), fx.participant)
+	assert.Error(t, err)
+	require.NoError(t, fx.db.Callback().Query().Remove("fail_team_members"))
+}
+
+func TestTeamPlacement_TieBreakMeanLastAndName(t *testing.T) {
+	fx := seedActiveLapFixture(t, "active")
+	svc := NewScanService(fx.db, nil)
+
+	teamEarly := &models.Team{RaceID: fx.race.ID, Name: "LateName"}
+	teamLate := &models.Team{RaceID: fx.race.ID, Name: "EarlyName"}
+	require.NoError(t, fx.db.Create(teamEarly).Error)
+	require.NoError(t, fx.db.Create(teamLate).Error)
+
+	addPair := func(teamID uuidutil.PublicUUID, bibs [2]string) [2]*models.Participant {
+		var out [2]*models.Participant
+		for i, bib := range bibs {
+			tid := teamID
+			p := &models.Participant{
+				RaceID: fx.race.ID, TeamID: &tid, BibNumber: bib,
+				FirstName: "P", LastName: bib, Status: "started",
+			}
+			require.NoError(t, fx.db.Create(p).Error)
+			out[i] = p
+		}
+		return out
+	}
+	earlyMembers := addPair(teamEarly.ID, [2]string{"30", "31"})
+	lateMembers := addPair(teamLate.ID, [2]string{"40", "41"})
+
+	mkLap := func(p *models.Participant, at time.Time) {
+		require.NoError(t, fx.db.Create(&models.TimingRecord{
+			ParticipantID: p.ID, CheckpointID: fx.finish.ID,
+			Timestamp: at, LocalTimestamp: at, DeviceID: "t",
+			SyncStatus: "synced", RecordType: "rfid_lap",
+		}).Error)
+	}
+	base := fx.race.StartTime.Add(10 * time.Minute)
+	mkLap(earlyMembers[0], base)
+	mkLap(earlyMembers[1], base)
+	mkLap(lateMembers[0], base.Add(5*time.Minute))
+	mkLap(lateMembers[1], base.Add(5*time.Minute))
+	// karaoke_bonus counted in avg, skipped for mean-last RFID — keep avgs equal.
+	require.NoError(t, fx.db.Create(&models.TimingRecord{
+		ParticipantID: earlyMembers[0].ID, CheckpointID: fx.finish.ID,
+		Timestamp: base.Add(time.Hour), LocalTimestamp: base.Add(time.Hour),
+		DeviceID: "t", SyncStatus: "synced", RecordType: "karaoke_bonus",
+	}).Error)
+	require.NoError(t, fx.db.Create(&models.TimingRecord{
+		ParticipantID: lateMembers[0].ID, CheckpointID: fx.finish.ID,
+		Timestamp: base.Add(time.Hour), LocalTimestamp: base.Add(time.Hour),
+		DeviceID: "t", SyncStatus: "synced", RecordType: "karaoke_bonus",
+	}).Error)
+
+	pEarly := earlyMembers[0]
+	place, _, err := svc.teamPlacement(fx.race.ID.UUID(), pEarly)
+	require.NoError(t, err)
+	assert.Equal(t, 1, place) // earlier mean last RFID lap wins when avg equal
+
+	// Name tie-break: equal avg and equal meanLast (raceEnd fallback — no records).
+	require.NoError(t, fx.db.Where("1 = 1").Delete(&models.TimingRecord{}).Error)
+	place, _, err = svc.teamPlacement(fx.race.ID.UUID(), pEarly)
+	require.NoError(t, err)
+	// EarlyName sorts before LateName when times are equal.
+	assert.Equal(t, 2, place)
+}
+
+func TestTimestampInRaceWindow_Edges(t *testing.T) {
+	assert.False(t, timestampInRaceWindow(models.Race{}, time.Now()))
+	assert.False(t, timestampInRaceWindow(models.Race{
+		StartTime:       time.Now(),
+		DurationMinutes: 0,
+	}, time.Now()))
+
+	start := time.Date(2026, 8, 1, 8, 0, 0, 0, time.UTC)
+	race := models.Race{StartTime: start, DurationMinutes: 60}
+	assert.True(t, timestampInRaceWindow(race, start))
+	assert.True(t, timestampInRaceWindow(race, start.Add(30*time.Minute)))
+	assert.True(t, timestampInRaceWindow(race, start.Add(60*time.Minute)))
+	assert.False(t, timestampInRaceWindow(race, start.Add(-time.Second)))
+	assert.False(t, timestampInRaceWindow(race, start.Add(61*time.Minute)))
+}
+
+func TestWithScanDisplay_TeamAndCategory(t *testing.T) {
+	teamID := uuidutil.NewPublicUUID(uuid.New())
+	team := &models.Team{ID: teamID, Name: "Keweenaw"}
+	cat := &models.Category{Name: "Advanced Men"}
+	p := &models.Participant{
+		FirstName: "Sam",
+		LastName:  "Lee",
+		BibNumber: "7",
+		Category:  cat,
+		Team:      team,
+		Race:      models.Race{Name: "12 Hour"},
+	}
+	out := withScanDisplay(&ScanResult{Participant: p})
+	assert.Equal(t, "Sam Lee", out.ParticipantName)
+	assert.Equal(t, "7", out.BibNumber)
+	assert.Equal(t, "Advanced Men", out.CategoryLabel)
+	assert.Equal(t, "12 Hour", out.RaceName)
+	assert.Equal(t, "Keweenaw", out.TeamName)
+	require.NotNil(t, out.TeamID)
+	assert.Equal(t, teamID.UUID(), out.TeamID.UUID())
+}

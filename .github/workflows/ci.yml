@@ -44,6 +44,10 @@ jobs:
       - name: Start app stack (mock RFID)
         run: docker compose up --build -d
 
+      # Frontend bind-mount can leave root-owned node_modules that break host npm ci.
+      - name: Reset frontend dir permissions for host npm
+        run: sudo rm -rf frontend/node_modules frontend/.vite || true
+
       - name: Wait for backend
         run: |
           for i in $(seq 1 60); do
