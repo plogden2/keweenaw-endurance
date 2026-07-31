@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import EventTaps from './EventTaps.vue'
 import { setupPinia, createTestRouter } from '@/test/helpers'
-import { eventsApi, eventTapsApi, timingRecordsApi } from '@/services/api'
+import { eventsApi, eventParticipantsApi, eventTapsApi, timingRecordsApi } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
 
 vi.mock('@/services/api', async () => {
@@ -16,6 +16,7 @@ vi.mock('@/services/api', async () => {
       update: vi.fn(),
       remove: vi.fn(),
     },
+    eventParticipantsApi: { list: vi.fn() },
     eventTapsApi: { list: vi.fn(), create: vi.fn() },
     timingRecordsApi: { voidRecord: vi.fn(), restoreRecord: vi.fn(), karaokeBonus: vi.fn() },
   }
@@ -27,6 +28,16 @@ const race = {
   name: '12 Hour',
   race_type: 'lap_based' as const,
   status: 'active' as const,
+}
+
+const sampleParticipant = {
+  id: 'p1',
+  race_id: 'race-1',
+  bib_number: '42',
+  first_name: 'Alex',
+  last_name: 'Runner',
+  status: 'started' as const,
+  race,
 }
 
 const sampleTaps = [
@@ -87,6 +98,10 @@ describe('EventTaps.vue', () => {
     ;(eventTapsApi.list as Mock).mockResolvedValue({
       data: { data: sampleTaps, total: 2, page: 1, limit: 50 },
     })
+    ;(eventParticipantsApi.list as Mock).mockResolvedValue({
+      data: { data: [sampleParticipant], total: 1 },
+    })
+    ;(eventTapsApi.create as Mock).mockResolvedValue({ data: {} })
   })
 
   async function mountEventTaps() {
@@ -98,6 +113,13 @@ describe('EventTaps.vue', () => {
     const wrapper = mount(EventTaps, { global: { plugins: [router] } })
     await flushPromises()
     return wrapper
+  }
+
+  async function submitBib(wrapper: Awaited<ReturnType<typeof mountEventTaps>>, bib: string) {
+    const input = wrapper.find('[data-testid="inline-bib-input"]')
+    await input.setValue(bib)
+    await input.trigger('keydown.enter')
+    await flushPromises()
   }
 
   it('renders rows from the event taps API', async () => {
@@ -118,19 +140,78 @@ describe('EventTaps.vue', () => {
     expect(voidedRow.find('[data-testid="voided-badge"]').exists()).toBe(true)
   })
 
-  it('hides add tap button and row actions without PIN', async () => {
+  it('hides inline bib input and row actions without PIN', async () => {
     const wrapper = await mountEventTaps()
-    expect(wrapper.find('[data-testid="add-tap-btn"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="inline-bib-input"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="void-tap-btn"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="restore-tap-btn"]').exists()).toBe(false)
   })
 
-  it('shows add tap button and row actions when PIN authenticated', async () => {
+  it('shows inline bib input and row actions when PIN authenticated', async () => {
     authenticate()
     const wrapper = await mountEventTaps()
-    expect(wrapper.find('[data-testid="add-tap-btn"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="inline-bib-input"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="void-tap-btn"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="restore-tap-btn"]').exists()).toBe(true)
+  })
+
+  it('records a tap on Enter with exact bib match and karaoke_bonus false', async () => {
+    authenticate()
+    const wrapper = await mountEventTaps()
+
+    await submitBib(wrapper, '42')
+
+    expect(eventParticipantsApi.list).toHaveBeenCalledWith('e1', { q: '42', limit: 20 })
+    expect(eventTapsApi.create).toHaveBeenCalledWith('e1', {
+      participant_id: 'p1',
+      karaoke_bonus: false,
+    })
+  })
+
+  it('shows not-found error and does not create when zero exact matches', async () => {
+    authenticate()
+    ;(eventParticipantsApi.list as Mock).mockResolvedValue({
+      data: { data: [], total: 0 },
+    })
+    const wrapper = await mountEventTaps()
+
+    await submitBib(wrapper, '99')
+
+    expect(eventTapsApi.create).not.toHaveBeenCalled()
+    const error = wrapper.find('[data-testid="inline-bib-error"]')
+    expect(error.exists()).toBe(true)
+    expect(error.text().toLowerCase()).toMatch(/not found|no match/)
+  })
+
+  it('shows error and does not create when multiple exact matches', async () => {
+    authenticate()
+    ;(eventParticipantsApi.list as Mock).mockResolvedValue({
+      data: {
+        data: [
+          sampleParticipant,
+          { ...sampleParticipant, id: 'p1b', race_id: 'race-2', race: { ...race, id: 'race-2', name: '100 Mile' } },
+        ],
+        total: 2,
+      },
+    })
+    const wrapper = await mountEventTaps()
+
+    await submitBib(wrapper, '42')
+
+    expect(eventTapsApi.create).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="inline-bib-error"]').exists()).toBe(true)
+  })
+
+  it('clears the input and refreshes taps after a successful create', async () => {
+    authenticate()
+    const wrapper = await mountEventTaps()
+    const listCallsBefore = (eventTapsApi.list as Mock).mock.calls.length
+
+    await submitBib(wrapper, '42')
+
+    const input = wrapper.find('[data-testid="inline-bib-input"]')
+    expect((input.element as HTMLInputElement).value).toBe('')
+    expect((eventTapsApi.list as Mock).mock.calls.length).toBeGreaterThan(listCallsBefore)
   })
 
   it('voids a tap after confirm and reloads the table', async () => {
@@ -156,16 +237,6 @@ describe('EventTaps.vue', () => {
     await flushPromises()
 
     expect(timingRecordsApi.restoreRecord).toHaveBeenCalledWith('t2')
-  })
-
-  it('opens the add tap dialog', async () => {
-    authenticate()
-    const wrapper = await mountEventTaps()
-
-    expect(wrapper.find('[data-testid="add-tap-dialog"]').exists()).toBe(false)
-    await wrapper.find('[data-testid="add-tap-btn"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="add-tap-dialog"]').exists()).toBe(true)
   })
 
   it('shows pagination controls when there are multiple pages', async () => {
