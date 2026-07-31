@@ -94,6 +94,18 @@ describe('eventTestMode store', () => {
     expect(store.leaderboard[0]?.name).toContain('Sam')
   })
 
+  it('recordBibTap rejects ambiguous bibs across races', () => {
+    const store = useEventTestModeStore()
+    store.open('ev1', [
+      makeParticipant({ id: 'p1', bib_number: '1', race_id: 'r1' }),
+      makeParticipant({ id: 'p2', bib_number: '1', race_id: 'r2' }),
+    ])
+    const result = store.recordBibTap('1')
+    expect(result.ok).toBe(false)
+    expect(result.message).toMatch(/Multiple/i)
+    expect(store.taps).toHaveLength(0)
+  })
+
   it('leaderboard merges across races and sorts by laps then earliest last tap', () => {
     const store = useEventTestModeStore()
     store.open('ev1', [

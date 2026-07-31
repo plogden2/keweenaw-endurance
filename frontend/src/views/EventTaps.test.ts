@@ -169,6 +169,18 @@ describe('EventTaps.vue', () => {
     })
   })
 
+  it('blocks production bib submit while event test mode is open', async () => {
+    authenticate()
+    const { useEventTestModeStore } = await import('@/stores/eventTestMode')
+    useEventTestModeStore().open('e1', [sampleParticipant])
+    const wrapper = await mountEventTaps()
+
+    await submitBib(wrapper, '42')
+
+    expect(eventTapsApi.create).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="inline-bib-error"]').text()).toMatch(/Test mode/i)
+  })
+
   it('records karaoke_bonus true when the karaoke toggle is checked', async () => {
     authenticate()
     const wrapper = await mountEventTaps()

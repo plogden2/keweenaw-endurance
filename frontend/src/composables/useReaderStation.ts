@@ -102,8 +102,9 @@ function createReaderStation(): UseReaderStation {
       const raw = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data
       const station = useStationStore()
       const testMode = useEventTestModeStore()
-      const testActive =
-        Boolean(station.eventId) && testMode.isActiveForEvent(station.eventId)
+      const testActive = Boolean(
+        station.eventId && testMode.isActiveForEvent(station.eventId),
+      )
 
       if (raw?.type === 'scan_result' && raw.scan) {
         // Bridge already scored server-side; do not surface production

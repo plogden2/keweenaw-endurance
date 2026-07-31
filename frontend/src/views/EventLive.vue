@@ -142,7 +142,11 @@
           </button>
         </div>
       </div>
-      <EventTestModeDialog v-if="testMode.isOpen" @close="closeTestMode" />
+      <EventTestModeDialog
+        v-if="testMode.isOpen"
+        :preferred-race-id="activeRaceId"
+        @close="closeTestMode"
+      />
       <p v-if="exportError" class="status error">{{ exportError }}</p>
 
       <div class="legend" data-testid="category-legend" role="list" aria-label="Category legend">
@@ -711,11 +715,13 @@ import {
   downloadEventResultsExcel,
   eventParticipantsApi,
   eventsLiveApi,
+  raceParticipantsApi,
   rfidApi,
   type EventLiveRace,
   type EventLiveResponse,
   type LapRecordedEvent,
 } from '@/services/api'
+import type { Participant } from '@/types/models'
 import {
   getLocalPendingCount,
   onOnline,
@@ -752,12 +758,34 @@ const { lastScan } = useReaderStation()
 const isReaderSession = computed(() => pinAuth.isAuthenticated)
 const testModeLoading = ref(false)
 
+async function loadTestModeRoster(): Promise<Participant[]> {
+  try {
+    const { data } = await eventParticipantsApi.list(eventId.value, { limit: 500 })
+    return data.data ?? []
+  } catch {
+    // Older backends may lack GET /events/:id/participants — assemble from races.
+  }
+
+  const raceIds = (live.value?.races ?? []).map((r) => r.id).filter(Boolean)
+  const pages = await Promise.all(
+    raceIds.map((raceId) => raceParticipantsApi.list(raceId, { limit: 500 })),
+  )
+  const byId = new Map<string, Participant>()
+  for (const page of pages) {
+    for (const participant of page.data.data ?? []) {
+      byId.set(participant.id, participant)
+    }
+  }
+  return [...byId.values()]
+}
+
 async function openTestMode() {
   if (testModeLoading.value || !eventId.value) return
   testModeLoading.value = true
+  exportError.value = null
   try {
-    const { data } = await eventParticipantsApi.list(eventId.value, { limit: 500 })
-    testMode.open(eventId.value, data.data ?? [])
+    const roster = await loadTestModeRoster()
+    testMode.open(eventId.value, roster)
   } catch (err) {
     exportError.value = getErrorMessage(err, 'Failed to open test mode')
   } finally {

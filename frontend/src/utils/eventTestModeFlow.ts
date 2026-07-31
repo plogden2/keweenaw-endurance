@@ -1,5 +1,5 @@
 import type { LiveLeaderboardEntry } from '@/services/api'
-import type { Participant, TimingRecord } from '@/types/models'
+import type { Checkpoint, Participant, TimingRecord } from '@/types/models'
 
 export type TestModeTapSource = 'rfid' | 'manual'
 
@@ -24,23 +24,25 @@ export function buildTestModeTimingRecords(
   roster: Participant[],
 ): TimingRecord[] {
   const byId = new Map(roster.map((p) => [p.id, p]))
-  return taps.map((tap, index) => {
+  return taps.map((tap, index): TimingRecord => {
     const participant = byId.get(tap.participant_id)
+    const checkpoint: Checkpoint = {
+      id: 'test-mode-finish',
+      race_id: participant?.race_id || 'test-mode',
+      name: 'Finish',
+      checkpoint_type: 'finish',
+      is_active: true,
+    }
     return {
       id: `test-tap-${index}-${tap.participant_id}`,
       participant_id: tap.participant_id,
-      checkpoint_id: 'test-mode-finish',
+      checkpoint_id: checkpoint.id,
       timestamp: tap.recorded_at,
       local_timestamp: tap.recorded_at,
       sync_status: 'synced',
       record_type: 'rfid_lap',
       participant,
-      checkpoint: {
-        id: 'test-mode-finish',
-        race_id: participant?.race_id || 'test-mode',
-        name: 'Finish',
-        checkpoint_type: 'finish' as const,
-      },
+      checkpoint,
     }
   })
 }
@@ -102,12 +104,16 @@ export function findParticipantByTag(
   })
 }
 
+export function findParticipantsByBib(roster: Participant[], bib: string): Participant[] {
+  const needle = bib.trim()
+  if (!needle) return []
+  return roster.filter((p) => String(p.bib_number) === needle)
+}
+
 export function findParticipantByBib(
   roster: Participant[],
   bib: string,
 ): Participant | undefined {
-  const needle = bib.trim()
-  if (!needle) return undefined
-  const matches = roster.filter((p) => String(p.bib_number) === needle)
+  const matches = findParticipantsByBib(roster, bib)
   return matches.length === 1 ? matches[0] : undefined
 }

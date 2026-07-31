@@ -151,6 +151,11 @@ import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import { useEventTestModeStore } from '@/stores/eventTestMode'
 import { resolveCategoryColor } from '@/themes/defaultLegend'
 
+const props = defineProps<{
+  /** When set, ambiguous bibs prefer this race's participant. */
+  preferredRaceId?: string
+}>()
+
 const emit = defineEmits<{ close: [] }>()
 
 const store = useEventTestModeStore()
@@ -172,7 +177,7 @@ function submitBib() {
   if (!bib || submitting.value) return
   submitting.value = true
   try {
-    const result = store.recordBibTap(bib)
+    const result = store.recordBibTap(bib, undefined, props.preferredRaceId)
     if (result.ok) {
       bibInput.value = ''
     }

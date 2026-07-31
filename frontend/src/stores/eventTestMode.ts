@@ -4,8 +4,8 @@ import type { Participant, TimingRecord } from '@/types/models'
 import {
   buildTestModeLeaderboard,
   buildTestModeTimingRecords,
-  findParticipantByBib,
   findParticipantByTag,
+  findParticipantsByBib,
   type TestModeTap,
   type TestModeTapSource,
 } from '@/utils/eventTestModeFlow'
@@ -112,9 +112,9 @@ export const useEventTestModeStore = defineStore('eventTestMode', {
       return recordFor(this, participant, 'rfid', recordedAt)
     },
 
-    recordBibTap(bib: string, recordedAt?: string): TestModeFeedback {
-      const participant = findParticipantByBib(this.roster, bib)
-      if (!participant) {
+    recordBibTap(bib: string, recordedAt?: string, preferredRaceId?: string): TestModeFeedback {
+      let matches = findParticipantsByBib(this.roster, bib)
+      if (matches.length === 0) {
         const feedback: TestModeFeedback = {
           ok: false,
           message: 'Bib not found',
@@ -123,7 +123,22 @@ export const useEventTestModeStore = defineStore('eventTestMode', {
         this.lastFeedback = feedback
         return feedback
       }
-      return recordFor(this, participant, 'manual', recordedAt)
+      if (matches.length > 1 && preferredRaceId) {
+        const preferred = matches.filter((p) => p.race_id === preferredRaceId)
+        if (preferred.length === 1) {
+          matches = preferred
+        }
+      }
+      if (matches.length > 1) {
+        const feedback: TestModeFeedback = {
+          ok: false,
+          message: 'Multiple matches',
+          source: 'manual',
+        }
+        this.lastFeedback = feedback
+        return feedback
+      }
+      return recordFor(this, matches[0], 'manual', recordedAt)
     },
   },
 })

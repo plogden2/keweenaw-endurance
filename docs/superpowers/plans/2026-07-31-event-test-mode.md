@@ -12,25 +12,25 @@
 
 ### Task 1: Store + flow utils (TDD)
 
-- [ ] Write failing tests for `eventTestMode` store (open/close, recordTap, leaderboard sort, clear, tag/bib resolve)
-- [ ] Write failing tests for `eventTestModeFlow` (synthetic TimingRecords + leaderboard rows)
-- [ ] Implement store + utils until green
+- [x] Write failing tests for `eventTestMode` store (open/close, recordTap, leaderboard sort, clear, tag/bib resolve)
+- [x] Write failing tests for `eventTestModeFlow` (synthetic TimingRecords + leaderboard rows)
+- [x] Implement store + utils until green
 
 ### Task 2: Reader intercept (TDD)
 
-- [ ] Extend `useReaderStation.spec.ts`: when test mode open for event, tag_read does not call `enqueueScan` and records into store
-- [ ] Implement intercept in `useReaderStation.ts`
-- [ ] Suppress `ScanPopup` in `App.vue` when test mode open
+- [x] Extend `useReaderStation.spec.ts`: when test mode open for event, tag_read does not call `enqueueScan` and records into store
+- [x] Implement intercept in `useReaderStation.ts`
+- [x] Suppress `ScanPopup` in `App.vue` when test mode open
 
 ### Task 3: Dialog + EventLive entry
 
-- [ ] Add optional external records/participants props to `RaceFlowChart`
-- [ ] Build `EventTestModeDialog.vue` (banner, feedback, bib form, chart, leaderboard, close confirm)
-- [ ] Wire Test mode button + dialog in `EventLive.vue`
-- [ ] Block `EventTaps` submit when test mode open for event
-- [ ] Component tests for dialog open/close discard
+- [x] Add optional external records/participants props to `RaceFlowChart`
+- [x] Build `EventTestModeDialog.vue` (banner, feedback, bib form, chart, leaderboard, close confirm)
+- [x] Wire Test mode button + dialog in `EventLive.vue`
+- [x] Block `EventTaps` submit when test mode open for event
+- [x] Component tests for dialog open/close discard
 
 ### Task 4: E2E + verify
 
-- [ ] Playwright: open test mode → inject/manual → assert no production lap pollution → close → empty
-- [ ] Run unit tests for touched packages; fix failures
+- [x] Playwright: open test mode → inject/manual → assert no production lap pollution → close → empty
+- [x] Run unit tests for touched packages; fix failures
