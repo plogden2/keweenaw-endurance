@@ -125,6 +125,57 @@ func TestParticipantService_ListByRace(t *testing.T) {
 	assert.Len(t, participants, 3)
 }
 
+func TestParticipantService_ListParticipantsByEvent(t *testing.T) {
+	db := setupServiceTestDB(t)
+	svc := NewParticipantService(db)
+	event := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	firstRace, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Morning Race", RaceType: "time_based", DistanceKm: 5,
+	})
+	require.NoError(t, err)
+	secondRace, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Afternoon Race", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	otherRace := createTestRace(t, db)
+
+	for _, participant := range []models.Participant{
+		{RaceID: firstRace.ID, BibNumber: "101", FirstName: "Alex", LastName: "Rivera"},
+		{RaceID: secondRace.ID, BibNumber: "202", FirstName: "Jamie", LastName: "Stone"},
+		{RaceID: otherRace.ID, BibNumber: "303", FirstName: "Alex", LastName: "Other"},
+	} {
+		_, err := svc.CreateParticipant(&participant)
+		require.NoError(t, err)
+	}
+
+	participants, total, err := svc.ListParticipantsByEvent(event.ID.UUID(), 2, 1, "")
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	require.Len(t, participants, 1)
+	assert.Equal(t, "202", participants[0].BibNumber)
+	assert.Equal(t, secondRace.ID, participants[0].Race.ID)
+	assert.Equal(t, "Afternoon Race", participants[0].Race.Name)
+
+	participants, total, err = svc.ListParticipantsByEvent(event.ID.UUID(), 1, 10, "101")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, participants, 1)
+	assert.Equal(t, "Alex", participants[0].FirstName)
+
+	participants, total, err = svc.ListParticipantsByEvent(event.ID.UUID(), 1, 10, "jamie")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, participants, 1)
+	assert.Equal(t, "202", participants[0].BibNumber)
+
+	participants, total, err = svc.ListParticipantsByEvent(event.ID.UUID(), 1, 10, "rivera")
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, participants, 1)
+	assert.Equal(t, "101", participants[0].BibNumber)
+}
+
 func TestParticipantService_SequentialBibDefault(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)

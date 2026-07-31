@@ -104,7 +104,7 @@
                 </router-link>
                 <router-link
                   class="btn secondary"
-                  :to="`/timing/live/${race.id}`"
+                  :to="`/events/${managementEventId}/taps`"
                   data-testid="race-open-manual"
                 >
                   Manual entry

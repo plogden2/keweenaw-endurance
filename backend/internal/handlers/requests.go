@@ -165,6 +165,12 @@ type processScanRequest struct {
 	LocalTimestamp string `json:"local_timestamp"`
 }
 
+type createEventTapRequest struct {
+	ParticipantID string `json:"participant_id" binding:"required"`
+	KaraokeBonus  bool   `json:"karaoke_bonus"`
+	Timestamp     string `json:"timestamp"`
+}
+
 type putStationRequest struct {
 	EventID      string  `json:"event_id" binding:"required"`
 	Mode         string  `json:"mode"`

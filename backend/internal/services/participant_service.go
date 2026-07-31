@@ -77,6 +77,45 @@ func (s *ParticipantService) ListParticipants(page, limit int, raceID *uuid.UUID
 	return participants, total, nil
 }
 
+// ListParticipantsByEvent returns the event's participants with their races
+// preloaded for event-scoped picker labels.
+func (s *ParticipantService) ListParticipantsByEvent(eventID uuid.UUID, page, limit int, q string) ([]models.Participant, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 500 {
+		limit = 20
+	}
+
+	query := s.db.Model(&models.Participant{}).
+		Joins("JOIN races ON races.id = participants.race_id").
+		Where("races.event_id = ?", eventID)
+	if term := strings.TrimSpace(q); term != "" {
+		like := "%" + strings.ToLower(term) + "%"
+		query = query.Where(
+			"LOWER(participants.first_name) LIKE ? OR LOWER(participants.last_name) LIKE ? OR LOWER(participants.bib_number) LIKE ? OR LOWER(participants.first_name || ' ' || participants.last_name) LIKE ?",
+			like, like, like, like,
+		)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var participants []models.Participant
+	offset := (page - 1) * limit
+	if err := query.Preload("Race").Preload("Category").Preload("Team").Order("participants.bib_number ASC").Offset(offset).Limit(limit).Find(&participants).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if err := s.attachTagUIDs(participants); err != nil {
+		return nil, 0, err
+	}
+
+	return participants, total, nil
+}
+
 func (s *ParticipantService) GetParticipant(id uuid.UUID) (*models.Participant, error) {
 	var participant models.Participant
 	if err := s.db.Preload("Category").Preload("Team").First(&participant, "id = ?", id).Error; err != nil {

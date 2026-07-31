@@ -68,6 +68,29 @@ Responses:
 ### POST `/api/timing-records/{id}/karaoke-bonus`
 `201` bonus; `409` if already exists for that lap.
 
+### GET `/api/events/{eventId}/taps`
+Public, paginated timing-record audit list across all event races. Query parameters:
+`page` (default `1`), `limit` (default `50`), optional `race_id`, and optional
+participant `q` search (bib or name). Returns:
+```json
+{ "data": [{ "id": "...", "record_type": "rfid_lap", "participant": {}, "checkpoint": {} }], "total": 1, "page": 1, "limit": 50 }
+```
+
+### GET `/api/events/{eventId}/participants`
+Public, paginated participant picker for the event. Query parameters: `page`
+(default `1`), `limit` (default `50`), optional `q` search (bib or name).
+Each participant includes its race for display labels.
+
+### POST `/api/events/{eventId}/taps` (PIN / timerWrite)
+Records a manual finish tap for an event participant. `karaoke_bonus: true`
+creates a standalone bonus without `source_lap_id`.
+```json
+{ "participant_id": "<uuid>", "karaoke_bonus": false, "timestamp": "2026-08-01T12:00:01Z" }
+```
+`timestamp` is optional and defaults to the server timestamp. Returns `201` with
+the timing-record JSON. The server refreshes the live CSV and emits a live
+`lap_recorded` update after a successful tap.
+
 ### POST `/api/timing/records/{id}/void` (PIN / timerWrite)
 Soft-voids a timing record (`voided_at` set). Voiding an `rfid_lap` cascades to its linked `karaoke_bonus`. Idempotent if already voided. Returns `{ record, cascaded_ids, lap_count, placement }`.
 

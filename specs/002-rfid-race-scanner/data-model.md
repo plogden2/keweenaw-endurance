@@ -74,13 +74,13 @@ TimingRecord (karaoke_bonus) ──> TimingRecord (source rfid_lap)
 |-------|--------|
 | existing fields | participant_id, checkpoint_id, timestamp, local_timestamp, device_id, sync_status |
 | record_type (new) | `rfid_lap` \| `karaoke_bonus` \| `checkpoint_pass` |
-| source_lap_id (new) | Nullable FK to timing_records; required for karaoke_bonus |
+| source_lap_id (new) | Optional FK to timing_records for `karaoke_bonus`; null denotes a standalone manual karaoke tap |
 | station_id (new) | Optional; which reader produced the event |
 
 **Validation**:
 - Scored `rfid_lap` only if participant’s race is `active`
 - Cooldown: reject new `rfid_lap` if prior scored `rfid_lap` for same participant within 60s
-- At most one `karaoke_bonus` per `source_lap_id`
+- At most one linked `karaoke_bonus` per non-null `source_lap_id`; standalone manual karaoke rows have `source_lap_id = null`
 - Placement **default**: combined overall across categories in the race; UI color-codes by category with legend; category filter optional
 - Placement sort: count `rfid_lap` + `karaoke_bonus`; tie-break earliest last lap timestamp
 
