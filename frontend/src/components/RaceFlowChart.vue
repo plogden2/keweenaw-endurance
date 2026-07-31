@@ -1,12 +1,65 @@
 <template>
-  <section class="race-flow-chart" data-testid="race-flow-chart">
+  <section
+    class="race-flow-chart"
+    data-testid="race-flow-chart"
+    :data-highlight-participant-id="highlightParticipantId ?? ''"
+  >
     <div v-if="loading" class="status">Loading race flow…</div>
     <div v-else-if="error" class="status error">{{ error }}</div>
     <p v-else-if="!hasData" class="empty" data-testid="race-flow-empty">
       Not enough timing data to render race flow yet.
     </p>
     <div v-else class="chart-panel">
-      <div class="chart-canvas-host">
+      <div class="chart-toolbar" data-testid="race-flow-zoom-toolbar" role="toolbar" aria-label="Race flow zoom">
+        <button
+          type="button"
+          class="zoom-btn"
+          data-testid="race-flow-zoom-in"
+          @click="zoomIn"
+        >
+          Zoom in
+        </button>
+        <button
+          type="button"
+          class="zoom-btn"
+          data-testid="race-flow-zoom-out"
+          :disabled="zoomAtFull"
+          @click="zoomOut"
+        >
+          Zoom out
+        </button>
+        <button
+          v-if="fullXAxisMax >= 60"
+          type="button"
+          class="zoom-btn"
+          data-testid="race-flow-zoom-last-60"
+          @click="zoomLastHour"
+        >
+          Last 60 min
+        </button>
+        <button
+          type="button"
+          class="zoom-btn"
+          data-testid="race-flow-zoom-reset"
+          :disabled="zoomAtFull"
+          @click="resetZoom"
+        >
+          Reset view
+        </button>
+      </div>
+      <p
+        v-if="datasetCapMessage"
+        class="dataset-cap-note"
+        data-testid="race-flow-dataset-cap"
+      >
+        {{ datasetCapMessage }}
+      </p>
+      <div
+        class="chart-canvas-host"
+        data-testid="race-flow-zoom-domain"
+        :data-zoom-min="zoomWindow.min"
+        :data-zoom-max="zoomWindow.max"
+      >
         <canvas ref="canvasRef" data-testid="race-flow-canvas" />
       </div>
       <div class="legend-panel" data-testid="race-flow-legend" aria-label="Participant legend">
@@ -230,7 +283,7 @@
               class="legend-select"
               data-testid="race-flow-legend-select"
               :aria-pressed="highlightParticipantId === item.participantId"
-              @click="selectParticipant(item.participantId)"
+              @click.stop="selectParticipant(item.participantId)"
             >
               <span
                 class="color-swatch"
@@ -276,7 +329,17 @@ import {
   Tooltip,
   type Plugin,
 } from 'chart.js'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import {
+  computed,
+  markRaw,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  shallowRef,
+  watch,
+  type Ref,
+} from 'vue'
 import { timingApi, raceParticipantsApi } from '@/services/api'
 import { useUnitsStore } from '@/stores/units'
 import type { Participant, ParticipantStatus, RaceStatus, RaceType, TimingRecord } from '@/types/models'
@@ -302,6 +365,17 @@ import {
   pickPlotClickDatasetIndex,
   type ParticipantFlowTooltip,
 } from '@/utils/raceFlowData'
+import {
+  createFullZoomWindow,
+  isZoomAtFull,
+  prefersCoarsePointer,
+  resolveChartDevicePixelRatio,
+  selectFlowsForRender,
+  zoomInX,
+  zoomOutX,
+  zoomToLastMinutes,
+  type ZoomWindow,
+} from '@/utils/raceFlowZoom'
 import { getErrorMessage } from '@/utils/error'
 
 const SIGNAL_COLOR = '#c45c38'
@@ -413,27 +487,25 @@ const props = defineProps<{
   raceStartTime?: string
   raceType?: RaceType
   durationMinutes?: number
-  highlightParticipantId?: string
   /** When set, skip API fetch and render these records (e.g. event test mode). */
   externalTimingRecords?: TimingRecord[]
   externalParticipants?: Participant[]
 }>()
 
-const emit = defineEmits<{
-  'update:highlightParticipantId': [value: string | undefined]
-}>()
+/** Sticky legend/plot selection — v-model:highlight-participant-id */
+const highlightParticipantId = defineModel<string | undefined>('highlightParticipantId')
 
 function selectParticipant(participantId: string | undefined): void {
   const next =
-    participantId != null && participantId === props.highlightParticipantId
+    participantId != null && participantId === highlightParticipantId.value
       ? undefined
       : participantId
-  emit('update:highlightParticipantId', next)
+  highlightParticipantId.value = next
 }
 
 function clearStickyHighlight(): void {
-  if (props.highlightParticipantId != null) {
-    emit('update:highlightParticipantId', undefined)
+  if (highlightParticipantId.value != null) {
+    highlightParticipantId.value = undefined
   }
 }
 
@@ -445,7 +517,8 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const records = ref<TimingRecord[]>([])
 const registeredParticipants = ref<Participant[]>([])
-const chartInstance = ref<Chart | null>(null)
+/** shallowRef + markRaw: Chart.js must not be deeply proxied (update() stack overflows). */
+const chartInstance = shallowRef<Chart | null>(null)
 const nowMs = ref(Date.now())
 const searchQuery = ref('')
 const legendItemsRef = ref<HTMLElement | null>(null)
@@ -459,7 +532,16 @@ const visibleParticipantIds = ref<Set<string>>(new Set())
 const hoveredParticipantId = ref<string | null>(null)
 const activeTooltip = ref<ParticipantFlowTooltip | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
+const zoomWindow = ref<ZoomWindow>(createFullZoomWindow(1))
+const coarsePointer = ref(false)
+/** When false, X window tracks the full race domain as data/duration resolve. */
+let zoomPinned = false
 let liveRefreshTimer: ReturnType<typeof setInterval> | null = null
+let cachedPolylines: Array<Array<{ x: number; y: number }>> | null = null
+let hoverRafId: number | null = null
+let pendingHoverEvent: { x?: number; y?: number; chart: Chart } | null = null
+let coarsePointerMql: MediaQueryList | null = null
+let hoverNoneMql: MediaQueryList | null = null
 
 const isActiveRace = computed(() => props.raceStatus === 'active')
 const flows = computed(() =>
@@ -556,6 +638,47 @@ const filteredFlows = computed(() => {
 const visibleFlows = computed(() =>
   filteredFlows.value.filter((flow) => visibleParticipantIds.value.has(flow.participantId)),
 )
+
+const renderSelection = computed(() =>
+  selectFlowsForRender(visibleFlows.value, {
+    // Cap priority follows sticky selection only — hover must not reshuffle datasets.
+    stickyParticipantId: highlightParticipantId.value,
+  }),
+)
+
+const renderedFlows = computed(() => renderSelection.value.rendered)
+
+const renderedFlowIdsKey = computed(() =>
+  renderedFlows.value.map((flow) => flow.participantId).join('\0'),
+)
+
+const datasetCapMessage = computed(() => {
+  if (!renderSelection.value.capped) {
+    return null
+  }
+  return `Showing ${renderedFlows.value.length} of ${renderSelection.value.totalVisible} selected lines — filter or deselect to see more.`
+})
+
+const fullXAxisMax = computed(() => {
+  const showCurrentTime = currentElapsedMinutes.value != null
+  const maxElapsedMinutes = visibleFlows.value.reduce((max, flow) => {
+    const extrapolation = showCurrentTime
+      ? buildExtrapolationPoint(flow, currentElapsedMinutes.value!)
+      : null
+    const lastElapsed = extrapolation?.elapsedMinutes ?? flow.points.at(-1)?.elapsedMinutes ?? 0
+    return Math.max(max, lastElapsed)
+  }, 0)
+  return (
+    resolveRaceFlowXAxisMax(
+      props.durationMinutes,
+      maxElapsedMinutes,
+      currentElapsedMinutes.value,
+      showCurrentTime,
+    ) ?? Math.max(maxElapsedMinutes, 1)
+  )
+})
+
+const zoomAtFull = computed(() => isZoomAtFull(zoomWindow.value, fullXAxisMax.value))
 
 // Space hues across filtered racers so lines stay distinct; legend toggles
 // (visibility) do not reshuffle colors.
@@ -731,14 +854,21 @@ function formatFilterSummary<T extends string>(
 }
 
 function handleDocumentClick(event: MouseEvent): void {
-  const target = event.target
-  if (!(target instanceof Element)) {
-    return
-  }
-  if (!target.closest('.filter-dropdown')) {
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : []
+  const pathElements = path.filter((node): node is Element => node instanceof Element)
+  const target = event.target instanceof Element ? event.target : null
+
+  const insideFilter = pathElements.some((el) => el.classList?.contains('filter-dropdown'))
+    || Boolean(target?.closest('.filter-dropdown'))
+  if (!insideFilter) {
     openFilter.value = null
   }
-  if (!target.closest('.race-flow-chart')) {
+
+  // Prefer composedPath: after sticky-select re-render, event.target can be detached
+  // and Element.closest() no longer reaches the live .race-flow-chart root.
+  const insideChart = pathElements.some((el) => el.classList?.contains('race-flow-chart'))
+    || Boolean(target?.closest('.race-flow-chart'))
+  if (!insideChart) {
     clearStickyHighlight()
   }
 }
@@ -790,14 +920,14 @@ function toggleSelectAllFiltered(): void {
 }
 
 function highlightParticipant(item: LegendItem, event: MouseEvent): void {
-  if (!props.highlightParticipantId) {
-    hoveredParticipantId.value = item.participantId
+  if (!highlightParticipantId.value && !coarsePointer.value) {
+    setHoveredParticipantId(item.participantId)
   }
   showTooltip(item, event)
 }
 
 function unhighlightParticipant(): void {
-  hoveredParticipantId.value = null
+  setHoveredParticipantId(null)
   hideTooltip()
 }
 
@@ -955,13 +1085,146 @@ function withAlpha(color: string, alpha: number): string {
 }
 
 function getEffectiveHighlightId(): string | undefined {
-  return props.highlightParticipantId ?? hoveredParticipantId.value ?? undefined
+  return highlightParticipantId.value ?? hoveredParticipantId.value ?? undefined
 }
 
 function getOrderedVisibleFlows(): (typeof flows.value)[number][] {
   // Keep dataset index order stable so Chart.js hover/click hit-testing stays
   // consistent; draw order is controlled via dataset `order` instead.
-  return visibleFlows.value
+  // Soft-capped for mobile GPU/CPU (see selectFlowsForRender).
+  return renderedFlows.value
+}
+
+function invalidatePolylineCache(): void {
+  cachedPolylines = null
+}
+
+function getCachedPolylines(chart: Chart): Array<Array<{ x: number; y: number }>> {
+  if (cachedPolylines) {
+    return cachedPolylines
+  }
+  cachedPolylines = chart.data.datasets.map((_, datasetIndex) => {
+    const meta = chart.getDatasetMeta(datasetIndex)
+    if (meta.hidden) {
+      return []
+    }
+    return meta.data.map((point) => ({ x: point.x, y: point.y }))
+  })
+  return cachedPolylines
+}
+
+function applyZoomToChart(chart: Chart = chartInstance.value!): void {
+  if (!chart) {
+    return
+  }
+  const xScale = chart.options.scales?.x
+  if (xScale && typeof xScale === 'object') {
+    ;(xScale as { min?: number; max?: number }).min = zoomWindow.value.min
+    ;(xScale as { min?: number; max?: number }).max = zoomWindow.value.max
+  }
+  invalidatePolylineCache()
+  chart.update('none')
+}
+
+function syncZoomWindowToFullDomain(): void {
+  if (!zoomPinned) {
+    zoomWindow.value = createFullZoomWindow(fullXAxisMax.value)
+    return
+  }
+  if (zoomWindow.value.max > fullXAxisMax.value) {
+    zoomWindow.value = createFullZoomWindow(fullXAxisMax.value)
+    zoomPinned = false
+  }
+}
+
+function setZoomWindow(next: ZoomWindow): void {
+  zoomWindow.value = next
+  zoomPinned = !isZoomAtFull(next, fullXAxisMax.value)
+}
+
+function stickyZoomCenter(): number | undefined {
+  const stickyId = highlightParticipantId.value
+  if (!stickyId) {
+    return undefined
+  }
+  const flow = renderedFlows.value.find((item) => item.participantId === stickyId)
+  return flow?.points.at(-1)?.elapsedMinutes
+}
+
+function zoomIn(): void {
+  setZoomWindow(zoomInX(zoomWindow.value, fullXAxisMax.value, 0.7, stickyZoomCenter()))
+  if (chartInstance.value) {
+    applyZoomToChart()
+  }
+}
+
+function zoomOut(): void {
+  setZoomWindow(zoomOutX(zoomWindow.value, fullXAxisMax.value, 1 / 0.7, stickyZoomCenter()))
+  if (chartInstance.value) {
+    applyZoomToChart()
+  }
+}
+
+function zoomLastHour(): void {
+  setZoomWindow(zoomToLastMinutes(fullXAxisMax.value, 60))
+  if (chartInstance.value) {
+    applyZoomToChart()
+  }
+}
+
+function resetZoom(): void {
+  zoomPinned = false
+  zoomWindow.value = createFullZoomWindow(fullXAxisMax.value)
+  if (chartInstance.value) {
+    applyZoomToChart()
+  }
+}
+
+function setHoveredParticipantId(next: string | null): void {
+  if (hoveredParticipantId.value === next) {
+    return
+  }
+  hoveredParticipantId.value = next
+}
+
+function processPendingHover(): void {
+  hoverRafId = null
+  const pending = pendingHoverEvent
+  pendingHoverEvent = null
+  if (!pending) {
+    return
+  }
+
+  const { chart, ...event } = pending
+  const datasetIndex = resolveDatasetIndexAtPointer(chart, event)
+  chart.canvas.style.cursor = datasetIndex != null ? 'pointer' : 'default'
+  if (highlightParticipantId.value || coarsePointer.value) {
+    return
+  }
+  if (datasetIndex != null) {
+    const dataset = chart.data.datasets[datasetIndex] as FlowLineDataset
+    setHoveredParticipantId(dataset.participantId ?? null)
+  } else {
+    setHoveredParticipantId(null)
+  }
+}
+
+function scheduleHoverHitTest(chart: Chart, event: { x?: number; y?: number }): void {
+  pendingHoverEvent = { ...event, chart }
+  if (hoverRafId != null) {
+    return
+  }
+  if (typeof requestAnimationFrame === 'function') {
+    hoverRafId = requestAnimationFrame(() => {
+      processPendingHover()
+    })
+    return
+  }
+  processPendingHover()
+}
+
+function syncCoarsePointer(): void {
+  coarsePointer.value = prefersCoarsePointer()
 }
 
 function getLineStyle(flow: (typeof flows.value)[number]): Pick<
@@ -987,16 +1250,6 @@ function getLineStyle(flow: (typeof flows.value)[number]): Pick<
     borderWidth: isHighlighted ? 4 : isDimmed ? 1 : 2,
     order: isHighlighted ? 10 : 0,
   }
-}
-
-function collectDatasetPolylines(chart: Chart): Array<Array<{ x: number; y: number }>> {
-  return chart.data.datasets.map((_, datasetIndex) => {
-    const meta = chart.getDatasetMeta(datasetIndex)
-    if (meta.hidden) {
-      return []
-    }
-    return meta.data.map((point) => ({ x: point.x, y: point.y }))
-  })
 }
 
 function resolveDatasetIndexAtPointer(
@@ -1035,7 +1288,7 @@ function resolveDatasetIndexAtPointer(
   }
 
   // Stepped lap lines have long segments between sparse taps — also hit the stroke.
-  return findNearestPolylineDatasetIndex(collectDatasetPolylines(chart), event.x, event.y)
+  return findNearestPolylineDatasetIndex(getCachedPolylines(chart), event.x, event.y)
 }
 
 function buildDataset(flow: (typeof flows.value)[number]): FlowLineDataset {
@@ -1128,17 +1381,8 @@ function updateLineHighlight(): void {
 
   // Avoid splicing datasets here — reordering mid-hover clears Chart.js active
   // elements and breaks subsequent hover/click hit-testing.
+  invalidatePolylineCache()
   chart.update('none')
-}
-
-function resolveVisibleMaxElapsedMinutes(showCurrentTime: boolean): number {
-  return visibleFlows.value.reduce((max, flow) => {
-    const extrapolation = showCurrentTime
-      ? buildExtrapolationPoint(flow, currentElapsedMinutes.value!)
-      : null
-    const lastElapsed = extrapolation?.elapsedMinutes ?? flow.points.at(-1)?.elapsedMinutes ?? 0
-    return Math.max(max, lastElapsed)
-  }, 0)
 }
 
 /** Move the live "now" line / extrapolations without destroy()+new Chart() (iOS Safari OOM). */
@@ -1148,20 +1392,14 @@ function updateLiveProgress(): void {
     return
   }
 
-  const showCurrentTime = currentElapsedMinutes.value != null
-  const maxElapsedMinutes = resolveVisibleMaxElapsedMinutes(showCurrentTime)
-  const xAxisMax = resolveRaceFlowXAxisMax(
-    props.durationMinutes,
-    maxElapsedMinutes,
-    currentElapsedMinutes.value,
-    showCurrentTime,
-  )
+  syncZoomWindowToFullDomain()
 
   chart.data.datasets = getOrderedVisibleFlows().map((flow) => buildDataset(flow))
 
   const xScale = chart.options.scales?.x
   if (xScale && typeof xScale === 'object') {
-    ;(xScale as { max?: number }).max = xAxisMax
+    ;(xScale as { min?: number; max?: number }).min = zoomWindow.value.min
+    ;(xScale as { min?: number; max?: number }).max = zoomWindow.value.max
   }
 
   const plugins = chart.options.plugins as { currentTimeLine?: { xMinutes: number | null } } | undefined
@@ -1171,31 +1409,25 @@ function updateLiveProgress(): void {
     plugins.currentTimeLine = { xMinutes: currentElapsedMinutes.value }
   }
 
+  invalidatePolylineCache()
   chart.update('none')
 }
 
 function renderChart(): void {
   destroyChart()
+  invalidatePolylineCache()
   if (!canvasRef.value || !hasData.value) {
     return
   }
 
-  const showCurrentTime = currentElapsedMinutes.value != null
-  const maxElapsedMinutes = resolveVisibleMaxElapsedMinutes(showCurrentTime)
+  syncZoomWindowToFullDomain()
 
   const orderedFlows = getOrderedVisibleFlows()
-  const xAxisMax = resolveRaceFlowXAxisMax(
-    props.durationMinutes,
-    maxElapsedMinutes,
-    currentElapsedMinutes.value,
-    showCurrentTime,
-  )
-
   const tickSize = chartFontSize(10)
   const axisTitleSize = chartFontSize(11)
   const axisInk = '#1a3f3d'
 
-  chartInstance.value = new Chart(canvasRef.value, {
+  chartInstance.value = markRaw(new Chart(canvasRef.value, {
     type: 'line',
     data: {
       datasets: orderedFlows.map((flow) => buildDataset(flow)),
@@ -1203,26 +1435,17 @@ function renderChart(): void {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: false,
+      devicePixelRatio: resolveChartDevicePixelRatio(),
       interaction: {
         mode: 'nearest',
         intersect: false,
         axis: 'xy',
       },
       onHover: (event, _elements, chart) => {
-        const datasetIndex = resolveDatasetIndexAtPointer(
-          chart,
-          event as { x?: number; y?: number },
-        )
-        chart.canvas.style.cursor = datasetIndex != null ? 'pointer' : 'default'
-        if (props.highlightParticipantId) {
-          return
-        }
-        if (datasetIndex != null) {
-          const dataset = chart.data.datasets[datasetIndex] as FlowLineDataset
-          hoveredParticipantId.value = dataset.participantId ?? null
-        } else {
-          hoveredParticipantId.value = null
-        }
+        // No freehand pan/zoom — hover is highlight preview only (desktop).
+        // RAF-coalesce expensive polyline hit-testing for mobile stability.
+        scheduleHoverHitTest(chart, event as { x?: number; y?: number })
       },
       onClick: (event, _elements, chart) => {
         const datasetIndex = resolveDatasetIndexAtPointer(
@@ -1239,7 +1462,7 @@ function renderChart(): void {
       scales: {
         x: {
           type: 'linear',
-          min: 0,
+          min: zoomWindow.value.min,
           title: {
             display: true,
             text: 'Elapsed time (minutes)',
@@ -1250,7 +1473,7 @@ function renderChart(): void {
             color: axisInk,
             font: { size: tickSize },
           },
-          max: xAxisMax,
+          max: zoomWindow.value.max,
         },
         y: {
           beginAtZero: true,
@@ -1273,10 +1496,24 @@ function renderChart(): void {
         title: { display: false },
       } as Record<string, unknown>,
     },
-  })
+  }))
+}
+
+function handlePointerModeChange(): void {
+  syncCoarsePointer()
+  if (coarsePointer.value) {
+    setHoveredParticipantId(null)
+  }
 }
 
 onMounted(async () => {
+  syncCoarsePointer()
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    coarsePointerMql = window.matchMedia('(pointer: coarse)')
+    hoverNoneMql = window.matchMedia('(hover: none)')
+    coarsePointerMql.addEventListener?.('change', handlePointerModeChange)
+    hoverNoneMql.addEventListener?.('change', handlePointerModeChange)
+  }
   document.addEventListener('click', handleDocumentClick)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('pageshow', handlePageShow)
@@ -1316,7 +1553,7 @@ watch(flows, () => {
 
 watch(
   [
-    visibleFlows,
+    renderedFlowIdsKey,
     loading,
     chartRaceType,
     () => props.durationMinutes,
@@ -1353,17 +1590,14 @@ watch(hoveredParticipantId, () => {
   }
 })
 
-watch(
-  () => props.highlightParticipantId,
-  () => {
-    if (!loading.value && chartInstance.value) {
-      updateLineHighlight()
-    }
-  },
-)
+watch(highlightParticipantId, () => {
+  if (!loading.value && chartInstance.value) {
+    updateLineHighlight()
+  }
+})
 
 watch(
-  () => props.highlightParticipantId,
+  highlightParticipantId,
   (participantId) => {
     if (!participantId || visibleParticipantIds.value.has(participantId)) {
       return
@@ -1377,11 +1611,21 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  coarsePointerMql?.removeEventListener?.('change', handlePointerModeChange)
+  hoverNoneMql?.removeEventListener?.('change', handlePointerModeChange)
+  coarsePointerMql = null
+  hoverNoneMql = null
+  if (hoverRafId != null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(hoverRafId)
+    hoverRafId = null
+  }
+  pendingHoverEvent = null
   document.removeEventListener('click', handleDocumentClick)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('pageshow', handlePageShow)
   clearLiveRefreshTimer()
   destroyChart()
+  invalidatePolylineCache()
 })
 
 defineExpose({
@@ -1393,6 +1637,9 @@ defineExpose({
   filteredLegendItems,
   hoveredParticipantId,
   isLegendBusy,
+  zoomWindow,
+  fullXAxisMax,
+  renderedFlows,
 })
 </script>
 
@@ -1405,6 +1652,39 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.chart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.zoom-btn {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(0.85rem * var(--live-display-scale, 1));
+}
+
+.zoom-btn:hover:not(:disabled) {
+  background: var(--mist);
+}
+
+.zoom-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dataset-cap-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: calc(0.85rem * var(--live-display-scale, 1));
 }
 
 .chart-canvas-host {

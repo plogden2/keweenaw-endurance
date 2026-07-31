@@ -1,6 +1,9 @@
 -- Bib-associated RFID tags: event-scoped bibs; associations point at bib_id.
--- Applied via GORM AutoMigrate + migrateTagAssociationsToBibs in production;
+-- Applied via GORM AutoMigrate + upgradeTagAssociationsToBibs in production;
 -- this file documents the target schema for seed scripts and manual Postgres.
+--
+-- Existing local volumes that still have participant_id: apply
+-- database/migrations/06-bib-tag-association-upgrade.sql once, then load seed.
 
 CREATE TABLE IF NOT EXISTS bibs (
     id UUID PRIMARY KEY,

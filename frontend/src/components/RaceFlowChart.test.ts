@@ -1558,6 +1558,9 @@ describe('RaceFlowChart.vue', () => {
         [],
         chart,
       )
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve())
+      })
       await flushPromises()
 
       const highlighted = chart.data.datasets.find((d) => d.participantId === 'p1')
@@ -1571,6 +1574,9 @@ describe('RaceFlowChart.vue', () => {
       const pointer = stubPointerHit(chart, 1)
 
       chart.options.onHover?.(pointer, [{ datasetIndex: 1 }], chart)
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve())
+      })
       await flushPromises()
 
       expect(wrapper.vm.hoveredParticipantId).toBeNull()
@@ -1620,12 +1626,20 @@ describe('RaceFlowChart.vue', () => {
       wrapper.unmount()
     })
 
+    async function flushHoverFrame() {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve())
+      })
+      await flushPromises()
+    }
+
     it('sets pointer cursor when hovering a line with no sticky selection', async () => {
       await mountWithData()
       const chart = lastChartInstance()
       const pointer = stubPointerHit(chart, 0)
 
       chart.options.onHover?.(pointer, [{ datasetIndex: 0 }], chart)
+      await flushHoverFrame()
       expect(chart.canvas.style.cursor).toBe('pointer')
 
       chart.getElementsAtEventForMode.mockReturnValue([])
@@ -1635,7 +1649,23 @@ describe('RaceFlowChart.vue', () => {
         [],
         chart,
       )
+      await flushHoverFrame()
       expect(chart.canvas.style.cursor).toBe('default')
+    })
+
+    it('coalesces hover hit-tests to one update per distinct participant', async () => {
+      const wrapper = await mountWithData()
+      const chart = lastChartInstance()
+      chart.update.mockClear()
+      const pointer = stubPointerHit(chart, 0)
+
+      chart.options.onHover?.(pointer, [{ datasetIndex: 0 }], chart)
+      chart.options.onHover?.(pointer, [{ datasetIndex: 0 }], chart)
+      chart.options.onHover?.(pointer, [{ datasetIndex: 0 }], chart)
+      await flushHoverFrame()
+
+      expect(wrapper.vm.hoveredParticipantId).toBe('p1')
+      expect(chart.update.mock.calls.length).toBe(1)
     })
 
     it('legend name button sticky-selects; checkbox only toggles visibility', async () => {
@@ -1655,6 +1685,59 @@ describe('RaceFlowChart.vue', () => {
       // checkbox click must not emit a second select
       const selectEmits = wrapper.emitted('update:highlightParticipantId') ?? []
       expect(selectEmits.filter((e) => e[0] === 'p1').length).toBe(1)
+    })
+  })
+
+  describe('toolbar zoom', () => {
+    it('zooms x domain in and resets to full race window', async () => {
+      ;(timingApi.getLive as Mock).mockResolvedValue({
+        data: { race_id: 'race-1', records: sampleRecords },
+      })
+
+      const wrapper = mount(RaceFlowChart, {
+        props: {
+          raceId: 'race-1',
+          durationMinutes: 720,
+          raceType: 'time_based',
+        },
+      })
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="race-flow-zoom-toolbar"]').exists()).toBe(true)
+      expect(wrapper.vm.fullXAxisMax).toBe(720)
+      expect(wrapper.vm.zoomWindow).toEqual({ min: 0, max: 720 })
+
+      await wrapper.find('[data-testid="race-flow-zoom-in"]').trigger('click')
+      await flushPromises()
+
+      const zoomed = wrapper.vm.zoomWindow as { min: number; max: number }
+      expect(zoomed.max - zoomed.min).toBeLessThan(720)
+
+      const chart = (Chart as unknown as Mock).mock.results.at(-1)?.value as {
+        options: { scales: { x: { min: number; max: number } } }
+      }
+      expect(chart.options.scales.x.min).toBe(zoomed.min)
+      expect(chart.options.scales.x.max).toBe(zoomed.max)
+
+      await wrapper.find('[data-testid="race-flow-zoom-reset"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.vm.zoomWindow).toEqual({ min: 0, max: 720 })
+      wrapper.unmount()
+    })
+
+    it('disables animation and caps devicePixelRatio', async () => {
+      ;(timingApi.getLive as Mock).mockResolvedValue({
+        data: { race_id: 'race-1', records: sampleRecords },
+      })
+
+      mount(RaceFlowChart, { props: { raceId: 'race-1' } })
+      await flushPromises()
+
+      const chartConfig = (Chart as unknown as Mock).mock.calls.at(-1)?.[1] as {
+        options: { animation: boolean; devicePixelRatio: number }
+      }
+      expect(chartConfig.options.animation).toBe(false)
+      expect(chartConfig.options.devicePixelRatio).toBeLessThanOrEqual(2)
     })
   })
 

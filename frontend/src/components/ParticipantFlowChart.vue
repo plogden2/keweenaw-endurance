@@ -24,7 +24,16 @@ import {
   Title,
   Tooltip,
 } from 'chart.js'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  computed,
+  markRaw,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue'
 import { timingApi } from '@/services/api'
 import { useUnitsStore } from '@/stores/units'
 import type { RaceStatus, RaceType, TimingRecord } from '@/types/models'
@@ -39,6 +48,7 @@ import {
   resolveRaceFlowXAxisMax,
   resolveRaceStartMs,
 } from '@/utils/raceFlowData'
+import { resolveChartDevicePixelRatio } from '@/utils/raceFlowZoom'
 import { getErrorMessage } from '@/utils/error'
 
 Chart.register(
@@ -50,6 +60,8 @@ Chart.register(
   Title,
   Tooltip,
 )
+
+const LIVE_REFRESH_MS = 30_000
 
 const props = defineProps<{
   raceId: string
@@ -68,7 +80,8 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const records = ref<TimingRecord[]>([])
-const chartInstance = ref<Chart | null>(null)
+/** shallowRef + markRaw: Chart.js must not be deeply proxied (update() stack overflows). */
+const chartInstance = shallowRef<Chart | null>(null)
 const nowMs = ref(Date.now())
 let liveRefreshTimer: ReturnType<typeof setInterval> | null = null
 
@@ -119,7 +132,7 @@ function startLiveRefreshTimer(): void {
 
   liveRefreshTimer = setInterval(() => {
     nowMs.value = Date.now()
-  }, 30_000)
+  }, LIVE_REFRESH_MS)
 }
 
 async function loadRecords(): Promise<void> {
@@ -175,12 +188,10 @@ function handlePageShow(event: PageTransitionEvent): void {
   }
 }
 
-function renderChart(): void {
-  destroyChart()
-
+function buildChartDataset() {
   const flow = participantFlow.value
-  if (!canvasRef.value || !flow || flow.points.length === 0) {
-    return
+  if (!flow) {
+    return null
   }
 
   const color = getFlowLineColor(flow.participantId)
@@ -221,79 +232,110 @@ function renderChart(): void {
     if (!isLapChart) {
       return 4
     }
-    // Hide synthetic step corners; keep real taps (and gun-start) hittable via hitRadius.
     return rawPoints.some((raw) => raw.x === point.x && raw.y === point.y) ? 4 : 0
   })
 
-  chartInstance.value = new Chart(canvasRef.value, {
-    type: 'line',
-    data: {
-      datasets: [
-        {
-          label: flow.label,
-          data: chartPoints,
-          borderColor: color,
-          backgroundColor: color,
-          pointBackgroundColor: color,
-          pointBorderColor: color,
-          borderWidth: 3,
-          tension: 0,
-          stepped: false,
-          pointHitRadius: 12,
-          pointRadius,
-          ...(extrapolation
-            ? {
-                segment: {
-                  borderDash: (ctx: { p1DataIndex: number }) =>
-                    ctx.p1DataIndex === chartPoints.length - 1 ? [6, 6] : undefined,
-                },
-              }
-            : {}),
-        },
-      ],
+  return {
+    dataset: {
+      label: flow.label,
+      data: chartPoints,
+      borderColor: color,
+      backgroundColor: color,
+      pointBackgroundColor: color,
+      pointBorderColor: color,
+      borderWidth: 3,
+      tension: 0,
+      stepped: false as const,
+      pointHitRadius: 12,
+      pointRadius,
+      ...(extrapolation
+        ? {
+            segment: {
+              borderDash: (ctx: { p1DataIndex: number }) =>
+                ctx.p1DataIndex === chartPoints.length - 1 ? [6, 6] : undefined,
+            },
+          }
+        : {}),
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: {
-        mode: 'nearest',
-        intersect: false,
-        axis: 'xy',
+    xAxisMax,
+  }
+}
+
+/** Move the live "now" extrapolation without destroy()+new Chart() (iOS Safari OOM). */
+function updateLiveProgress(): void {
+  const chart = chartInstance.value
+  const built = buildChartDataset()
+  if (!chart || !built) {
+    return
+  }
+
+  chart.data.datasets = [built.dataset]
+  const xScale = chart.options.scales?.x
+  if (xScale && typeof xScale === 'object') {
+    ;(xScale as { max?: number }).max = built.xAxisMax
+  }
+  chart.update('none')
+}
+
+function renderChart(): void {
+  destroyChart()
+
+  const built = buildChartDataset()
+  if (!canvasRef.value || !built) {
+    return
+  }
+
+  chartInstance.value = markRaw(
+    new Chart(canvasRef.value, {
+      type: 'line',
+      data: {
+        datasets: [built.dataset],
       },
-      scales: {
-        x: {
-          type: 'linear',
-          min: 0,
-          title: {
-            display: true,
-            text: 'Elapsed time (minutes)',
-            color: '#1a3f3d',
-            font: { size: 9, weight: 'bold' },
-          },
-          ticks: { color: '#1a3f3d', font: { size: 8 } },
-          max: xAxisMax,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        devicePixelRatio: resolveChartDevicePixelRatio(),
+        interaction: {
+          mode: 'nearest',
+          intersect: false,
+          axis: 'xy',
         },
-        y: {
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: getFlowYAxisLabel(chartRaceType.value, unitsStore.unitSystem),
-            color: '#1a3f3d',
-            font: { size: 9, weight: 'bold' },
+        scales: {
+          x: {
+            type: 'linear',
+            min: 0,
+            title: {
+              display: true,
+              text: 'Elapsed time (minutes)',
+              color: '#1a3f3d',
+              font: { size: 9, weight: 'bold' },
+            },
+            ticks: { color: '#1a3f3d', font: { size: 8 } },
+            max: built.xAxisMax,
           },
-          ticks: {
-            color: '#1a3f3d',
-            font: { size: 8 },
-            ...(chartRaceType.value === 'lap_based' ? { stepSize: 1 } : {}),
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: getFlowYAxisLabel(chartRaceType.value, unitsStore.unitSystem),
+              color: '#1a3f3d',
+              font: { size: 9, weight: 'bold' },
+            },
+            ticks: {
+              color: '#1a3f3d',
+              font: { size: 8 },
+              ...(chartRaceType.value === 'lap_based' ? { stepSize: 1 } : {}),
+            },
           },
         },
+        plugins: {
+          legend: { display: false },
+          title: { display: false },
+        },
       },
-      plugins: {
-        legend: { display: false },
-        title: { display: false },
-      },
-    },
-  })
+    }),
+  )
 }
 
 onMounted(async () => {
@@ -319,7 +361,7 @@ watch(
 )
 
 watch(
-  [participantFlow, loading, currentElapsedMinutes, chartRaceType, () => props.durationMinutes, () => unitsStore.unitSystem],
+  [participantFlow, loading, chartRaceType, () => props.durationMinutes, () => unitsStore.unitSystem],
   async () => {
     if (!loading.value) {
       await nextTick()
@@ -328,11 +370,33 @@ watch(
   },
 )
 
+watch(currentElapsedMinutes, () => {
+  if (loading.value) {
+    return
+  }
+  if (chartInstance.value) {
+    updateLiveProgress()
+    return
+  }
+  void nextTick().then(() => {
+    if (!loading.value && !chartInstance.value) {
+      renderChart()
+    } else if (chartInstance.value) {
+      updateLiveProgress()
+    }
+  })
+})
+
 onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('pageshow', handlePageShow)
   clearLiveRefreshTimer()
   destroyChart()
+})
+
+defineExpose({
+  loadRecords,
+  currentElapsedMinutes,
 })
 </script>
 

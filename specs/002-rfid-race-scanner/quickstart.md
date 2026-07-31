@@ -37,21 +37,38 @@ Compose defaults include `ORGANIZER_PIN=1738`, `RFID_INJECT=true`, and `PROXMARK
 
 ## Load AYCEB 2026 demo seed
 
+Seed requires the **bib-tag association** schema (`bibs` + `rfid_tag_associations.bib_id` from migration 06 / GORM AutoMigrate).
+
+1. Boot the stack so the backend migrates the DB (`docker compose up --build -d`).
+2. **Existing Postgres volumes** that still have `rfid_tag_associations.participant_id` (pre–bib-tag merge) must upgrade once:
+
+```bash
+# bash
+docker compose exec -T postgres psql -U timing_user -d keweenaw_timing \
+  < database/migrations/06-bib-tag-association-upgrade.sql
+```
+
+```powershell
+# PowerShell
+Get-Content database/migrations/06-bib-tag-association-upgrade.sql |
+  docker compose exec -T postgres psql -U timing_user -d keweenaw_timing
+```
+
+3. Generate and load the Bluffet seed:
+
 ```bash
 python database/seed/generate_bluffet_seed.py
 docker compose exec -T postgres psql -U timing_user -d keweenaw_timing < database/seed/03-bluffet-2026.sql
 ```
-
-On PowerShell, pipe via stdin:
 
 ```powershell
 python database/seed/generate_bluffet_seed.py
 Get-Content database/seed/03-bluffet-2026.sql | docker compose exec -T postgres psql -U timing_user -d keweenaw_timing
 ```
 
-Expect: **All You Can East Bluffet** (`1441674d-a011-471a-a601-722b88b117f5`), 3 lap races (12h / 6h / 90-min kids), clarified categories, **100** racers with deterministic logical RFID UUIDs (`uuid5` per `tag:{race}:{n}` — see `frontend/e2e/fixtures/rfid.ts`).
+Expect: **All You Can East Bluffet** (`1441674d-a011-471a-a601-722b88b117f5`), 3 lap races (12h / 6h / 90-min kids), clarified categories, **100** event-unique bibs + participants with deterministic logical RFID UUIDs (`uuid5` per `tag:{race}:{n}` — see `frontend/e2e/fixtures/rfid.ts`).
 
-The generator uses **deterministic UUIDs** (fixed event/race IDs matching `frontend/e2e/fixtures/rfid.ts` `BLUFFET`; child rows via uuid5). Regenerating SQL does not break e2e fixtures.
+The generator uses **deterministic UUIDs** (fixed event/race IDs matching `frontend/e2e/fixtures/rfid.ts` `BLUFFET`; child rows via uuid5). Regenerating SQL does not break e2e fixtures. If seed fails with `relation "bibs" does not exist`, the volume was not upgraded — run step 2.
 
 ## Organizer PIN
 
