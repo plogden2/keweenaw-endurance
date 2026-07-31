@@ -153,3 +153,49 @@ func TestUniqueSheetNameDedupesCaseInsensitively(t *testing.T) {
 	assert.Equal(t, "12 hour Men", uniqueSheetName("12 hour Men", used))
 	assert.Equal(t, "12 hour men (2)", uniqueSheetName("12 hour men", used))
 }
+
+func TestResultsExcelFiltersCustomCategorySheetsByCategoryID(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	race, err := NewRaceService(db).CreateRace(&models.Race{
+		EventID: event.ID, Name: "6 Hour", RaceType: "lap_based", DurationMinutes: 360,
+		Status: "active",
+	})
+	require.NoError(t, err)
+
+	categorySvc := NewCategoryService(db)
+	solo, err := categorySvc.CreateCategory(&models.Category{
+		RaceID: race.ID, Name: "Solo", CategoryType: "custom",
+	})
+	require.NoError(t, err)
+	duo, err := categorySvc.CreateCategory(&models.Category{
+		RaceID: race.ID, Name: "Duo", CategoryType: "custom",
+	})
+	require.NoError(t, err)
+
+	participantSvc := NewParticipantService(db)
+	_, err = participantSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, CategoryID: &solo.ID, BibNumber: "1", FirstName: "Solo", LastName: "Racer",
+	})
+	require.NoError(t, err)
+	_, err = participantSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, CategoryID: &duo.ID, BibNumber: "2", FirstName: "Duo", LastName: "Racer",
+	})
+	require.NoError(t, err)
+
+	data, _, err := NewResultsService(db, nil).BuildEventResultsWorkbook(event.ID.UUID())
+	require.NoError(t, err)
+	workbook, err := excelize.OpenReader(bytes.NewReader(data))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, workbook.Close()) }()
+
+	soloRows, err := workbook.GetRows("6 hour Solo")
+	require.NoError(t, err)
+	require.Len(t, soloRows, 2)
+	assert.Equal(t, "Solo Racer", soloRows[1][1])
+
+	duoRows, err := workbook.GetRows("6 hour Duo")
+	require.NoError(t, err)
+	require.Len(t, duoRows, 2)
+	assert.Equal(t, "Duo Racer", duoRows[1][1])
+}

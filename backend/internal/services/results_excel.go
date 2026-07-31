@@ -107,7 +107,11 @@ func (s *ResultsService) BuildEventResultsWorkbook(eventID uuid.UUID) (data []by
 			return nil, "", err
 		}
 		for _, category := range categories {
-			categoryBoard := filterLiveBoardByCategory(board, participantsByID, &category)
+			categoryID := category.ID.UUID()
+			categoryBoard, err := s.buildOverallLeaderboard(race.ID.UUID(), &categoryID, map[string]CategoryLegendEntry{})
+			if err != nil {
+				return nil, "", err
+			}
 			if len(categoryBoard) == 0 {
 				continue
 			}
@@ -172,19 +176,6 @@ func individualResultsRows(board []LiveOverallEntry, participants map[uuid.UUID]
 		})
 	}
 	return rows
-}
-
-func filterLiveBoardByCategory(board []LiveOverallEntry, participants map[uuid.UUID]models.Participant, category *models.Category) []LiveOverallEntry {
-	filtered := make([]LiveOverallEntry, 0, len(board))
-	for _, entry := range board {
-		participant, ok := participants[entry.ParticipantID.UUID()]
-		if !ok || !participantMatchesCategory(&participant, category) {
-			continue
-		}
-		entry.Place = len(filtered) + 1
-		filtered = append(filtered, entry)
-	}
-	return filtered
 }
 
 func shortRaceName(name string) string {
