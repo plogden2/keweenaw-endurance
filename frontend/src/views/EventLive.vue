@@ -989,27 +989,31 @@ const activeIndividualsRace = computed(() => {
 })
 
 const categoryFilterKeys = computed(() => {
-  const keys = new Set<string>()
+  // Active race board only — event-wide legend would show Class chips on kids.
+  const keys: string[] = []
   for (const entry of activeIndividualsRace.value?.leaderboard_overall ?? []) {
-    if (entry.category_key) keys.add(entry.category_key)
+    if (entry.category_key) keys.push(entry.category_key)
   }
-  for (const item of live.value?.category_legend ?? []) {
-    if (item.key) keys.add(item.key)
-  }
-  return [...keys]
+  return keys
 })
 
 const categoryFacets = computed(() => availableFacets(categoryFilterKeys.value))
 
-const filtered12 = computed(() =>
-  filterLeaderboard(race12.value?.leaderboard_overall ?? [], categoryFilter.value, 'place'),
-)
-const filtered6 = computed(() =>
-  filterLeaderboard(race6.value?.leaderboard_overall ?? [], categoryFilter.value, 'place'),
-)
-const filtered90 = computed(() =>
-  filterLeaderboard(race90.value?.leaderboard_overall ?? [], categoryFilter.value, 'place'),
-)
+function filterIndividualsBoard(
+  board: EventLiveRace['leaderboard_overall'] | undefined,
+): EventLiveRace['leaderboard_overall'] {
+  const entries = board ?? []
+  const facets = availableFacets(entries.map((e) => e.category_key))
+  const effective: LeaderboardCategoryFilter = {
+    skill: facets.hasSkill ? categoryFilter.value.skill : 'all',
+    gender: facets.hasGender ? categoryFilter.value.gender : 'all',
+  }
+  return filterLeaderboard(entries, effective, 'place')
+}
+
+const filtered12 = computed(() => filterIndividualsBoard(race12.value?.leaderboard_overall))
+const filtered6 = computed(() => filterIndividualsBoard(race6.value?.leaderboard_overall))
+const filtered90 = computed(() => filterIndividualsBoard(race90.value?.leaderboard_overall))
 
 function individualsEmptyMessage(
   source: EventLiveRace['leaderboard_overall'] | undefined,

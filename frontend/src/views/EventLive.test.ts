@@ -188,7 +188,26 @@ const livePayload = {
       start_time: '2026-08-01T15:00:00-04:00',
       duration_minutes: 90,
       countdown_seconds: 25200,
-      leaderboard_overall: [],
+      leaderboard_overall: [
+        {
+          place: 1,
+          participant_id: 'kid1',
+          bib_number: '101',
+          name: 'Kid One',
+          category_key: 'men',
+          laps: 2,
+          last_lap_at: '2026-08-01T15:20:00-04:00',
+        },
+        {
+          place: 2,
+          participant_id: 'kid2',
+          bib_number: '102',
+          name: 'Kid Two',
+          category_key: 'women',
+          laps: 1,
+          last_lap_at: '2026-08-01T15:18:00-04:00',
+        },
+      ],
       leaderboard_teams: [],
       flow_series: [],
     },
@@ -381,6 +400,17 @@ describe('EventLive.vue', () => {
       await flushPromises()
 
       expect(wrapper.find('[data-testid="leaderboard-category-filters"]').exists()).toBe(false)
+    })
+
+    it('hides Class chips on kids tab even when event legend has Expert', async () => {
+      const wrapper = await mountLive()
+
+      await wrapper.find('[data-testid="race-tab-90m"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="leaderboard-category-filters"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="lb-filter-skill"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="lb-filter-gender"]').exists()).toBe(true)
     })
   })
 
