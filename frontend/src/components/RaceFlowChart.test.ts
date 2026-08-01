@@ -1916,6 +1916,55 @@ describe('RaceFlowChart.vue', () => {
       wrapper.unmount()
     })
 
+    it('expands the plot alone and restores controls on collapse', async () => {
+      ;(timingApi.getLive as Mock).mockResolvedValue({
+        data: { race_id: 'race-1', records: sampleRecords },
+      })
+
+      const wrapper = mount(RaceFlowChart, {
+        props: { raceId: 'race-1' },
+      })
+      await flushPromises()
+
+      const expandToggle = wrapper.find('[data-testid="race-flow-expand-toggle"]')
+      expect(expandToggle.exists()).toBe(true)
+      expect(expandToggle.text()).toBe('Expand plot')
+      expect(wrapper.find('[data-testid="race-flow-zoom-toolbar"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="race-flow-legend"]').exists()).toBe(true)
+
+      const chart = (Chart as unknown as Mock).mock.results.at(-1)?.value as {
+        resize: Mock
+        update: Mock
+      }
+      chart.resize.mockClear()
+      chart.update.mockClear()
+
+      await expandToggle.trigger('click')
+      await flushPromises()
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find('.chart-panel').classes()).toContain('is-expanded')
+      expect(wrapper.find('[data-testid="race-flow-zoom-toolbar"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="race-flow-legend"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="race-flow-canvas"]').exists()).toBe(true)
+
+      const collapseToggle = wrapper.find('[data-testid="race-flow-expand-toggle"]')
+      expect(collapseToggle.text()).toBe('Collapse plot')
+      expect(collapseToggle.classes()).toContain('collapse-plot-btn')
+      expect(chart.resize).toHaveBeenCalled()
+      expect(chart.update).toHaveBeenCalledWith('none')
+
+      await collapseToggle.trigger('click')
+      await flushPromises()
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.find('.chart-panel').classes()).not.toContain('is-expanded')
+      expect(wrapper.find('[data-testid="race-flow-zoom-toolbar"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="race-flow-legend"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="race-flow-expand-toggle"]').text()).toBe('Expand plot')
+      wrapper.unmount()
+    })
+
     it('disables animation and caps devicePixelRatio', async () => {
       ;(timingApi.getLive as Mock).mockResolvedValue({
         data: { race_id: 'race-1', records: sampleRecords },

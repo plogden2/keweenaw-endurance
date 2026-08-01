@@ -9,8 +9,14 @@
     <p v-else-if="!hasData" class="empty" data-testid="race-flow-empty">
       Not enough timing data to render race flow yet.
     </p>
-    <div v-else class="chart-panel">
-      <div class="chart-toolbar" data-testid="race-flow-zoom-toolbar" role="toolbar" aria-label="Race flow zoom">
+    <div v-else class="chart-panel" :class="{ 'is-expanded': plotExpanded }">
+      <div
+        v-if="!plotExpanded"
+        class="chart-toolbar"
+        data-testid="race-flow-zoom-toolbar"
+        role="toolbar"
+        aria-label="Race flow zoom"
+      >
         <button
           type="button"
           class="zoom-btn"
@@ -46,23 +52,52 @@
         >
           Reset view
         </button>
+        <button
+          type="button"
+          class="zoom-btn"
+          data-testid="race-flow-expand-toggle"
+          aria-label="Expand plot"
+          :aria-controls="canvasHostId"
+          :aria-pressed="plotExpanded"
+          @click="togglePlotExpanded"
+        >
+          Expand plot
+        </button>
       </div>
       <p
-        v-if="datasetCapMessage"
+        v-if="datasetCapMessage && !plotExpanded"
         class="dataset-cap-note"
         data-testid="race-flow-dataset-cap"
       >
         {{ datasetCapMessage }}
       </p>
       <div
+        :id="canvasHostId"
         class="chart-canvas-host"
         data-testid="race-flow-zoom-domain"
         :data-zoom-min="zoomWindow.min"
         :data-zoom-max="zoomWindow.max"
       >
+        <button
+          v-if="plotExpanded"
+          type="button"
+          class="collapse-plot-btn"
+          data-testid="race-flow-expand-toggle"
+          aria-label="Collapse plot"
+          :aria-controls="canvasHostId"
+          :aria-pressed="plotExpanded"
+          @click="togglePlotExpanded"
+        >
+          Collapse plot
+        </button>
         <canvas ref="canvasRef" data-testid="race-flow-canvas" />
       </div>
-      <div class="legend-panel" data-testid="race-flow-legend" aria-label="Participant legend">
+      <div
+        v-if="!plotExpanded"
+        class="legend-panel"
+        data-testid="race-flow-legend"
+        aria-label="Participant legend"
+      >
         <div class="legend-controls">
           <div class="legend-controls-row">
             <label class="legend-search-label">
@@ -516,6 +551,8 @@ const unitsStore = useUnitsStore()
 const chartRaceType = computed(() => props.raceType ?? 'time_based')
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const canvasHostId = `race-flow-canvas-host-${Math.random().toString(36).slice(2, 10)}`
+const plotExpanded = ref(false)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const records = ref<TimingRecord[]>([])
@@ -1026,6 +1063,25 @@ function destroyChart(): void {
   chartInstance.value = null
 }
 
+function resizeRenderedChart(): void {
+  void nextTick(() => {
+    const chart = chartInstance.value
+    if (chart) {
+      chart.resize()
+      chart.update('none')
+      return
+    }
+    if (!loading.value && hasData.value) {
+      renderChart()
+    }
+  })
+}
+
+function togglePlotExpanded(): void {
+  plotExpanded.value = !plotExpanded.value
+  resizeRenderedChart()
+}
+
 /** Recover blank Chart.js canvases after browser tab hide/show or bfcache restore. */
 function restoreChartAfterVisible(): void {
   if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
@@ -1035,15 +1091,7 @@ function restoreChartAfterVisible(): void {
     return
   }
 
-  void nextTick(() => {
-    const chart = chartInstance.value
-    if (chart) {
-      chart.resize()
-      chart.update('none')
-      return
-    }
-    renderChart()
-  })
+  resizeRenderedChart()
 }
 
 function handleVisibilityChange(): void {
@@ -1727,6 +1775,30 @@ defineExpose({
   min-width: 0;
   height: 320px;
   overflow: hidden;
+}
+
+.chart-panel.is-expanded .chart-canvas-host {
+  height: clamp(360px, 65vh, 720px);
+  min-height: 0;
+}
+
+.collapse-plot-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 2;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 0.35rem 0.65rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.collapse-plot-btn:hover {
+  background: var(--surface);
 }
 
 .legend-panel {
