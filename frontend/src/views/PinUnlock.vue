@@ -287,6 +287,14 @@
           <router-link
             v-if="managementEventId"
             class="btn secondary"
+            :to="`/events/${managementEventId}/bibs`"
+            data-testid="mgmt-open-bibs"
+          >
+            Bibs
+          </router-link>
+          <router-link
+            v-if="managementEventId"
+            class="btn secondary"
             :to="`/events/${managementEventId}/live`"
           >
             Live view

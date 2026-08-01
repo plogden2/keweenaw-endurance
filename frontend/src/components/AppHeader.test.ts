@@ -5,6 +5,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import AppHeader from './AppHeader.vue'
+import { usePinAuthStore } from '@/stores/pinAuth'
 import { BLUFFET_EVENT_ID, BLUFFET_LOGO_PATH } from '@/themes/bluffetConstants'
 
 const headerVue = readFileSync(join(process.cwd(), 'src/components/AppHeader.vue'), 'utf8')
@@ -56,9 +57,22 @@ describe('AppHeader', () => {
     expect(headerVue).toMatch(/background(-color)?:\s*var\(--ink\)/)
   })
 
-  it('does not expose PIN in the header (PIN lives in the footer)', async () => {
+  it('does not expose PIN unlock or Station in the header (PIN lives in the footer)', async () => {
     const wrapper = await mountHeader('/')
     expect(wrapper.find('[data-testid="nav-station"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="nav-pin"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="nav-management"]').exists()).toBe(false)
+  })
+
+  it('shows Management index link in the header when PIN is unlocked', async () => {
+    const pinAuth = usePinAuthStore()
+    pinAuth.token = 'test-token'
+    pinAuth.role = 'organizer'
+    pinAuth.expiresAt = Math.floor(Date.now() / 1000) + 3600
+
+    const wrapper = await mountHeader('/')
+    const link = wrapper.get('[data-testid="nav-management"]')
+    expect(link.text()).toBe('Management')
+    expect(link.attributes('href')).toBe('/pin')
   })
 })
