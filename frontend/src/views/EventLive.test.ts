@@ -77,6 +77,10 @@ vi.mock('@/services/offlineQueue', () => ({
   syncAll: vi.fn().mockResolvedValue({ synced: 0, failed: 0 }),
 }))
 
+vi.mock('qrcode', () => ({
+  default: { toCanvas: vi.fn(async () => undefined) },
+}))
+
 vi.mock('@/services/timingStorage', () => ({
   setDisplayCache: vi.fn().mockResolvedValue(undefined),
 }))
@@ -915,6 +919,36 @@ describe('EventLive.vue', () => {
       } finally {
         Element.prototype.scrollIntoView = previous
       }
+    })
+  })
+
+  describe('rotator live QR', () => {
+    beforeEach(() => {
+      sessionStorage.clear()
+    })
+
+    it('does not show QR by default', async () => {
+      const wrapper = await mountLive()
+      await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+      await nextTick()
+      expect(wrapper.find('[data-testid="rotator-live-qr"]').exists()).toBe(false)
+    })
+
+    it('shows QR with live url when enabled in settings', async () => {
+      const wrapper = await mountLive()
+      await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+      await nextTick()
+      await wrapper.find('[data-testid="rotator-settings-open"]').trigger('click')
+      await nextTick()
+      const checkbox = wrapper.find('[data-testid="rotator-show-qr"]')
+      expect(checkbox.exists()).toBe(true)
+      await checkbox.setValue(true)
+      await nextTick()
+      await wrapper.find('[data-testid="rotator-settings-done"]').trigger('click')
+      await nextTick()
+      const qr = wrapper.find('[data-testid="rotator-live-qr"]')
+      expect(qr.exists()).toBe(true)
+      expect(qr.text()).toContain('view results at keweenawendurance.com')
     })
   })
 

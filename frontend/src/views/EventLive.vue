@@ -501,35 +501,41 @@
         data-testid="fullscreen-rotator"
         aria-label="Fullscreen rotating race display"
       >
-        <div class="fs-controls" data-testid="rotator-controls">
-          <button
-            type="button"
-            class="btn secondary"
-            data-testid="rotator-play-pause"
-            :aria-pressed="rotatorPlaying"
-            :aria-label="rotatorPlaying ? 'Pause rotation' : 'Play rotation'"
-            @click="toggleRotatorPlay"
+        <div class="fs-corner" data-testid="rotator-corner">
+          <div
+            class="fs-controls"
+            data-testid="rotator-controls"
           >
-            {{ rotatorPlaying ? 'Pause' : 'Play' }}
-          </button>
-          <button
-            type="button"
-            class="btn secondary fs-cog"
-            data-testid="rotator-settings-open"
-            aria-label="Rotator settings"
-            title="Settings"
-            @click="openRotatorSettings"
-          >
-            ⚙
-          </button>
-          <button
-            type="button"
-            class="btn secondary"
-            data-testid="rotator-exit"
-            @click="rotatorOpen = false"
-          >
-            Exit (Esc)
-          </button>
+            <button
+              type="button"
+              class="btn secondary"
+              data-testid="rotator-play-pause"
+              :aria-pressed="rotatorPlaying"
+              :aria-label="rotatorPlaying ? 'Pause rotation' : 'Play rotation'"
+              @click="toggleRotatorPlay"
+            >
+              {{ rotatorPlaying ? 'Pause' : 'Play' }}
+            </button>
+            <button
+              type="button"
+              class="btn secondary fs-cog"
+              data-testid="rotator-settings-open"
+              aria-label="Rotator settings"
+              title="Settings"
+              @click="openRotatorSettings"
+            >
+              ⚙
+            </button>
+            <button
+              type="button"
+              class="btn secondary"
+              data-testid="rotator-exit"
+              @click="rotatorOpen = false"
+            >
+              Exit (Esc)
+            </button>
+          </div>
+          <LiveEventQr v-if="showRotatorQr" :url="rotatorLiveUrl" />
         </div>
         <div class="fs-top">
           <div>
@@ -651,6 +657,15 @@
                 @change="onRotatorDwellChange"
               />
             </label>
+            <label class="rotator-settings-field">
+              <input
+                data-testid="rotator-show-qr"
+                type="checkbox"
+                :checked="rotatorSettings.showQrCode"
+                @change="setShowQrCode(($event.target as HTMLInputElement).checked)"
+              />
+              Show QR code for live page
+            </label>
             <p class="muted">Pages in cycle (drag order with ↑ ↓)</p>
             <ul class="rotator-page-list" data-testid="rotator-page-list">
               <li
@@ -717,6 +732,7 @@ import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import EventTestModeDialog from '@/components/EventTestModeDialog.vue'
 import LapCelebrationOverlay from '@/components/LapCelebrationOverlay.vue'
+import LiveEventQr from '@/components/LiveEventQr.vue'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import {
   downloadEventResultsExcel,
@@ -736,6 +752,7 @@ import {
   onPendingChange,
 } from '@/services/offlineQueue'
 import { setDisplayCache } from '@/services/timingStorage'
+import { liveEventUrl } from '@/utils/liveEventUrl'
 import { useBridgeSyncStatus } from '@/composables/useBridgeSyncStatus'
 import { useEventLiveStream } from '@/composables/useEventLiveStream'
 import {
@@ -964,11 +981,20 @@ const {
   setDwellSeconds,
   setPageEnabled: setRotatorPageEnabled,
   movePage: moveRotatorPage,
+  setShowQrCode,
   onKeydown: onRotatorKeydown,
 } = useFullscreenRotator({
   open: rotatorOpen,
   races: rotatorRaces,
 })
+
+const showRotatorQr = computed(() => Boolean(rotatorSettings.value.showQrCode))
+const rotatorLiveUrl = computed(() =>
+  liveEventUrl(
+    typeof window !== 'undefined' ? window.location.origin : '',
+    eventId.value,
+  ),
+)
 
 /** participant_id → on a team (for rotator mode preference on lap jump). */
 let teamMembershipByParticipantId: Map<string, boolean> = new Map()
@@ -1845,10 +1871,19 @@ td {
   color: var(--ink);
 }
 
-.fs-controls {
+.fs-corner {
   position: absolute;
   top: 1rem;
   right: 1rem;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.fs-controls {
+  position: static;
   display: flex;
   gap: 0.5rem;
   z-index: 2;
