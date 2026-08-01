@@ -736,6 +736,11 @@ import {
   type RotatorMode,
   type RotatorRaceKey,
 } from '@/composables/useFullscreenRotator'
+import {
+  buildTeamMembershipMap,
+  preferredRotatorMode,
+  rotatorKeyForRaceId,
+} from '@/utils/rotatorLapJump'
 import { useReaderStation } from '@/composables/useReaderStation'
 import { useSpectatorIdle } from '@/composables/useSpectatorIdle'
 import { useEventTestModeStore } from '@/stores/eventTestMode'
@@ -924,6 +929,7 @@ const {
   pageIndex: rotatorPageIndex,
   activePages: rotatorActivePages,
   currentPage: rotatorCurrentPage,
+  jumpToRace: jumpRotatorToRace,
   togglePlay: toggleRotatorPlay,
   openSettings: openRotatorSettings,
   closeSettings: closeRotatorSettings,
@@ -935,6 +941,19 @@ const {
   open: rotatorOpen,
   races: rotatorRaces,
 })
+
+/** participant_id → on a team (for rotator mode preference on lap jump). */
+let teamMembershipByParticipantId: Map<string, boolean> = new Map()
+
+async function refreshTeamMembership() {
+  if (!eventId.value) return
+  try {
+    const roster = await loadTestModeRoster()
+    teamMembershipByParticipantId = buildTeamMembershipMap(roster)
+  } catch {
+    // Keep prior cache if roster fetch fails.
+  }
+}
 
 function raceForRotatorKey(key: RotatorRaceKey | undefined): EventLiveRace | undefined {
   if (key === '12h') return race12.value
@@ -965,6 +984,15 @@ const visibleRaceIds = computed(() => {
   if (activeTab.value === '12h') return race12.value?.id ? [race12.value.id] : []
   if (activeTab.value === '6h') return race6.value?.id ? [race6.value.id] : []
   return race90.value?.id ? [race90.value.id] : []
+})
+
+/** Races allowed to celebrate a lap. While the rotator is playing, include all
+ *  rotator races so a lap can jump the display to that race. */
+const celebrationRaceIds = computed(() => {
+  if (rotatorOpen.value && rotatorPlaying.value) {
+    return [race12.value?.id, race6.value?.id].filter(Boolean) as string[]
+  }
+  return visibleRaceIds.value
 })
 
 /** Race selected by the live tab — used for Racers / Manual entry shortcuts. */
@@ -1023,6 +1051,16 @@ function shouldSkipDuplicateCelebration(ev: LapRecordedEvent): boolean {
   return key === lastCelebratedKey && Date.now() - lastCelebratedAt < 2500
 }
 
+function jumpRotatorForLap(ev: LapRecordedEvent) {
+  const key = rotatorKeyForRaceId(ev.race_id, {
+    '12h': race12.value?.id,
+    '6h': race6.value?.id,
+  })
+  if (!key) return
+  const mode = preferredRotatorMode(ev.participant_id, teamMembershipByParticipantId)
+  jumpRotatorToRace(key, mode)
+}
+
 function startCelebration(ev: LapRecordedEvent) {
   if (shouldSkipDuplicateCelebration(ev)) return
   clearCelebrationTimers()
@@ -1036,6 +1074,7 @@ function startCelebration(ev: LapRecordedEvent) {
     celebrationTimer = undefined
   }, 2500)
 
+  jumpRotatorForLap(ev)
   void refreshFlowForRace(ev.race_id)
 
   if (isBusy.value) {
@@ -1121,7 +1160,7 @@ async function applyLiveData(data: EventLiveResponse) {
 
   // Poll fallback: celebrate when boards show a new lap (covers multi-instance WS gaps).
   for (const ev of events) {
-    if (!visibleRaceIds.value.some((id) => publicIdsMatch(id, ev.race_id))) continue
+    if (!celebrationRaceIds.value.some((id) => publicIdsMatch(id, ev.race_id))) continue
     startCelebration(ev)
   }
 }
@@ -1133,6 +1172,7 @@ async function loadLive() {
   try {
     const { data } = await eventsLiveApi.getLive(eventId.value)
     await applyLiveData(data)
+    void refreshTeamMembership()
     online.value = navigator.onLine
   } catch (err) {
     error.value = getErrorMessage(err, 'Failed to load live view')
@@ -1268,11 +1308,11 @@ watch(
 
 watch(lastLap, (ev) => {
   if (!ev || ev.type !== 'lap_recorded') return
-  if (!visibleRaceIds.value.some((id) => publicIdsMatch(id, ev.race_id))) return
+  if (!celebrationRaceIds.value.some((id) => publicIdsMatch(id, ev.race_id))) return
   startCelebration(ev)
 })
 
-watch(visibleRaceIds, (ids) => {
+watch(celebrationRaceIds, (ids) => {
   if (
     celebrationRaceId.value &&
     !ids.some((id) => publicIdsMatch(id, celebrationRaceId.value))
@@ -1296,7 +1336,10 @@ watch(pageScrolledFromTop, (scrolled) => {
 })
 
 watch(rotatorOpen, (open) => {
-  if (open) restoreFsFlowWidth()
+  if (open) {
+    restoreFsFlowWidth()
+    void refreshTeamMembership()
+  }
 })
 
 watchEffect(() => {

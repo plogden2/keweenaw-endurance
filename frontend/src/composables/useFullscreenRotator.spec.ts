@@ -121,4 +121,67 @@ describe('useFullscreenRotator', () => {
     expect(settingsOpen.value).toBe(false)
     expect(ev.defaultPrevented).toBe(true)
   })
+
+  describe('jumpToRace', () => {
+    it('jumps to preferred mode for the race and resets dwell', async () => {
+      const { open, jumpToRace, pageIndex, currentPage } = setup()
+      open.value = true
+      await nextTick()
+      pageIndex.value = 0
+      await nextTick()
+
+      expect(jumpToRace('6h', 'teams')).toBe(true)
+      expect(currentPage.value).toEqual({ race: '6h', mode: 'teams', enabled: true })
+      expect(pageIndex.value).toBe(3)
+
+      vi.advanceTimersByTime(DEFAULT_ROTATOR_DWELL_MS - 1)
+      expect(pageIndex.value).toBe(3)
+      vi.advanceTimersByTime(1)
+      await nextTick()
+      expect(pageIndex.value).toBe(0)
+    })
+
+    it('falls back to the other mode when preferred is disabled', async () => {
+      const { open, jumpToRace, setPageEnabled, currentPage } = setup()
+      open.value = true
+      await nextTick()
+      setPageEnabled('12h', 'teams', false)
+
+      expect(jumpToRace('12h', 'teams')).toBe(true)
+      expect(currentPage.value?.race).toBe('12h')
+      expect(currentPage.value?.mode).toBe('individuals')
+    })
+
+    it('does not jump when paused', async () => {
+      const { open, jumpToRace, togglePlay, pageIndex, currentPage } = setup()
+      open.value = true
+      await nextTick()
+      togglePlay()
+      expect(jumpToRace('6h', 'individuals')).toBe(false)
+      expect(pageIndex.value).toBe(0)
+      expect(currentPage.value?.race).toBe('12h')
+    })
+
+    it('does not jump when rotator is closed', () => {
+      const { jumpToRace, pageIndex } = setup()
+      expect(jumpToRace('6h', 'teams')).toBe(false)
+      expect(pageIndex.value).toBe(0)
+    })
+
+    it('resets dwell when already on the target page', async () => {
+      const { open, jumpToRace, pageIndex } = setup()
+      open.value = true
+      await nextTick()
+      expect(jumpToRace('12h', 'individuals')).toBe(true)
+      expect(pageIndex.value).toBe(0)
+
+      vi.advanceTimersByTime(DEFAULT_ROTATOR_DWELL_MS - 1)
+      expect(jumpToRace('12h', 'individuals')).toBe(true)
+      vi.advanceTimersByTime(DEFAULT_ROTATOR_DWELL_MS - 1)
+      expect(pageIndex.value).toBe(0)
+      vi.advanceTimersByTime(1)
+      await nextTick()
+      expect(pageIndex.value).toBe(1)
+    })
+  })
 })

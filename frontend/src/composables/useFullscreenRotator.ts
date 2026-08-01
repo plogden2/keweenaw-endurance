@@ -185,6 +185,24 @@ export function useFullscreenRotator(opts: {
     scheduleAdvance()
   }
 
+  /** Jump to a race page for a live lap. No-op when closed or paused. */
+  function jumpToRace(race: RotatorRaceKey, preferredMode: RotatorMode): boolean {
+    if (!opts.open.value || !playing.value) return false
+    const pages = activePages.value
+    if (!pages.length) return false
+
+    const fallback: RotatorMode = preferredMode === 'teams' ? 'individuals' : 'teams'
+    let idx = pages.findIndex((p) => p.race === race && p.mode === preferredMode)
+    if (idx < 0) {
+      idx = pages.findIndex((p) => p.race === race && p.mode === fallback)
+    }
+    if (idx < 0) return false
+
+    pageIndex.value = idx
+    scheduleAdvance()
+    return true
+  }
+
   function togglePlay() {
     playing.value = !playing.value
     if (playing.value) scheduleAdvance()
@@ -325,6 +343,7 @@ export function useFullscreenRotator(opts: {
     currentPage,
     nextPage,
     prevPage,
+    jumpToRace,
     togglePlay,
     openSettings,
     closeSettings,

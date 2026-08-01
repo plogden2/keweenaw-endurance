@@ -43,6 +43,19 @@ vi.mock('@/services/api', async () => {
     eventsLiveApi: {
       getLive: vi.fn(),
     },
+    eventParticipantsApi: {
+      list: vi.fn().mockResolvedValue({
+        data: {
+          data: [
+            { id: 'p1', team_id: 'team-a', first_name: 'Alex', last_name: 'Rivera' },
+            { id: 'p6', team_id: null, first_name: 'Solo', last_name: 'Six' },
+          ],
+        },
+      }),
+    },
+    raceParticipantsApi: {
+      list: vi.fn().mockResolvedValue({ data: { data: [] } }),
+    },
     rfidApi: {
       getSyncStatus: vi.fn().mockResolvedValue({
         data: { pending_count: 0, failed_count: 0, synced_count: 0 },
@@ -715,6 +728,64 @@ describe('EventLive.vue', () => {
     it('source contract: uses event-live-fs-flow-width sessionStorage key', () => {
       const src = readFileSync(join(process.cwd(), 'src/views/EventLive.vue'), 'utf8')
       expect(src).toMatch(/event-live-fs-flow-width/)
+    })
+  })
+
+  describe('rotator lap jump', () => {
+    it('jumps to team page for a teammate lap on another race while playing', async () => {
+      const wrapper = await mountLive()
+      await flushPromises()
+      await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+      await nextTick()
+
+      expect(wrapper.find('.fs-meta').text()).toContain('12 Hour · Individual')
+
+      lastLap.value = lapEvent({
+        race_id: 'r-6',
+        participant_id: 'p1',
+        participant_name: 'Alex Rivera',
+      })
+      await nextTick()
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="lap-celebration"]').exists()).toBe(true)
+      expect(wrapper.find('.fs-meta').text()).toContain('6 Hour · Team')
+    })
+
+    it('jumps to individual page when the racer has no team', async () => {
+      const wrapper = await mountLive()
+      await flushPromises()
+      await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+      await nextTick()
+
+      lastLap.value = lapEvent({
+        race_id: 'r-6',
+        participant_id: 'p6',
+        participant_name: 'Solo Six',
+      })
+      await nextTick()
+      await flushPromises()
+
+      expect(wrapper.find('.fs-meta').text()).toContain('6 Hour · Individual')
+    })
+
+    it('does not jump when rotator is paused', async () => {
+      const wrapper = await mountLive()
+      await flushPromises()
+      await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+      await nextTick()
+      await wrapper.find('[data-testid="rotator-play-pause"]').trigger('click')
+      await nextTick()
+
+      lastLap.value = lapEvent({
+        race_id: 'r-6',
+        participant_id: 'p1',
+        participant_name: 'Alex Rivera',
+      })
+      await nextTick()
+
+      expect(wrapper.find('[data-testid="lap-celebration"]').exists()).toBe(false)
+      expect(wrapper.find('.fs-meta').text()).toContain('12 Hour · Individual')
     })
   })
 
