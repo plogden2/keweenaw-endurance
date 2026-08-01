@@ -713,7 +713,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import EventTestModeDialog from '@/components/EventTestModeDialog.vue'
 import LapCelebrationOverlay from '@/components/LapCelebrationOverlay.vue'
