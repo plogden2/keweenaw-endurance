@@ -21,11 +21,11 @@ defineProps<{
 
 <style scoped>
 .lap-celebration {
-  position: absolute;
+  position: fixed;
   top: 1rem;
   right: 1rem;
   pointer-events: none;
-  z-index: 100;
+  z-index: 1200;
   padding: 0.85rem 1.1rem;
   background: var(--bluffet-panel, #f7f3ea);
   color: var(--bluffet-ink, #1a1a1a);

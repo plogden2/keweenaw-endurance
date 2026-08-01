@@ -53,3 +53,20 @@ export function isoToTimeInputValue(iso: string): string {
   if (Number.isNaN(d.getTime())) return ''
   return formatTimeHHMM(iso)
 }
+
+/** YYYY-MM-DD for `<input type="date">` in the display timezone. */
+export function isoToDateInputValue(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: getDisplayTimeZone(),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d)
+  const year = parts.find((p) => p.type === 'year')?.value
+  const month = parts.find((p) => p.type === 'month')?.value
+  const day = parts.find((p) => p.type === 'day')?.value
+  if (!year || !month || !day) return ''
+  return `${year}-${month}-${day}`
+}

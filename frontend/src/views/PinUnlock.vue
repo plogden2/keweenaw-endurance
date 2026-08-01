@@ -164,6 +164,15 @@
             </select>
           </label>
           <label
+            >Start date
+            <input
+              v-model="createForm.startDate"
+              data-testid="create-race-start-date"
+              type="date"
+              required
+            />
+          </label>
+          <label
             >Start time
             <input
               v-model="createForm.startTime"
@@ -195,15 +204,26 @@
         <div class="confirm-panel panel">
           <h2 id="edit-race-title">Edit race</h2>
           <p class="muted">{{ pendingEdit.name }}</p>
-          <label
-            >Start time
-            <input
-              v-model="editForm.startTime"
-              data-testid="edit-race-start-time"
-              type="time"
-              required
-            />
-          </label>
+          <div class="grid-2">
+            <label
+              >Start date
+              <input
+                v-model="editForm.startDate"
+                data-testid="edit-race-start-date"
+                type="date"
+                required
+              />
+            </label>
+            <label
+              >Start time
+              <input
+                v-model="editForm.startTime"
+                data-testid="edit-race-start-time"
+                type="time"
+                required
+              />
+            </label>
+          </div>
           <label
             >Status
             <select v-model="editForm.status" data-testid="edit-race-status" required>
@@ -316,6 +336,7 @@ import { BLUFFET_EVENT_NAME } from '@/themes/bluffetConstants'
 import type { Race, RaceStatus } from '@/types/models'
 import {
   formatTimeHHMM,
+  isoToDateInputValue,
   isoToTimeInputValue,
   wallTimeToRFC3339,
 } from '@/utils/datetime'
@@ -343,13 +364,16 @@ const pendingEdit = ref<Race | null>(null)
 const createForm = ref({
   name: '',
   duration: '720',
+  startDate: '2026-08-01',
   startTime: '08:00',
 })
 
 const editForm = ref<{
+  startDate: string
   startTime: string
   status: 'scheduled' | 'active'
 }>({
+  startDate: '2026-08-01',
   startTime: '08:00',
   status: 'scheduled',
 })
@@ -389,6 +413,7 @@ async function resolveManagementEvent() {
   managementEventId.value = chosen.id
   managementEventName.value = chosen.name
   managementEventDate.value = (chosen.event_date || '2026-08-01').slice(0, 10)
+  createForm.value.startDate = managementEventDate.value
 }
 
 async function loadRaces() {
@@ -450,6 +475,9 @@ function openEdit(race: Race) {
   const status: 'scheduled' | 'active' =
     race.status === 'active' ? 'active' : 'scheduled'
   editForm.value = {
+    startDate: race.start_time
+      ? isoToDateInputValue(race.start_time) || managementEventDate.value
+      : managementEventDate.value,
     startTime: race.start_time
       ? isoToTimeInputValue(race.start_time) || '08:00'
       : '08:00',
@@ -471,12 +499,17 @@ async function onCreateRace() {
       race_type: 'lap_based',
       duration_minutes: Number(createForm.value.duration),
       start_time: wallTimeToRFC3339(
-        managementEventDate.value,
+        createForm.value.startDate || managementEventDate.value,
         createForm.value.startTime,
       ),
       status: 'scheduled',
     })
-    createForm.value = { name: '', duration: '720', startTime: '08:00' }
+    createForm.value = {
+      name: '',
+      duration: '720',
+      startDate: managementEventDate.value,
+      startTime: '08:00',
+    }
     await loadRaces()
   } catch (err) {
     mgmtError.value = getErrorMessage(err, 'Failed to create race')
@@ -495,7 +528,7 @@ async function onConfirmEdit() {
     }
     if (editForm.value.startTime) {
       payload.start_time = wallTimeToRFC3339(
-        managementEventDate.value,
+        editForm.value.startDate || managementEventDate.value,
         editForm.value.startTime,
       )
     }

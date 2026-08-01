@@ -3,6 +3,7 @@ import {
   formatDateTime,
   formatTimeHHMM,
   getDisplayTimeZone,
+  isoToDateInputValue,
   isoToTimeInputValue,
   wallTimeToRFC3339,
 } from './datetime'
@@ -51,6 +52,17 @@ describe('formatTimeHHMM / isoToTimeInputValue', () => {
   it('returns em dash / empty for invalid ISO', () => {
     expect(formatTimeHHMM('bad')).toBe('—')
     expect(isoToTimeInputValue('bad')).toBe('')
+  })
+})
+
+describe('isoToDateInputValue', () => {
+  it('round-trips wall date through ISO as YYYY-MM-DD', () => {
+    const iso = wallTimeToRFC3339('2026-07-31', '21:30')
+    expect(isoToDateInputValue(iso)).toBe('2026-07-31')
+  })
+
+  it('returns empty for invalid ISO', () => {
+    expect(isoToDateInputValue('bad')).toBe('')
   })
 })
 
