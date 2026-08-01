@@ -74,7 +74,7 @@ Spectators ───────────────────────
 
 **Windows:** run bash scripts via **Git Bash** or **WSL**. Install `gcloud` CLI and **Docker Desktop** for local image builds.
 
-**HTTP → HTTPS redirect:** not yet automated in `bootstrap-lb.sh` (Task 5 deferred). Operators can add a classic HTTP redirect URL map later if apex HTTP should redirect to HTTPS.
+**HTTP → HTTPS redirect:** created by `bootstrap-lb.sh` (port 80 forwarding rule → `keweenaw-http-redirect` URL map). New-device browsers that open bare `keweenawendurance.com` are upgraded to HTTPS.
 
 ---
 
@@ -270,7 +270,7 @@ Manual reference:
   - `/*` → serverless NEG → `keweenaw-frontend`
 - WebSocket upgrade headers for `/api/rfid/bridge` (backend timeout 3600s in YAML)
 
-**HTTP → HTTPS redirect** is not created by `bootstrap-lb.sh` yet; add a classic HTTP redirect URL map separately if needed.
+**HTTP → HTTPS redirect** is created by `bootstrap-lb.sh` (`keweenaw-http-rule` on port 80 → HTTPS).
 
 ### B. Separate Cloud Run domain mappings
 
@@ -410,7 +410,7 @@ Normal outages rely on **automatic bridge sync** only.
 | File | Purpose |
 |---|---|
 | `bootstrap.sh` | One-time greenfield: APIs, AR, SQL, secrets, GCS, service accounts, CI key |
-| `bootstrap-lb.sh` | HTTPS LB, managed cert, path routing, static IP + DNS instructions |
+| `bootstrap-lb.sh` | HTTPS LB, HTTP→HTTPS redirect, managed cert, path routing, static IP + DNS instructions |
 | `deploy-cloud-run.sh` | Render templates and `gcloud run services replace` |
 | `render-cloud-run.sh` | envsubst templates → `deploy/.generated/` |
 | `migrate-cloud-sql.sh` | Auth Proxy + `database/init` + migrations |

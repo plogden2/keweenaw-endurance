@@ -65,6 +65,28 @@ gcloud compute forwarding-rules describe keweenaw-https-rule --global \
        --global --address=keweenaw-lb-ip --target-https-proxy=keweenaw-https-proxy \
        --ports=443 --load-balancing-scheme=EXTERNAL_MANAGED
 
+# HTTP → HTTPS redirect on the same static IP (browsers default to http:// on first visit).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+mkdir -p "${SCRIPT_DIR}/.generated"
+cat > "${SCRIPT_DIR}/.generated/keweenaw-http-redirect.yaml" <<'EOF'
+name: keweenaw-http-redirect
+defaultUrlRedirect:
+  httpsRedirect: true
+  redirectResponseCode: MOVED_PERMANENTLY_DEFAULT
+  stripQuery: false
+EOF
+if ! gcloud compute url-maps describe keweenaw-http-redirect --global >/dev/null 2>&1; then
+  gcloud compute url-maps import keweenaw-http-redirect \
+    --global --source="${SCRIPT_DIR}/.generated/keweenaw-http-redirect.yaml" --quiet
+fi
+gcloud compute target-http-proxies describe keweenaw-http-proxy --global \
+  || gcloud compute target-http-proxies create keweenaw-http-proxy \
+       --url-map=keweenaw-http-redirect --global
+gcloud compute forwarding-rules describe keweenaw-http-rule --global \
+  || gcloud compute forwarding-rules create keweenaw-http-rule \
+       --global --address=keweenaw-lb-ip --target-http-proxy=keweenaw-http-proxy \
+       --ports=80 --load-balancing-scheme=EXTERNAL_MANAGED
+
 gcloud run services add-iam-policy-binding keweenaw-backend \
   --region="${REGION}" --member="allUsers" --role="roles/run.invoker" || true
 gcloud run services add-iam-policy-binding keweenaw-frontend \
