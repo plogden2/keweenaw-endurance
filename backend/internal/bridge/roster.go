@@ -65,7 +65,9 @@ func (c *RosterCache) RefreshRace(auth *HostedAuth, client *http.Client, raceID,
 	return nil
 }
 
-// RefreshEvent loads participants for every race in the event (paginated).
+// RefreshEvent loads participants for every race in the event (paginated),
+// then merges event bib inventory so unassigned programmed chips still resolve
+// to "Bib N" in the reader GUI.
 func (c *RosterCache) RefreshEvent(auth *HostedAuth, client *http.Client, eventID string) error {
 	if c == nil {
 		return fmt.Errorf("roster cache is nil")
@@ -94,7 +96,11 @@ func (c *RosterCache) RefreshEvent(auth *HostedAuth, client *http.Client, eventI
 		}
 		all = append(all, entries...)
 	}
-	c.replace(all)
+	bibEntries, err := fetchEventBibEntries(auth, client, eventID)
+	if err != nil {
+		return err
+	}
+	c.replace(mergeRosterPreferNamed(all, bibEntries))
 	return nil
 }
 
@@ -179,6 +185,87 @@ func fetchFinishCheckpointID(auth *HostedAuth, client *http.Client, raceID strin
 		return list[0].ID, nil
 	}
 	return "", nil
+}
+
+// mergeRosterPreferNamed keeps participant-named rows when the same UUID appears
+// in both participant and bib-inventory lists.
+func mergeRosterPreferNamed(primary, fallback []RosterEntry) []RosterEntry {
+	seen := map[string]bool{}
+	out := make([]RosterEntry, 0, len(primary)+len(fallback))
+	for _, e := range primary {
+		uid := strings.ToLower(strings.TrimSpace(e.LogicalUUID))
+		if uid == "" {
+			continue
+		}
+		seen[uid] = true
+		out = append(out, e)
+	}
+	for _, e := range fallback {
+		uid := strings.ToLower(strings.TrimSpace(e.LogicalUUID))
+		if uid == "" || seen[uid] {
+			continue
+		}
+		seen[uid] = true
+		out = append(out, e)
+	}
+	return out
+}
+
+func fetchEventBibEntries(auth *HostedAuth, client *http.Client, eventID string) ([]RosterEntry, error) {
+	if auth == nil {
+		return nil, fmt.Errorf("auth not configured")
+	}
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" {
+		return nil, fmt.Errorf("event_id is required")
+	}
+	if client == nil {
+		client = &http.Client{Timeout: 20 * time.Second}
+	}
+	url := fmt.Sprintf("%s/api/events/%s/bibs", auth.BaseURL, eventID)
+	raw, err := hostedGET(auth, client, url)
+	if err != nil {
+		return nil, err
+	}
+	var wrapped struct {
+		Data []struct {
+			BibNumber       string   `json:"bib_number"`
+			LogicalUUID     string   `json:"logical_uuid"`
+			TagUIDs         []string `json:"tag_uids"`
+			ParticipantName string   `json:"participant_name"`
+			RaceID          string   `json:"race_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err != nil {
+		return nil, err
+	}
+	var out []RosterEntry
+	for _, b := range wrapped.Data {
+		bib := strings.TrimSpace(b.BibNumber)
+		if bib == "" {
+			continue
+		}
+		name := strings.TrimSpace(b.ParticipantName)
+		raceID := strings.TrimSpace(b.RaceID)
+		uids := map[string]struct{}{}
+		if lu := strings.ToLower(strings.TrimSpace(b.LogicalUUID)); lu != "" {
+			uids[lu] = struct{}{}
+		}
+		for _, t := range b.TagUIDs {
+			if u := strings.ToLower(strings.TrimSpace(t)); u != "" {
+				uids[u] = struct{}{}
+			}
+		}
+		for uid := range uids {
+			out = append(out, RosterEntry{
+				Bib:         bib,
+				Name:        name,
+				RaceID:      raceID,
+				LogicalUUID: uid,
+			})
+		}
+	}
+	return out, nil
 }
 
 func fetchRaceParticipants(auth *HostedAuth, client *http.Client, raceID, raceName, finishCheckpointID string) ([]RosterEntry, error) {

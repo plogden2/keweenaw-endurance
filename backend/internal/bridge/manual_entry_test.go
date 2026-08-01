@@ -110,6 +110,8 @@ func TestRosterCache_AmbiguousBibAcrossRaces(t *testing.T) {
 				},
 				"total": 1,
 			})
+		case strings.Contains(r.URL.Path, "/bibs"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}

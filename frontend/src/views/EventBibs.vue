@@ -211,8 +211,8 @@ async function programTag(bib: BibListItem) {
       bib.logical_uuid ||
       ''
     programSuccess.value = uid
-      ? `WRITE OK — ${who} — chip verified (${uid})`
-      : `WRITE OK — ${who} — chip verified`
+      ? `WRITE OK — ${who} — verified read (${uid})`
+      : `WRITE OK — ${who} — verified read`
   } catch (err) {
     const who = bib.participant_name
       ? `Bib ${bib.bib_number} · ${bib.participant_name}`

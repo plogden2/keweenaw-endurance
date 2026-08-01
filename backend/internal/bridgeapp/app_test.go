@@ -112,7 +112,7 @@ func TestApp_RecordWriteResultShowsBib(t *testing.T) {
 	assert.True(t, st.LastWriteOK)
 	assert.Equal(t, "4", st.LastWriteBib)
 	assert.Equal(t, "Lianna Miller", st.LastWriteName)
-	assert.Contains(t, st.LastWriteMessage, "verified")
+	assert.Contains(t, st.LastWriteMessage, "Verified read")
 
 	app.recordWriteResult("a6588848-7664-42b6-9a62-10abf3862e00", false, errors.New("write verify failed: readback mismatch"))
 	st = app.StatusSnapshot()
@@ -120,6 +120,66 @@ func TestApp_RecordWriteResultShowsBib(t *testing.T) {
 	assert.Equal(t, "4", st.LastWriteBib)
 	assert.Contains(t, st.LastWriteMessage, "write verify failed")
 	assert.Contains(t, st.LastError, "write verify failed")
+}
+
+func TestApp_WriteChipRecordsWriteBanner(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{
+		HostedAPIURL: "http://127.0.0.1:1",
+		BridgeToken:  "tok",
+		DeviceID:     "laptop-finish-1",
+		EventID:      "11111111-1111-1111-1111-111111111111",
+		DataDir:      dir,
+		LocalAddr:    "127.0.0.1:0",
+		BridgeMock:   true,
+		WriteOnly:    true,
+	}
+	normalizeConfig(&cfg)
+	app, err := New(cfg)
+	require.NoError(t, err)
+	const uid = "40cb5f0d-be59-42e9-97f0-4d422b06d8fa"
+	app.roster.SeedForTest([]bridge.RosterEntry{{
+		Bib: "6", Name: "", RaceID: "race-1", RaceName: "6 Hour",
+		LogicalUUID: uid,
+	}})
+
+	require.NoError(t, app.writeChip(uid))
+	st := app.StatusSnapshot()
+	assert.True(t, st.LastWriteOK)
+	assert.Equal(t, "6", st.LastWriteBib)
+	assert.Equal(t, uid, st.LastWriteUUID)
+	assert.Contains(t, st.LastWriteMessage, "Verified read")
+	assert.Contains(t, st.LastWriteMessage, uid)
+}
+
+func TestApp_WriteChipFailsWhenPostWritePollMismatches(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{
+		HostedAPIURL: "http://127.0.0.1:1",
+		BridgeToken:  "tok",
+		DeviceID:     "laptop-finish-1",
+		EventID:      "11111111-1111-1111-1111-111111111111",
+		DataDir:      dir,
+		LocalAddr:    "127.0.0.1:0",
+		BridgeMock:   true,
+	}
+	normalizeConfig(&cfg)
+	app, err := New(cfg)
+	require.NoError(t, err)
+	const want = "40cb5f0d-be59-42e9-97f0-4d422b06d8fa"
+	const wrong = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	mock := app.reader.(*rfid.MockReader)
+	// Queue wrong UUIDs so every post-write Poll mismatches (queue beats memory).
+	for i := 0; i < 3; i++ {
+		mock.Enqueue(wrong)
+	}
+
+	err = app.writeChip(want)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "post-write read mismatch")
+	st := app.StatusSnapshot()
+	assert.False(t, st.LastWriteOK)
+	assert.Contains(t, st.LastWriteMessage, "post-write read mismatch")
 }
 
 func TestApp_WriteOnlyPollDoesNotRecord(t *testing.T) {

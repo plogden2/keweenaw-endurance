@@ -173,7 +173,7 @@ describe('EventBibs.vue', () => {
     const success = wrapper.find('[data-testid="bib-program-success"]')
     expect(success.exists()).toBe(true)
     expect(success.text()).toMatch(/WRITE OK — Bib 2/i)
-    expect(success.text()).toMatch(/chip verified/i)
+    expect(success.text()).toMatch(/verified read/i)
   })
 
   it('shows write fail message when programming fails', async () => {

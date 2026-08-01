@@ -529,6 +529,22 @@ func (a *App) snapshotStatusMap() map[string]any {
 	if st.LastTapRaceName != "" {
 		out["last_tap_race_name"] = st.LastTapRaceName
 	}
+	if st.LastWriteAt != nil {
+		out["last_write_ok"] = st.LastWriteOK
+		out["last_write_at"] = st.LastWriteAt.UTC().Format(time.RFC3339)
+		if st.LastWriteUUID != "" {
+			out["last_write_uuid"] = st.LastWriteUUID
+		}
+		if st.LastWriteBib != "" {
+			out["last_write_bib"] = st.LastWriteBib
+		}
+		if st.LastWriteName != "" {
+			out["last_write_name"] = st.LastWriteName
+		}
+		if st.LastWriteMessage != "" {
+			out["last_write_message"] = st.LastWriteMessage
+		}
+	}
 	if st.LastError != "" {
 		out["last_error"] = st.LastError
 	}
@@ -615,11 +631,9 @@ func (a *App) handleWriteTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := a.writeChip(logicalUUID); err != nil {
-		a.recordWriteResult(logicalUUID, false, err)
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	a.recordWriteResult(logicalUUID, true, nil)
 	st := a.StatusSnapshot()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -675,20 +689,62 @@ func (a *App) resolveLogicalUUID(req writeTagRequest) (string, error) {
 func (a *App) writeChip(logicalUUID string) error {
 	// WriteLogicalUUID cancels the continuous arm and (via killAllProxmarkHook)
 	// terminates any proxmark3 still holding COM — including our own Lua arm.
-	if err := a.pm3.WriteLogicalUUID(logicalUUID); err != nil {
+	// It also does a family-specific readback before returning.
+	normalized := strings.ToLower(strings.TrimSpace(logicalUUID))
+	if err := a.pm3.WriteLogicalUUID(normalized); err != nil {
+		// Hosted WS writes and local /write-tag both use this path — always
+		// update the operator WRITE OK/FAILED banner.
+		a.recordWriteResult(normalized, false, err)
 		return err
 	}
-	normalized := strings.ToLower(strings.TrimSpace(logicalUUID))
+	// Independent quick Poll before operator success — never report WRITE OK
+	// from write-exit alone (partial page writes have slipped past CLI exit 0).
+	got, err := a.verifyWriteByPoll(normalized)
+	if err != nil {
+		a.recordWriteResult(normalized, false, err)
+		return err
+	}
 	a.mu.Lock()
-	a.chipMemory = normalized
+	a.chipMemory = got
 	// Dress rehearsal rewrites the same chip every lap — clear debounce so the
 	// post-write emit always scores.
 	a.lastReadAt = time.Time{}
 	a.mu.Unlock()
-	// Score the UUID we just programmed. Do not re-Poll: Windows one-shot CLI
-	// reads after wrbl are flaky and the dress rehearsal only waits on feedback.
-	a.emitRead(normalized, true)
+	a.emitRead(got, true)
+	a.recordWriteResult(got, true, nil)
 	return nil
+}
+
+// verifyWriteByPoll polls the antenna a few times until the chip returns want.
+func (a *App) verifyWriteByPoll(want string) (string, error) {
+	want = strings.ToLower(strings.TrimSpace(want))
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt == 0 {
+			time.Sleep(150 * time.Millisecond)
+		} else {
+			time.Sleep(250 * time.Millisecond)
+		}
+		got, err := a.pm3.Poll()
+		got = strings.ToLower(strings.TrimSpace(got))
+		if err != nil {
+			lastErr = fmt.Errorf("post-write read failed: %w", err)
+			continue
+		}
+		if got == "" {
+			lastErr = fmt.Errorf("post-write read empty — hold chip on antenna and retry")
+			continue
+		}
+		if !strings.EqualFold(got, want) {
+			lastErr = fmt.Errorf("post-write read mismatch: got %s want %s", got, want)
+			continue
+		}
+		return got, nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("post-write read failed")
+	}
+	return "", lastErr
 }
 
 // recordWriteResult updates the operator-facing write banner (bib + ok/fail).
@@ -697,7 +753,7 @@ func (a *App) recordWriteResult(logicalUUID string, ok bool, writeErr error) {
 	bib, name := a.lookupWriteSubject(normalized)
 	msg := ""
 	if ok {
-		msg = "Chip verified on antenna"
+		msg = "Verified read " + normalized
 		a.setLastError(nil)
 	} else if writeErr != nil {
 		msg = writeErr.Error()
@@ -824,16 +880,25 @@ func (a *App) emitRead(logicalUUID string, playBeep bool) {
 	}
 	a.lastRead = logicalUUID
 	a.lastReadAt = time.Now()
-	if e, ok := a.roster.EntryForUUID(logicalUUID); ok {
-		a.lastTapUUID = logicalUUID
-		a.lastTapAt = a.lastReadAt
+	tapAt := a.lastReadAt
+	a.mu.Unlock()
+
+	// Resolve bib outside a.mu — may refresh event bibs (includes unassigned).
+	e, ok := a.roster.EntryForUUID(logicalUUID)
+	if !ok {
+		_, _ = a.lookupWriteSubject(logicalUUID)
+		e, ok = a.roster.EntryForUUID(logicalUUID)
+	}
+
+	a.mu.Lock()
+	a.lastTapUUID = logicalUUID
+	a.lastTapAt = tapAt
+	if ok {
 		a.lastTapName = e.Name
 		a.lastTapBib = e.Bib
 		a.lastTapRaceID = e.RaceID
 		a.lastTapRaceName = e.RaceName
 	} else {
-		a.lastTapUUID = logicalUUID
-		a.lastTapAt = a.lastReadAt
 		a.lastTapName = ""
 		a.lastTapBib = ""
 		a.lastTapRaceID = ""
@@ -1020,11 +1085,6 @@ func (a *App) handleWSMessage(conn *websocket.Conn, msg *services.BridgeMessage)
 		if err := a.writeChip(strings.TrimSpace(msg.LogicalUUID)); err != nil {
 			ok = false
 			errMsg = err.Error()
-			a.setLastError(err)
-		} else {
-			a.mu.Lock()
-			a.lastError = ""
-			a.mu.Unlock()
 		}
 		a.publishStatus()
 		return bridge.SendWriteAck(conn, &a.writeMu, msg.RequestID, ok, errMsg)

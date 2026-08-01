@@ -810,7 +810,11 @@ func formatLastWrite(st bridgeapp.Status) string {
 		when = " @ " + st.LastWriteAt.Local().Format(time.Kitchen)
 	}
 	if st.LastWriteOK {
-		return "WRITE OK — " + who + when + " — chip verified"
+		detail := st.LastWriteMessage
+		if detail == "" {
+			detail = "verified read"
+		}
+		return "WRITE OK — " + who + when + " — " + detail
 	}
 	detail := st.LastWriteMessage
 	if detail == "" {

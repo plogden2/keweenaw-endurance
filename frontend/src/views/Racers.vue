@@ -745,8 +745,8 @@ async function writeTag(racer: Participant) {
       tags[tags.length - 1] ||
       ''
     programSuccess.value = uid
-      ? `WRITE OK — ${who} — chip verified (${uid})`
-      : `WRITE OK — ${who} — chip verified`
+      ? `WRITE OK — ${who} — verified read (${uid})`
+      : `WRITE OK — ${who} — verified read`
   } catch (err) {
     programError.value = `WRITE FAILED — ${who} — ${getErrorMessage(err, 'write failed')}`
   } finally {
