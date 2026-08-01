@@ -29,6 +29,17 @@ vi.mock('chart.js', () => ({
   Legend: vi.fn(),
 }))
 
+const playMock = vi.fn().mockResolvedValue(undefined)
+
+vi.stubGlobal(
+  'Audio',
+  vi.fn(function AudioMock(this: { play: typeof playMock; src: string }) {
+    this.play = playMock
+    this.src = ''
+    return this
+  }),
+)
+
 vi.mock('@/services/api', async () => {
   const actual = await vi.importActual<typeof import('@/services/api')>('@/services/api')
   return {
@@ -36,6 +47,7 @@ vi.mock('@/services/api', async () => {
     rfidApi: {
       ...actual.rfidApi,
       getLocalBridgeStatusForTestMode: vi.fn().mockResolvedValue(null),
+      playLocalBridgeBeep: vi.fn().mockResolvedValue(false),
     },
   }
 })
@@ -57,7 +69,9 @@ describe('EventTestModeDialog', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia())
+    playMock.mockClear()
     vi.mocked(rfidApi.getLocalBridgeStatusForTestMode).mockResolvedValue(null)
+    vi.mocked(rfidApi.playLocalBridgeBeep).mockResolvedValue(false)
     const store = useEventTestModeStore()
     store.open('ev1', [
       {
@@ -96,6 +110,7 @@ describe('EventTestModeDialog', () => {
   })
 
   it('renders banner, leaderboard, and records bib taps', async () => {
+    const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus')
     wrapper = mount(EventTestModeDialog, mountOpts)
     await flushPromises()
 
@@ -103,11 +118,35 @@ describe('EventTestModeDialog', () => {
     expect(wrapper.get('[data-testid="test-mode-leaderboard"]').text()).toMatch(/No test taps/)
 
     await wrapper.get('[data-testid="test-mode-bib-input"]').setValue('101')
+    focusSpy.mockClear()
     await wrapper.get('form.bib-form').trigger('submit')
     await flushPromises()
 
     expect(wrapper.get('[data-testid="test-mode-feedback"]').text()).toMatch(/Alex Rivera/)
     expect(wrapper.get('[data-testid="test-mode-leaderboard-laps"]').text()).toBe('1')
+    expect(playMock).toHaveBeenCalled()
+    expect(focusSpy).toHaveBeenCalled()
+    focusSpy.mockRestore()
+  })
+
+  it('uses local bridge beep when bridge is online', async () => {
+    vi.mocked(rfidApi.getLocalBridgeStatusForTestMode).mockResolvedValue({
+      connected: true,
+      pending_count: 0,
+      syncing: false,
+      mode: 'online_synced',
+    })
+    vi.mocked(rfidApi.playLocalBridgeBeep).mockResolvedValue(true)
+
+    wrapper = mount(EventTestModeDialog, mountOpts)
+    await flushPromises()
+
+    await wrapper.get('[data-testid="test-mode-bib-input"]').setValue('101')
+    await wrapper.get('form.bib-form').trigger('submit')
+    await flushPromises()
+
+    expect(rfidApi.playLocalBridgeBeep).toHaveBeenCalled()
+    expect(playMock).not.toHaveBeenCalled()
   })
 
   it('emits close immediately when empty; confirms discard when taps exist', async () => {

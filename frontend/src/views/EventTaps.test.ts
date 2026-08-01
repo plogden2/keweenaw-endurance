@@ -2,8 +2,25 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import EventTaps from './EventTaps.vue'
 import { setupPinia, createTestRouter } from '@/test/helpers'
-import { eventsApi, eventParticipantsApi, eventTapsApi, timingRecordsApi } from '@/services/api'
+import {
+  eventsApi,
+  eventParticipantsApi,
+  eventTapsApi,
+  rfidApi,
+  timingRecordsApi,
+} from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
+
+const playMock = vi.fn().mockResolvedValue(undefined)
+
+vi.stubGlobal(
+  'Audio',
+  vi.fn(function AudioMock(this: { play: typeof playMock; src: string }) {
+    this.play = playMock
+    this.src = ''
+    return this
+  }),
+)
 
 vi.mock('@/services/api', async () => {
   const actual = await vi.importActual<typeof import('@/services/api')>('@/services/api')
@@ -19,6 +36,10 @@ vi.mock('@/services/api', async () => {
     eventParticipantsApi: { list: vi.fn() },
     eventTapsApi: { list: vi.fn(), create: vi.fn() },
     timingRecordsApi: { voidRecord: vi.fn(), restoreRecord: vi.fn(), karaokeBonus: vi.fn() },
+    rfidApi: {
+      ...actual.rfidApi,
+      playLocalBridgeBeep: vi.fn().mockResolvedValue(false),
+    },
   }
 })
 
@@ -92,6 +113,8 @@ describe('EventTaps.vue', () => {
   beforeEach(() => {
     setupPinia()
     vi.clearAllMocks()
+    playMock.mockClear()
+    vi.mocked(rfidApi.playLocalBridgeBeep).mockResolvedValue(false)
     ;(eventsApi.get as Mock).mockResolvedValue({
       data: { id: 'e1', name: 'Bluffet', event_date: '2026-08-01', status: 'active' },
     })
@@ -163,16 +186,23 @@ describe('EventTaps.vue', () => {
 
   it('records a tap on Enter with exact bib match and karaoke_bonus false by default', async () => {
     authenticate()
+    const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus')
     const wrapper = await mountEventTaps()
 
     expect(wrapper.find('[data-testid="inline-karaoke-toggle"]').exists()).toBe(true)
+    focusSpy.mockClear()
     await submitBib(wrapper, '42')
+    await flushPromises()
 
     expect(eventParticipantsApi.list).toHaveBeenCalledWith('e1', { q: '42', limit: 20 })
     expect(eventTapsApi.create).toHaveBeenCalledWith('e1', {
       participant_id: 'p1',
       karaoke_bonus: false,
     })
+    expect(rfidApi.playLocalBridgeBeep).toHaveBeenCalled()
+    expect(playMock).toHaveBeenCalled()
+    expect(focusSpy).toHaveBeenCalled()
+    focusSpy.mockRestore()
   })
 
   it('blocks production bib submit while event test mode is open', async () => {

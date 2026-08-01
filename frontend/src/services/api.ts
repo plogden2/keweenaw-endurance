@@ -100,6 +100,19 @@ async function fetchLocalBridgeStatus(
   }
 }
 
+/** Fire-and-forget local bridge coin beep; returns false if the bridge is unavailable. */
+async function playLocalBridgeBeep(timeoutMs = WRITE_TAG_PROBE_MS): Promise<boolean> {
+  try {
+    const res = await withProbeTimeout(
+      fetch(`${bridgeLocalUrl}/beep`, { method: 'POST' }),
+      timeoutMs,
+    )
+    return Boolean(res?.ok)
+  } catch {
+    return false
+  }
+}
+
 async function refreshBridgeSnapshotForWriteTag(): Promise<void> {
   const navigatorOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
   let hosted: BridgeStatusResponse | null = lastBridgeSnapshot.hosted
@@ -377,6 +390,8 @@ export const rfidApi = {
   getLocalBridgeStatus: () => fetchLocalBridgeStatus(),
   /** Longer timeout for event test-mode RFID ingest polling. */
   getLocalBridgeStatusForTestMode: () => fetchLocalBridgeStatus(2000),
+  /** Play the local bridge coin beep (same tone as an RFID tap). */
+  playLocalBridgeBeep: () => playLocalBridgeBeep(),
   syncPending: () =>
     apiClient.post<{ synced_count: number }>('/api/rfid/sync-pending'),
 }

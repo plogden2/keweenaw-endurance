@@ -40,7 +40,7 @@
                   data-testid="test-mode-bib-input"
                   placeholder="Bib number"
                   autocomplete="off"
-                  :disabled="submitting"
+                  autofocus
                 />
               </label>
               <button
@@ -152,6 +152,7 @@ import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import { rfidApi } from '@/services/api'
 import { useEventTestModeStore } from '@/stores/eventTestMode'
 import { resolveCategoryColor } from '@/themes/defaultLegend'
+import { playCoinSound } from '@/utils/playCoinSound'
 
 const props = defineProps<{
   /** When set, ambiguous bibs prefer this race's participant. */
@@ -166,6 +167,7 @@ const submitting = ref(false)
 const confirmOpen = ref(false)
 const highlightParticipantId = ref<string | undefined>()
 const bibInputRef = ref<HTMLInputElement | null>(null)
+const localBridgeOnline = ref(false)
 let bridgePollTimer: ReturnType<typeof setInterval> | undefined
 let bridgeBaselineReady = false
 
@@ -176,6 +178,13 @@ const durationMinutes = computed(() => {
   return minutes.length ? Math.max(...minutes) : 720
 })
 
+function focusBibInput() {
+  const el = bibInputRef.value
+  if (!el) return
+  el.focus()
+  el.select()
+}
+
 function submitBib() {
   const bib = bibInput.value.trim()
   if (!bib || submitting.value) return
@@ -184,10 +193,11 @@ function submitBib() {
     const result = store.recordBibTap(bib, undefined, props.preferredRaceId)
     if (result.ok) {
       bibInput.value = ''
+      playCoinSound({ bridgeOnline: localBridgeOnline.value })
     }
   } finally {
     submitting.value = false
-    void nextTick(() => bibInputRef.value?.focus())
+    void nextTick(() => focusBibInput())
   }
 }
 
@@ -216,7 +226,11 @@ function onKeydown(e: KeyboardEvent) {
 
 async function pollLocalBridgeTap() {
   const status = await rfidApi.getLocalBridgeStatusForTestMode()
-  if (!status) return
+  if (!status) {
+    localBridgeOnline.value = false
+    return
+  }
+  localBridgeOnline.value = true
   const snap = {
     last_tap_uuid: status.last_tap_uuid || status.last_read,
     last_tap_at: status.last_tap_at || status.last_read_at,
@@ -233,7 +247,7 @@ async function pollLocalBridgeTap() {
 
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
-  void nextTick(() => bibInputRef.value?.focus())
+  void nextTick(() => focusBibInput())
   void pollLocalBridgeTap()
   bridgePollTimer = setInterval(() => {
     void pollLocalBridgeTap()

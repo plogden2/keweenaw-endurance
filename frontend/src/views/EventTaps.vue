@@ -21,7 +21,7 @@
               data-testid="inline-bib-input"
               placeholder="Bib number"
               autocomplete="off"
-              :disabled="submitting"
+              autofocus
               @keydown.enter.prevent="submitBib"
               @input="onBibInput"
             />
@@ -180,6 +180,7 @@ import { usePinAuthStore } from '@/stores/pinAuth'
 import type { Participant, TimingRecord } from '@/types/models'
 import { formatTimeHHMMSSssss } from '@/utils/datetime'
 import { getErrorMessage } from '@/utils/error'
+import { playCoinSound } from '@/utils/playCoinSound'
 
 const PAGE_LIMIT = 50
 const SUCCESS_CLEAR_MS = 2000
@@ -253,7 +254,10 @@ function selectBibInput(): void {
 
 function focusBibInput(): void {
   void nextTick(() => {
-    bibInputRef.value?.focus()
+    const el = bibInputRef.value
+    if (!el) return
+    el.focus()
+    el.select()
   })
 }
 
@@ -277,6 +281,7 @@ async function createTapForParticipant(match: Participant): Promise<void> {
   clearBibMatches()
   const kind = isKaraoke ? 'Karaoke' : 'Lap'
   setEphemeralSuccess(`${kind} #${match.bib_number} ${match.first_name} ${match.last_name}`)
+  playCoinSound()
   focusBibInput()
   await loadTaps()
 }
@@ -398,6 +403,9 @@ async function confirmRestore(record: TimingRecord): Promise<void> {
 onMounted(async () => {
   await loadEvent()
   await loadTaps()
+  if (pinAuth.isAuthenticated) {
+    focusBibInput()
+  }
 })
 
 onUnmounted(() => {
