@@ -17,6 +17,9 @@
               ref="bibInputRef"
               v-model="bibInput"
               type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              enterkeyhint="done"
               class="inline-bib-input"
               data-testid="inline-bib-input"
               placeholder="Bib number"
@@ -92,6 +95,7 @@
                 <th>Race</th>
                 <th>Bib</th>
                 <th>Name</th>
+                <th>Laps</th>
                 <th>Type</th>
                 <th>Sync</th>
                 <th v-if="pinAuth.isAuthenticated">Actions</th>
@@ -113,6 +117,7 @@
                     voided
                   </span>
                 </td>
+                <td data-testid="tap-lap-count">{{ formatLapCount(record) }}</td>
                 <td>{{ typeLabel(record.record_type) }}</td>
                 <td>{{ record.sync_status }}</td>
                 <td v-if="pinAuth.isAuthenticated">
@@ -137,7 +142,7 @@
                 </td>
               </tr>
               <tr v-if="!taps.length">
-                <td :colspan="pinAuth.isAuthenticated ? 7 : 6" class="empty">No taps yet.</td>
+                <td :colspan="pinAuth.isAuthenticated ? 8 : 7" class="empty">No taps yet.</td>
               </tr>
             </tbody>
           </table>
@@ -220,6 +225,10 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_LIMIT
 
 function typeLabel(recordType: TimingRecord['record_type']): string {
   return (recordType && TYPE_LABELS[recordType]) || recordType || 'Lap'
+}
+
+function formatLapCount(record: TimingRecord): string {
+  return typeof record.lap_count === 'number' ? String(record.lap_count) : '—'
 }
 
 function formatTime(iso: string): string {

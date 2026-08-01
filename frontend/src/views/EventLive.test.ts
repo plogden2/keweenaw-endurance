@@ -234,6 +234,7 @@ describe('EventLive.vue', () => {
               'raceType',
               'durationMinutes',
               'highlightParticipantId',
+              'defaultPlotExpanded',
             ],
             template: '<div data-testid="race-flow-chart-stub" />',
             setup() {
@@ -975,10 +976,13 @@ describe('EventLive.vue', () => {
       await nextTick()
       expect(wrapper.find('[data-testid="rotator-live-qr"]').exists()).toBe(true)
       const controls = wrapper.find('[data-testid="rotator-controls"]')
+      const corner = wrapper.find('[data-testid="rotator-corner"]')
       expect(controls.classes()).not.toContain('fs-controls--idle')
+      expect(corner.classes()).not.toContain('fs-corner--controls-idle')
       await vi.advanceTimersByTimeAsync(3000)
       await nextTick()
       expect(controls.classes()).toContain('fs-controls--idle')
+      expect(corner.classes()).toContain('fs-corner--controls-idle')
       vi.useRealTimers()
     })
 
@@ -1010,6 +1014,15 @@ describe('EventLive.vue', () => {
       await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
       await nextTick()
     }
+
+    it('opens the rotator race-flow chart in expanded plot mode', async () => {
+      const wrapper = await mountLive()
+      await openFullscreenRotator(wrapper)
+      const chart = wrapper
+        .find('[data-testid="rotator-flow"]')
+        .findComponent({ name: 'RaceFlowChart' })
+      expect(chart.props('defaultPlotExpanded')).toBe(true)
+    })
 
     it('shows play/pause and settings controls in the top right', async () => {
       const wrapper = await mountLive()

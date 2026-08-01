@@ -167,7 +167,69 @@ func (s *TimingService) ListRecordsByEvent(eventID uuid.UUID, page, limit int, r
 		Find(&records).Error; err != nil {
 		return nil, 0, err
 	}
+	if err := s.attachEventTapLapCounts(records); err != nil {
+		return nil, 0, err
+	}
 	return records, total, nil
+}
+
+// attachEventTapLapCounts sets LapCount on non-voided scoring taps to the
+// 1-based ordinal among that participant's non-voided rfid_lap/karaoke_bonus rows.
+func (s *TimingService) attachEventTapLapCounts(records []models.TimingRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	seen := make(map[uuid.UUID]struct{})
+	participantIDs := make([]uuid.UUID, 0)
+	for _, r := range records {
+		id := r.ParticipantID.UUID()
+		if id == uuid.Nil {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		participantIDs = append(participantIDs, id)
+	}
+	if len(participantIDs) == 0 {
+		return nil
+	}
+
+	var scored []models.TimingRecord
+	if err := s.db.
+		Where(
+			"participant_id IN ? AND record_type IN ? AND voided_at IS NULL",
+			participantIDs,
+			[]string{"rfid_lap", "karaoke_bonus"},
+		).
+		Order("participant_id ASC, timestamp ASC, id ASC").
+		Find(&scored).Error; err != nil {
+		return err
+	}
+
+	ordinals := make(map[uuid.UUID]int, len(scored))
+	perParticipant := make(map[uuid.UUID]int)
+	for _, r := range scored {
+		pid := r.ParticipantID.UUID()
+		perParticipant[pid]++
+		ordinals[r.ID.UUID()] = perParticipant[pid]
+	}
+
+	for i := range records {
+		if records[i].IsVoided() {
+			continue
+		}
+		if records[i].RecordType != "rfid_lap" && records[i].RecordType != "karaoke_bonus" {
+			continue
+		}
+		if n, ok := ordinals[records[i].ID.UUID()]; ok {
+			count := n
+			records[i].LapCount = &count
+		}
+	}
+	return nil
 }
 
 type CreateEventTapInput struct {

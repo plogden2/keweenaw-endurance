@@ -71,6 +71,7 @@ const sampleTaps = [
     sync_status: 'synced' as const,
     record_type: 'rfid_lap' as const,
     voided_at: null,
+    lap_count: 3,
     participant: {
       id: 'p1',
       race_id: 'race-1',
@@ -156,6 +157,14 @@ describe('EventTaps.vue', () => {
     expect(wrapper.text()).toContain('Karaoke')
   })
 
+  it('shows scored lap count per tap and a dash when missing', async () => {
+    const wrapper = await mountEventTaps()
+    const headers = wrapper.findAll('[data-testid="event-taps-table"] th').map((h) => h.text())
+    expect(headers).toContain('Laps')
+    expect(wrapper.find('[data-testid="tap-row-t1"] [data-testid="tap-lap-count"]').text()).toBe('3')
+    expect(wrapper.find('[data-testid="tap-row-t2"] [data-testid="tap-lap-count"]').text()).toBe('—')
+  })
+
   it('formats tap times as hh:mm:ss.ssss', async () => {
     const wrapper = await mountEventTaps()
     const t1 = wrapper.find('[data-testid="tap-row-t1"] td')
@@ -179,7 +188,9 @@ describe('EventTaps.vue', () => {
   it('shows inline bib input and row actions when PIN authenticated', async () => {
     authenticate()
     const wrapper = await mountEventTaps()
-    expect(wrapper.find('[data-testid="inline-bib-input"]').exists()).toBe(true)
+    const bibInput = wrapper.find('[data-testid="inline-bib-input"]')
+    expect(bibInput.exists()).toBe(true)
+    expect(bibInput.attributes('inputmode')).toBe('numeric')
     expect(wrapper.find('[data-testid="void-tap-btn"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="restore-tap-btn"]').exists()).toBe(true)
   })

@@ -202,6 +202,59 @@ func TestTimingService_ListRecordsByEvent(t *testing.T) {
 	assert.Equal(t, grace.ID, byBib[0].ParticipantID)
 }
 
+func TestTimingService_ListRecordsByEvent_AttachesLapCounts(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	race, err := NewRaceService(db).CreateRace(&models.Race{
+		EventID: event.ID, Name: "Laps", RaceType: "lap_based", DistanceKm: 1,
+	})
+	require.NoError(t, err)
+	finish := createCheckpoint(t, db, race.ID, "Finish", "finish")
+	participant, err := NewParticipantService(db).CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "9", FirstName: "Lap", LastName: "Counter",
+	})
+	require.NoError(t, err)
+
+	svc := NewTimingService(db)
+	now := time.Now().UTC().Truncate(time.Second)
+	first, err := svc.CreateRecord(&models.TimingRecord{
+		ParticipantID: participant.ID, CheckpointID: finish.ID,
+		Timestamp: now.Add(-3 * time.Minute), LocalTimestamp: now.Add(-3 * time.Minute),
+		RecordType: "rfid_lap",
+	})
+	require.NoError(t, err)
+	second, err := svc.CreateRecord(&models.TimingRecord{
+		ParticipantID: participant.ID, CheckpointID: finish.ID,
+		Timestamp: now.Add(-2 * time.Minute), LocalTimestamp: now.Add(-2 * time.Minute),
+		RecordType: "rfid_lap",
+	})
+	require.NoError(t, err)
+	karaoke, err := svc.CreateRecord(&models.TimingRecord{
+		ParticipantID: participant.ID, CheckpointID: finish.ID,
+		Timestamp: now.Add(-time.Minute), LocalTimestamp: now.Add(-time.Minute),
+		RecordType: "karaoke_bonus",
+	})
+	require.NoError(t, err)
+	_, _, err = svc.VoidRecord(second.ID.UUID())
+	require.NoError(t, err)
+
+	rows, total, err := svc.ListRecordsByEvent(event.ID.UUID(), 1, 50, nil, "")
+	require.NoError(t, err)
+	assert.EqualValues(t, 3, total)
+	require.Len(t, rows, 3)
+
+	byID := map[uuidutil.PublicUUID]models.TimingRecord{}
+	for _, row := range rows {
+		byID[row.ID] = row
+	}
+
+	require.NotNil(t, byID[first.ID].LapCount)
+	assert.Equal(t, 1, *byID[first.ID].LapCount)
+	assert.Nil(t, byID[second.ID].LapCount) // voided
+	require.NotNil(t, byID[karaoke.ID].LapCount)
+	assert.Equal(t, 2, *byID[karaoke.ID].LapCount) // second non-voided scoring tap
+}
+
 func TestTimingService_ListRecordsByEvent_UsesIDForEqualTimestamps(t *testing.T) {
 	db := setupServiceTestDB(t)
 	event := createTestEvent(t, db)

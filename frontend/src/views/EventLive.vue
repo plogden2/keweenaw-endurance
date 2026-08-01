@@ -507,6 +507,7 @@
         <div
           class="fs-corner"
           data-testid="rotator-corner"
+          :class="{ 'fs-corner--controls-idle': rotatorControlsIdle }"
           @pointerenter="bumpRotatorControlsActivity"
         >
           <div
@@ -572,6 +573,7 @@
                 :race-start-time="rotatorRace.start_time"
                 :race-type="rotatorRace.race_type"
                 :duration-minutes="rotatorRace.duration_minutes"
+                :default-plot-expanded="true"
                 v-model:highlight-participant-id="highlightParticipantId"
               />
             </div>
@@ -1910,6 +1912,12 @@ td {
   color: var(--ink);
 }
 
+/* Fill the rotator flow panel when the chart starts expanded. */
+.fs-panel[data-testid='rotator-flow'] :deep(.chart-panel.is-expanded .chart-canvas-host) {
+  height: calc(100vh - 10rem);
+  max-height: none;
+}
+
 .fs-corner {
   position: absolute;
   top: 1rem;
@@ -1921,6 +1929,10 @@ td {
   gap: 0.5rem;
 }
 
+.fs-corner--controls-idle {
+  gap: 0;
+}
+
 .fs-controls {
   position: static;
   display: flex;
@@ -1930,6 +1942,10 @@ td {
 }
 
 .fs-controls--idle {
+  /* Leave the flex flow so the QR rises into the free corner. */
+  position: absolute;
+  top: 0;
+  right: 0;
   opacity: 0;
   pointer-events: none;
 }

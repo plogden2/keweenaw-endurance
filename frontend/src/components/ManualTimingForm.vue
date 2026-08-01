@@ -25,6 +25,9 @@
       <input
         v-model="bibNumber"
         type="text"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        enterkeyhint="done"
         data-testid="bib-input"
         placeholder="e.g. 42"
       />

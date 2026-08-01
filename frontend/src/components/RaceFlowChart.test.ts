@@ -1903,6 +1903,23 @@ describe('RaceFlowChart.vue', () => {
       wrapper.unmount()
     })
 
+    it('starts expanded when defaultPlotExpanded is true', async () => {
+      ;(timingApi.getLive as Mock).mockResolvedValue({
+        data: { race_id: 'race-1', records: sampleRecords },
+      })
+
+      const wrapper = mount(RaceFlowChart, {
+        props: { raceId: 'race-1', defaultPlotExpanded: true },
+      })
+      await flushPromises()
+
+      expect(wrapper.find('.chart-panel').classes()).toContain('is-expanded')
+      expect(wrapper.find('[data-testid="race-flow-zoom-toolbar"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="race-flow-legend"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="race-flow-expand-toggle"]').text()).toBe('Collapse plot')
+      wrapper.unmount()
+    })
+
     it('expands the plot alone and restores controls on collapse', async () => {
       ;(timingApi.getLive as Mock).mockResolvedValue({
         data: { race_id: 'race-1', records: sampleRecords },
@@ -1938,9 +1955,20 @@ describe('RaceFlowChart.vue', () => {
       const collapseToggle = wrapper.find('[data-testid="race-flow-expand-toggle"]')
       expect(collapseToggle.text()).toBe('Collapse plot')
       expect(collapseToggle.classes()).toContain('collapse-plot-btn')
+      expect(collapseToggle.classes()).toContain('collapse-plot-btn--idle')
       expect(chart.resize).toHaveBeenCalled()
       expect(chart.update).toHaveBeenCalledWith('none')
 
+      const canvasHost = wrapper.find('[data-testid="race-flow-zoom-domain"]')
+      await canvasHost.trigger('pointerenter')
+      await wrapper.vm.$nextTick()
+      expect(collapseToggle.classes()).not.toContain('collapse-plot-btn--idle')
+
+      await canvasHost.trigger('pointerleave')
+      await wrapper.vm.$nextTick()
+      expect(collapseToggle.classes()).toContain('collapse-plot-btn--idle')
+
+      await canvasHost.trigger('pointerenter')
       await collapseToggle.trigger('click')
       await flushPromises()
       await wrapper.vm.$nextTick()

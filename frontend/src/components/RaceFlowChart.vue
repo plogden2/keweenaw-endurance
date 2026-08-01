@@ -77,11 +77,14 @@
         data-testid="race-flow-zoom-domain"
         :data-zoom-min="zoomWindow.min"
         :data-zoom-max="zoomWindow.max"
+        @pointerenter="collapsePlotRevealed = true"
+        @pointerleave="collapsePlotRevealed = false"
       >
         <button
           v-if="plotExpanded"
           type="button"
           class="collapse-plot-btn"
+          :class="{ 'collapse-plot-btn--idle': !collapsePlotRevealed }"
           data-testid="race-flow-expand-toggle"
           aria-label="Collapse plot"
           :aria-controls="canvasHostId"
@@ -527,6 +530,8 @@ const props = defineProps<{
   externalParticipants?: Participant[]
   /** RFID cooldown coalescing window; 0 keeps every tap (event test mode). */
   mergeRfidLapPointsWithinMinutes?: number
+  /** Start in expanded (plot-only) mode — used by the fullscreen rotator. */
+  defaultPlotExpanded?: boolean
 }>()
 
 /** Sticky legend/plot selection — v-model:highlight-participant-id */
@@ -551,7 +556,9 @@ const chartRaceType = computed(() => props.raceType ?? 'time_based')
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const canvasHostId = `race-flow-canvas-host-${Math.random().toString(36).slice(2, 10)}`
-const plotExpanded = ref(false)
+const plotExpanded = ref(Boolean(props.defaultPlotExpanded))
+/** Expanded-plot collapse control stays hidden until the canvas host is hovered. */
+const collapsePlotRevealed = ref(false)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const records = ref<TimingRecord[]>([])
@@ -1078,6 +1085,9 @@ function resizeRenderedChart(): void {
 
 function togglePlotExpanded(): void {
   plotExpanded.value = !plotExpanded.value
+  if (!plotExpanded.value) {
+    collapsePlotRevealed.value = false
+  }
   resizeRenderedChart()
 }
 
@@ -1793,10 +1803,19 @@ defineExpose({
   font: inherit;
   font-size: 0.85rem;
   cursor: pointer;
+  transition: opacity 0.2s ease;
 }
 
-.collapse-plot-btn:hover {
+.collapse-plot-btn--idle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.collapse-plot-btn:hover,
+.collapse-plot-btn:focus-visible {
   background: var(--surface);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .legend-panel {

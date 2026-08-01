@@ -123,6 +123,10 @@ type TimingRecord struct {
 	VoidedAt       *time.Time           `gorm:"type:timestamp" json:"voided_at,omitempty"`
 	CreatedAt      time.Time            `gorm:"autoCreateTime" json:"created_at"`
 
+	// LapCount is the participant's scored lap ordinal after this record
+	// (non-voided rfid_lap / karaoke_bonus). Computed for API responses only.
+	LapCount *int `json:"lap_count,omitempty" gorm:"-"`
+
 	// Relationships
 	Participant Participant      `gorm:"foreignKey:ParticipantID" json:"participant,omitempty"`
 	Checkpoint  TimingCheckpoint `gorm:"foreignKey:CheckpointID" json:"checkpoint,omitempty"`

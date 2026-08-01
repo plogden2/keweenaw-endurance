@@ -203,6 +203,8 @@ export interface TimingRecord {
   sync_status: SyncStatus
   record_type?: 'rfid_lap' | 'karaoke_bonus' | 'checkpoint_pass' | string
   voided_at?: string | null
+  /** Scored lap ordinal after this tap (rfid_lap / karaoke_bonus); omitted when voided. */
+  lap_count?: number
   participant?: Participant
   checkpoint?: Checkpoint
 }
