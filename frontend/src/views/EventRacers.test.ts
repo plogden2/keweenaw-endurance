@@ -8,7 +8,6 @@ import {
   eventsApi,
   raceParticipantsApi,
   racesApi,
-  rfidApi,
 } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
 
