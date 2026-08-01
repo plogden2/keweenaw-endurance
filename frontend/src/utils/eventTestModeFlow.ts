@@ -31,7 +31,7 @@ export function participantFromUnassignedBib(bib: BibListItem): Participant {
       event_id: '',
       name: 'Unassigned bib',
       race_type: 'time_based',
-      status: 'draft',
+      status: 'scheduled',
     },
   }
 }
