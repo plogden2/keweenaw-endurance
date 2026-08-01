@@ -927,6 +927,10 @@ describe('EventLive.vue', () => {
       sessionStorage.clear()
     })
 
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
     it('does not show QR by default', async () => {
       const wrapper = await mountLive()
       await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
@@ -949,6 +953,46 @@ describe('EventLive.vue', () => {
       const qr = wrapper.find('[data-testid="rotator-live-qr"]')
       expect(qr.exists()).toBe(true)
       expect(qr.text()).toContain('view results at keweenawendurance.com')
+    })
+
+    it('hides controls after idle when QR is enabled', async () => {
+      vi.useFakeTimers()
+      sessionStorage.setItem(
+        'event-live-fs-rotator-settings',
+        JSON.stringify({
+          dwellMs: 5000,
+          showQrCode: true,
+          pages: [
+            { race: '12h', mode: 'individuals', enabled: true },
+            { race: '12h', mode: 'teams', enabled: true },
+            { race: '6h', mode: 'individuals', enabled: true },
+            { race: '6h', mode: 'teams', enabled: true },
+          ],
+        }),
+      )
+      const wrapper = await mountLive()
+      await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+      await nextTick()
+      expect(wrapper.find('[data-testid="rotator-live-qr"]').exists()).toBe(true)
+      const controls = wrapper.find('[data-testid="rotator-controls"]')
+      expect(controls.classes()).not.toContain('fs-controls--idle')
+      await vi.advanceTimersByTimeAsync(3000)
+      await nextTick()
+      expect(controls.classes()).toContain('fs-controls--idle')
+      vi.useRealTimers()
+    })
+
+    it('does not idle-hide controls when QR is off', async () => {
+      vi.useFakeTimers()
+      const wrapper = await mountLive()
+      await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+      await nextTick()
+      await vi.advanceTimersByTimeAsync(5000)
+      await nextTick()
+      expect(wrapper.find('[data-testid="rotator-controls"]').classes()).not.toContain(
+        'fs-controls--idle',
+      )
+      vi.useRealTimers()
     })
   })
 

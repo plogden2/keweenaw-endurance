@@ -500,11 +500,19 @@
         class="fs-root"
         data-testid="fullscreen-rotator"
         aria-label="Fullscreen rotating race display"
+        @pointerdown="bumpRotatorControlsActivity"
+        @pointermove="bumpRotatorControlsActivity"
+        @keydown="bumpRotatorControlsActivity"
       >
-        <div class="fs-corner" data-testid="rotator-corner">
+        <div
+          class="fs-corner"
+          data-testid="rotator-corner"
+          @pointerenter="bumpRotatorControlsActivity"
+        >
           <div
             class="fs-controls"
             data-testid="rotator-controls"
+            :class="{ 'fs-controls--idle': rotatorControlsIdle }"
           >
             <button
               type="button"
@@ -994,6 +1002,36 @@ const rotatorLiveUrl = computed(() =>
     typeof window !== 'undefined' ? window.location.origin : '',
     eventId.value,
   ),
+)
+
+const ROTATOR_CONTROLS_IDLE_MS = 3000
+const rotatorControlsIdle = ref(false)
+let rotatorIdleTimer: number | undefined
+
+function clearRotatorIdleTimer() {
+  if (rotatorIdleTimer !== undefined) {
+    window.clearTimeout(rotatorIdleTimer)
+    rotatorIdleTimer = undefined
+  }
+}
+
+function bumpRotatorControlsActivity() {
+  rotatorControlsIdle.value = false
+  clearRotatorIdleTimer()
+  if (!rotatorOpen.value || !showRotatorQr.value || rotatorSettingsOpen.value) return
+  rotatorIdleTimer = window.setTimeout(() => {
+    rotatorControlsIdle.value = true
+    rotatorIdleTimer = undefined
+  }, ROTATOR_CONTROLS_IDLE_MS)
+}
+
+watch(
+  () => [rotatorOpen.value, showRotatorQr.value, rotatorSettingsOpen.value] as const,
+  ([open, showQr, settingsOpen]) => {
+    clearRotatorIdleTimer()
+    rotatorControlsIdle.value = false
+    if (open && showQr && !settingsOpen) bumpRotatorControlsActivity()
+  },
 )
 
 /** participant_id → on a team (for rotator mode preference on lap jump). */
@@ -1492,6 +1530,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearCelebrationTimers()
+  clearRotatorIdleTimer()
   cleanupFsSplitDrag(fsGridRef.value?.querySelector('.fs-split') as HTMLElement | null)
   if (pollTimer) window.clearInterval(pollTimer)
   if (countdownTickTimer) window.clearInterval(countdownTickTimer)
@@ -1887,6 +1926,12 @@ td {
   display: flex;
   gap: 0.5rem;
   z-index: 2;
+  transition: opacity 0.2s ease;
+}
+
+.fs-controls--idle {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .confirm-overlay {
