@@ -86,6 +86,32 @@ describe('RaceDetails.vue', () => {
     expect(wrapper.find('[data-testid="race-details-manual"]').exists()).toBe(false)
   })
 
+  it('shows switch-to-live-view banner linking to event live route', async () => {
+    racesStore.currentRace = {
+      id: 'race-1',
+      name: 'Marathon',
+      race_type: 'time_based',
+      status: 'active',
+    }
+    ;(timingApi.getLeaderboard as Mock).mockResolvedValue({ data: { data: [] } })
+    ;(timingApi.getLive as Mock).mockResolvedValue({
+      data: { race_id: 'race-1', records: [] },
+    })
+
+    const router = createTestRouter()
+    await router.push('/timing/evt-1/race/race-1')
+    await router.isReady()
+
+    const wrapper = mount(RaceDetails, {
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    const banner = wrapper.get('[data-testid="switch-to-live-view"]')
+    expect(banner.text()).toMatch(/Switch to live view/)
+    expect(banner.attributes('href')).toBe('/events/evt-1/live')
+  })
+
   it('shows Racers and Manual entry ops when PIN unlocked', async () => {
     const pin = usePinAuthStore()
     pin.token = 'test-token'

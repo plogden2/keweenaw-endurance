@@ -16,6 +16,14 @@
           {{ racesStore.currentRace.status }}
         </span>
       </p>
+      <router-link
+        :to="`/events/${eventId}/live`"
+        class="live-view-banner"
+        data-testid="switch-to-live-view"
+      >
+        <span>Switch to live view</span>
+        <span class="live-view-banner-chevron" aria-hidden="true">→</span>
+      </router-link>
       <p
         v-if="pinAuth.isAuthenticated"
         class="ops-bar"
@@ -477,6 +485,30 @@ watch(activeTab, async (tab) => {
   color: var(--muted);
   margin-bottom: 0.75rem;
   text-transform: capitalize;
+}
+
+.live-view-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem;
+  border-radius: 4px;
+  background: var(--ink);
+  color: var(--surface);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.live-view-banner:hover {
+  background: var(--ink-deep);
+}
+
+.live-view-banner-chevron {
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .ops-bar {
