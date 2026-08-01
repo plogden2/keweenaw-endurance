@@ -713,6 +713,7 @@ import LapCelebrationOverlay from '@/components/LapCelebrationOverlay.vue'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import {
   downloadEventResultsExcel,
+  eventBibsApi,
   eventParticipantsApi,
   eventsLiveApi,
   raceParticipantsApi,
@@ -721,7 +722,7 @@ import {
   type EventLiveResponse,
   type LapRecordedEvent,
 } from '@/services/api'
-import type { Participant } from '@/types/models'
+import type { BibListItem, Participant } from '@/types/models'
 import {
   getLocalPendingCount,
   onOnline,
@@ -790,13 +791,25 @@ async function loadTestModeRoster(): Promise<Participant[]> {
   return [...byId.values()]
 }
 
+async function loadTestModeBibInventory(): Promise<BibListItem[]> {
+  try {
+    const { data } = await eventBibsApi.list(eventId.value)
+    return data.data ?? []
+  } catch {
+    return []
+  }
+}
+
 async function openTestMode() {
   if (testModeLoading.value || !eventId.value) return
   testModeLoading.value = true
   exportError.value = null
   try {
-    const roster = await loadTestModeRoster()
-    testMode.open(eventId.value, roster)
+    const [roster, bibInventory] = await Promise.all([
+      loadTestModeRoster(),
+      loadTestModeBibInventory(),
+    ])
+    testMode.open(eventId.value, roster, bibInventory)
   } catch (err) {
     exportError.value = getErrorMessage(err, 'Failed to open test mode')
   } finally {

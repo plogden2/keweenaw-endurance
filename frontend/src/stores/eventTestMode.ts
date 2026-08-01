@@ -1,11 +1,14 @@
 import { defineStore } from 'pinia'
 import type { LiveLeaderboardEntry } from '@/services/api'
-import type { Participant, TimingRecord } from '@/types/models'
+import type { BibListItem, Participant, TimingRecord } from '@/types/models'
 import {
   buildTestModeLeaderboard,
   buildTestModeTimingRecords,
+  findBibByNumber,
+  findBibByTag,
   findParticipantByTag,
   findParticipantsByBib,
+  participantFromUnassignedBib,
   type TestModeTap,
   type TestModeTapSource,
 } from '@/utils/eventTestModeFlow'
@@ -31,6 +34,8 @@ interface EventTestModeState {
   isOpen: boolean
   eventId: string | null
   roster: Participant[]
+  /** Event bib inventory for resolving tags/bibs not assigned to a racer. */
+  bibInventory: BibListItem[]
   taps: TestModeTap[]
   sessionStartedAt: string | null
   lastFeedback: TestModeFeedback | null
@@ -62,6 +67,22 @@ function hasNearbyRfidTap(
   })
 }
 
+function feedbackFor(
+  state: EventTestModeState,
+  participant: Participant,
+  source: TestModeTapSource,
+): TestModeFeedback {
+  const laps = state.taps.filter((t) => t.participant_id === participant.id).length
+  return {
+    ok: true,
+    message: `Test lap recorded`,
+    participant_name: `${participant.first_name} ${participant.last_name}`.trim() || 'Unassigned',
+    bib_number: participant.bib_number,
+    lap_count: laps,
+    source,
+  }
+}
+
 function recordFor(
   state: EventTestModeState,
   participant: Participant,
@@ -69,20 +90,17 @@ function recordFor(
   recordedAt?: string,
 ): TestModeFeedback {
   const at = recordedAt || new Date().toISOString()
+  if (source === 'rfid' && hasNearbyRfidTap(state.taps, participant.id, at)) {
+    const feedback = feedbackFor(state, participant, source)
+    state.lastFeedback = feedback
+    return feedback
+  }
   state.taps.push({
     participant_id: participant.id,
     recorded_at: at,
     source,
   })
-  const laps = state.taps.filter((t) => t.participant_id === participant.id).length
-  const feedback: TestModeFeedback = {
-    ok: true,
-    message: `Test lap recorded`,
-    participant_name: `${participant.first_name} ${participant.last_name}`.trim(),
-    bib_number: participant.bib_number,
-    lap_count: laps,
-    source,
-  }
+  const feedback = feedbackFor(state, participant, source)
   state.lastFeedback = feedback
   return feedback
 }
@@ -92,6 +110,7 @@ export const useEventTestModeStore = defineStore('eventTestMode', {
     isOpen: false,
     eventId: null,
     roster: [],
+    bibInventory: [],
     taps: [],
     sessionStartedAt: null,
     lastFeedback: null,
@@ -115,10 +134,11 @@ export const useEventTestModeStore = defineStore('eventTestMode', {
       return this.isOpen && this.eventId === eventId
     },
 
-    open(eventId: string, roster: Participant[]) {
+    open(eventId: string, roster: Participant[], bibInventory: BibListItem[] = []) {
       this.isOpen = true
       this.eventId = eventId
       this.roster = roster
+      this.bibInventory = bibInventory
       this.taps = []
       this.sessionStartedAt = new Date().toISOString()
       this.lastFeedback = null
@@ -129,10 +149,47 @@ export const useEventTestModeStore = defineStore('eventTestMode', {
       this.isOpen = false
       this.eventId = null
       this.roster = []
+      this.bibInventory = []
       this.taps = []
       this.sessionStartedAt = null
       this.lastFeedback = null
       this.lastBridgeTapKey = null
+    },
+
+    /** Ensure an unassigned bib has a synthetic roster entry; return it. */
+    ensureUnassignedBibParticipant(bib: BibListItem): Participant {
+      const existing = this.roster.find((p) => p.id === `unassigned-bib:${bib.id}`)
+      if (existing) return existing
+      const synthetic = participantFromUnassignedBib(bib)
+      this.roster.push(synthetic)
+      return synthetic
+    },
+
+    resolveParticipantForTag(tagUid: string): Participant | undefined {
+      const byTag = findParticipantByTag(this.roster, tagUid)
+      if (byTag) return byTag
+      const bib = findBibByTag(this.bibInventory, tagUid)
+      if (!bib || bib.participant_id) return undefined
+      return this.ensureUnassignedBibParticipant(bib)
+    },
+
+    resolveParticipantForBib(
+      bibNumber: string,
+      preferredRaceId?: string,
+    ): { participant?: Participant; error?: string } {
+      let matches = findParticipantsByBib(this.roster, bibNumber)
+      if (matches.length > 1 && preferredRaceId) {
+        const preferred = matches.filter((p) => p.race_id === preferredRaceId)
+        if (preferred.length === 1) matches = preferred
+      }
+      if (matches.length === 1) return { participant: matches[0] }
+      if (matches.length > 1) return { error: 'Multiple matches' }
+
+      const bib = findBibByNumber(this.bibInventory, bibNumber)
+      if (bib && !bib.participant_id) {
+        return { participant: this.ensureUnassignedBibParticipant(bib) }
+      }
+      return { error: 'Bib not found' }
     },
 
     /** Mark the current bridge last-tap as already seen so it is not ingested. */
@@ -152,7 +209,7 @@ export const useEventTestModeStore = defineStore('eventTestMode', {
       const at = snap.last_tap_at!.trim()
       const uid = snap.last_tap_uuid?.trim()
       if (uid) {
-        const byTag = findParticipantByTag(this.roster, uid)
+        const byTag = this.resolveParticipantForTag(uid)
         if (byTag) {
           this.lastBridgeTapKey = key
           if (hasNearbyRfidTap(this.taps, byTag.id, at)) {
@@ -168,22 +225,20 @@ export const useEventTestModeStore = defineStore('eventTestMode', {
       const bib = snap.last_tap_bib?.trim()
       if (bib) {
         const preferredRaceId = snap.last_tap_race_id?.trim() || undefined
-        let matches = findParticipantsByBib(this.roster, bib)
-        if (matches.length > 1 && preferredRaceId) {
-          const preferred = matches.filter((p) => p.race_id === preferredRaceId)
-          if (preferred.length === 1) matches = preferred
+        const resolved = this.resolveParticipantForBib(bib, preferredRaceId)
+        if (resolved.participant) {
+          if (hasNearbyRfidTap(this.taps, resolved.participant.id, at)) {
+            return null
+          }
+          const feedback = recordFor(this, resolved.participant, 'rfid', at)
+          return feedback
         }
-        if (matches.length === 1 && hasNearbyRfidTap(this.taps, matches[0].id, at)) {
-          return null
+        const feedback: TestModeFeedback = {
+          ok: false,
+          message: resolved.error || 'Bib not found',
+          source: 'rfid',
         }
-        const feedback = this.recordBibTap(bib, at, preferredRaceId)
-        if (feedback.ok) {
-          // recordBibTap sets source 'manual'; keep RFID semantics for bridge.
-          const last = this.taps.at(-1)
-          if (last) last.source = 'rfid'
-          feedback.source = 'rfid'
-          this.lastFeedback = feedback
-        }
+        this.lastFeedback = feedback
         return feedback
       }
 
@@ -197,7 +252,7 @@ export const useEventTestModeStore = defineStore('eventTestMode', {
     },
 
     recordTagTap(tagUid: string, recordedAt?: string): TestModeFeedback {
-      const participant = findParticipantByTag(this.roster, tagUid)
+      const participant = this.resolveParticipantForTag(tagUid)
       if (!participant) {
         const feedback: TestModeFeedback = {
           ok: false,
@@ -211,32 +266,17 @@ export const useEventTestModeStore = defineStore('eventTestMode', {
     },
 
     recordBibTap(bib: string, recordedAt?: string, preferredRaceId?: string): TestModeFeedback {
-      let matches = findParticipantsByBib(this.roster, bib)
-      if (matches.length === 0) {
+      const resolved = this.resolveParticipantForBib(bib, preferredRaceId)
+      if (!resolved.participant) {
         const feedback: TestModeFeedback = {
           ok: false,
-          message: 'Bib not found',
+          message: resolved.error || 'Bib not found',
           source: 'manual',
         }
         this.lastFeedback = feedback
         return feedback
       }
-      if (matches.length > 1 && preferredRaceId) {
-        const preferred = matches.filter((p) => p.race_id === preferredRaceId)
-        if (preferred.length === 1) {
-          matches = preferred
-        }
-      }
-      if (matches.length > 1) {
-        const feedback: TestModeFeedback = {
-          ok: false,
-          message: 'Multiple matches',
-          source: 'manual',
-        }
-        this.lastFeedback = feedback
-        return feedback
-      }
-      return recordFor(this, matches[0], 'manual', recordedAt)
+      return recordFor(this, resolved.participant, 'manual', recordedAt)
     },
   },
 })

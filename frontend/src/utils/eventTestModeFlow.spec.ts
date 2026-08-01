@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import type { Participant } from '@/types/models'
+import type { BibListItem, Participant } from '@/types/models'
 import {
   buildTestModeLeaderboard,
   buildTestModeTimingRecords,
+  findBibByNumber,
+  findBibByTag,
+  participantFromUnassignedBib,
   type TestModeTap,
 } from './eventTestModeFlow'
 
@@ -55,5 +58,34 @@ describe('eventTestModeFlow', () => {
     expect(board[0]?.name).toMatch(/12 Hour/)
     expect(board[1]?.participant_id).toBe('p2')
     expect(board[1]?.laps).toBe(1)
+  })
+
+  it('finds unassigned bibs by tag/logical uuid and builds a synthetic roster entry', () => {
+    const bibs: BibListItem[] = [
+      {
+        id: 'bib-99',
+        bib_number: '99',
+        logical_uuid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        tag_count: 1,
+        tag_uids: ['aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'],
+      },
+      {
+        id: 'bib-7',
+        bib_number: '7',
+        tag_count: 0,
+        tag_uids: [],
+        participant_id: 'p-other',
+        participant_name: 'Taken',
+      },
+    ]
+    expect(findBibByTag(bibs, 'AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE')?.bib_number).toBe('99')
+    expect(findBibByNumber(bibs, '99')?.id).toBe('bib-99')
+    expect(findBibByNumber(bibs, '7')?.participant_id).toBe('p-other')
+
+    const synthetic = participantFromUnassignedBib(bibs[0]!)
+    expect(synthetic.id).toBe('unassigned-bib:bib-99')
+    expect(synthetic.bib_number).toBe('99')
+    expect(synthetic.first_name).toMatch(/unassigned/i)
+    expect(synthetic.tag_uids).toContain('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')
   })
 })

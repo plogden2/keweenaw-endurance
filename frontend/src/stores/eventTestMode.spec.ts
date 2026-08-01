@@ -79,6 +79,55 @@ describe('eventTestMode store', () => {
     expect(store.taps).toHaveLength(2)
   })
 
+  it('coalesces duplicate RFID paths for the same tap within the nearby window', () => {
+    const store = useEventTestModeStore()
+    store.open('ev1', [
+      makeParticipant({ id: 'p1', bib_number: '12', tag_uids: ['TAG-DUP'] }),
+    ])
+    const at = '2026-07-31T22:00:00.000Z'
+    expect(store.recordTagTap('TAG-DUP', at).ok).toBe(true)
+    // Second path (e.g. scan_result after tag_read) must not add another lap.
+    const dup = store.recordTagTap('TAG-DUP', '2026-07-31T22:00:00.200Z')
+    expect(dup.ok).toBe(true)
+    expect(dup.lap_count).toBe(1)
+    expect(store.taps).toHaveLength(1)
+
+    // A later intentional retap still counts.
+    expect(store.recordTagTap('TAG-DUP', '2026-07-31T22:00:01.000Z').ok).toBe(true)
+    expect(store.taps).toHaveLength(2)
+  })
+
+  it('records taps for unassigned event bibs by tag uid and bib number', () => {
+    const store = useEventTestModeStore()
+    store.open(
+      'ev1',
+      [makeParticipant({ id: 'p1', bib_number: '1', tag_uids: ['TAG-P1'] })],
+      [
+        {
+          id: 'bib-99',
+          bib_number: '99',
+          logical_uuid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+          tag_count: 1,
+          tag_uids: ['aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'],
+        },
+      ],
+    )
+
+    const byTag = store.recordTagTap('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')
+    expect(byTag.ok).toBe(true)
+    expect(byTag.bib_number).toBe('99')
+    expect(byTag.participant_name).toMatch(/unassigned/i)
+    expect(store.taps).toHaveLength(1)
+    expect(store.leaderboard).toHaveLength(1)
+    expect(store.leaderboard[0]?.bib_number).toBe('99')
+    expect(store.leaderboard[0]?.name).toMatch(/unassigned/i)
+
+    const byBib = store.recordBibTap('99')
+    expect(byBib.ok).toBe(true)
+    expect(store.taps).toHaveLength(2)
+    expect(store.leaderboard[0]?.laps).toBe(2)
+  })
+
   it('recordBibTap requires exact bib match; allows rapid repeat taps', () => {
     const store = useEventTestModeStore()
     store.open('ev1', [

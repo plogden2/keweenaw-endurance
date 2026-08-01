@@ -193,6 +193,55 @@ describe('useReaderStation', () => {
     stop()
   })
 
+  it('when test mode is open, tag_read then scan_result for the same tap counts once', async () => {
+    unlockReaderPin()
+    const station = useStationStore()
+    station.eventId = 'evt-1'
+    station.deviceId = 'laptop-finish-1'
+
+    const testMode = useEventTestModeStore()
+    testMode.open('evt-1', [
+      {
+        id: 'p1',
+        race_id: 'r1',
+        bib_number: '12',
+        first_name: 'Alex',
+        last_name: 'Rivera',
+        status: 'registered',
+        tag_uids: ['DEMO-TAG-DUP'],
+      },
+    ])
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop } = useReaderStation()
+    start()
+
+    const at = '2026-08-01T12:00:01-04:00'
+    MockWebSocket.instances[0].emit({
+      type: 'tag_read',
+      tag_uid: 'DEMO-TAG-DUP',
+      read_at: at,
+      device_id: 'laptop-finish-1',
+    })
+    MockWebSocket.instances[0].emit({
+      type: 'scan_result',
+      tag_uid: 'DEMO-TAG-DUP',
+      read_at: at,
+      scan: {
+        result: 'test_read',
+        participant_name: 'Alex Rivera',
+        bib_number: '12',
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(testMode.taps).toHaveLength(1)
+    })
+    expect(testMode.lastFeedback?.lap_count).toBe(1)
+
+    stop()
+  })
+
   it('when event test mode is open, bridge scan_result records into the store and suppresses ScanPopup', async () => {
     unlockReaderPin()
     const station = useStationStore()

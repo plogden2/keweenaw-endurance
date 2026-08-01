@@ -1,5 +1,5 @@
 import type { LiveLeaderboardEntry } from '@/services/api'
-import type { Checkpoint, Participant, TimingRecord } from '@/types/models'
+import type { BibListItem, Checkpoint, Participant, TimingRecord } from '@/types/models'
 
 export type TestModeTapSource = 'rfid' | 'manual'
 
@@ -7,6 +7,49 @@ export interface TestModeTap {
   participant_id: string
   recorded_at: string
   source: TestModeTapSource
+}
+
+export function unassignedBibParticipantId(bibId: string): string {
+  return `unassigned-bib:${bibId}`
+}
+
+/** Synthetic roster row so unassigned event bibs can appear on the test board. */
+export function participantFromUnassignedBib(bib: BibListItem): Participant {
+  const uids = [...(bib.tag_uids ?? [])]
+  if (bib.logical_uuid) uids.push(bib.logical_uuid)
+  const unique = [...new Set(uids.map((u) => u.trim()).filter(Boolean))]
+  return {
+    id: unassignedBibParticipantId(bib.id),
+    race_id: bib.race_id || 'unassigned',
+    bib_number: bib.bib_number,
+    first_name: 'Unassigned',
+    last_name: '',
+    status: 'registered',
+    tag_uids: unique,
+    race: {
+      id: bib.race_id || 'unassigned',
+      event_id: '',
+      name: 'Unassigned bib',
+      race_type: 'time_based',
+      status: 'draft',
+    },
+  }
+}
+
+export function findBibByTag(bibs: BibListItem[], tagUid: string): BibListItem | undefined {
+  const needle = tagUid.trim().toLowerCase()
+  if (!needle) return undefined
+  return bibs.find((bib) => {
+    const uids = [...(bib.tag_uids ?? [])]
+    if (bib.logical_uuid) uids.push(bib.logical_uuid)
+    return uids.some((uid) => uid.trim().toLowerCase() === needle)
+  })
+}
+
+export function findBibByNumber(bibs: BibListItem[], bibNumber: string): BibListItem | undefined {
+  const needle = bibNumber.trim()
+  if (!needle) return undefined
+  return bibs.find((bib) => String(bib.bib_number) === needle)
 }
 
 function participantLabel(p: Participant): string {

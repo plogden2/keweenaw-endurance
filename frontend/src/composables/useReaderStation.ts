@@ -67,7 +67,14 @@ function createReaderStation(): UseReaderStation {
     // While the dialog is open on this browser, keep taps ephemeral even if
     // stations/current is unset/stale (common with hosted + bridge).
     if (testMode.isOpen) {
-      testMode.recordTagTap(tagUid, readAt)
+      const feedback = testMode.recordTagTap(tagUid, readAt)
+      if (feedback.ok) {
+        // Align local-bridge poll dedupe with this WS path.
+        testMode.noteBridgeTapBaseline({
+          last_tap_uuid: tagUid,
+          last_tap_at: readAt,
+        })
+      }
       error.value = null
       return
     }
@@ -119,19 +126,14 @@ function createReaderStation(): UseReaderStation {
             ? testMode.recordTagTap(tagUid, raw.read_at)
             : null
           if ((!feedback || !feedback.ok) && scan.bib_number) {
-            feedback = testMode.recordBibTap(
-              String(scan.bib_number),
-              raw.read_at,
-              scan.race_id,
-            )
-            if (feedback.ok) {
-              const last = testMode.taps.at(-1)
-              if (last) last.source = 'rfid'
-              feedback.source = 'rfid'
-              testMode.lastFeedback = feedback
-            }
-          }
-          if (feedback?.ok && (tagUid || scan.bib_number)) {
+            // Resolve via bib with RFID source so nearby-path dedupe applies.
+            feedback = testMode.ingestLocalBridgeTap({
+              last_tap_uuid: tagUid || undefined,
+              last_tap_at: raw.read_at || new Date().toISOString(),
+              last_tap_bib: String(scan.bib_number),
+              last_tap_race_id: scan.race_id,
+            })
+          } else if (feedback?.ok && (tagUid || scan.bib_number)) {
             // Align poll dedupe so a later /status snapshot of this tap is skipped.
             testMode.noteBridgeTapBaseline({
               last_tap_uuid: tagUid || undefined,
