@@ -121,36 +121,48 @@
         <template v-else>
           <div v-if="leaderboardLoading" class="status">Loading leaderboard…</div>
           <div v-else-if="leaderboardError" class="status error">{{ leaderboardError }}</div>
-          <div v-else-if="leaderboard.length" class="table-scroll" data-testid="leaderboard-scroll">
-            <table class="leaderboard-table">
-              <thead>
-                <tr>
-                  <th>Pos</th>
-                  <th>Bib</th>
-                  <th>Name</th>
-                  <th>Location</th>
-                  <th>Result</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="entry in leaderboard"
-                  :key="entry.participant_id"
-                  :class="{ clickable: entry.status === 'finished' }"
-                  @click="selectParticipant(entry)"
-                >
-                  <td>{{ entry.position }}</td>
-                  <td>{{ entry.bib_number }}</td>
-                  <td>{{ entry.first_name }} {{ entry.last_name }}</td>
-                  <td>{{ entry.location || '—' }}</td>
-                  <td>{{ formatResult(entry) }}</td>
-                  <td>{{ entry.status }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p v-else class="empty">No results yet.</p>
+          <template v-else>
+            <LeaderboardCategoryFilters
+              v-if="leaderboard.length"
+              v-model="categoryFilter"
+              :show-skill="categoryFacets.hasSkill"
+              :show-gender="categoryFacets.hasGender"
+            />
+            <div
+              v-if="filteredLeaderboard.length"
+              class="table-scroll"
+              data-testid="leaderboard-scroll"
+            >
+              <table class="leaderboard-table">
+                <thead>
+                  <tr>
+                    <th>Pos</th>
+                    <th>Bib</th>
+                    <th>Name</th>
+                    <th>Location</th>
+                    <th>Result</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="entry in filteredLeaderboard"
+                    :key="entry.participant_id"
+                    :class="{ clickable: entry.status === 'finished' }"
+                    @click="selectParticipant(entry)"
+                  >
+                    <td>{{ entry.position }}</td>
+                    <td>{{ entry.bib_number }}</td>
+                    <td>{{ entry.first_name }} {{ entry.last_name }}</td>
+                    <td>{{ entry.location || '—' }}</td>
+                    <td>{{ formatResult(entry) }}</td>
+                    <td>{{ entry.status }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-else class="empty">{{ leaderboardEmptyMessage }}</p>
+          </template>
         </template>
       </section>
 
@@ -202,6 +214,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import LeaderboardCategoryFilters from '@/components/LeaderboardCategoryFilters.vue'
 import ParticipantFlowChart from '@/components/ParticipantFlowChart.vue'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import ResultCertificate from '@/components/ResultCertificate.vue'
@@ -228,6 +241,12 @@ import {
   type ParticipantResultRanks,
 } from '@/utils/participantResults'
 import { getErrorMessage } from '@/utils/error'
+import {
+  availableFacets,
+  DEFAULT_CATEGORY_FILTER,
+  filterLeaderboard,
+  type LeaderboardCategoryFilter,
+} from '@/utils/leaderboardCategoryFilter'
 import { formatDistance } from '@/utils/units'
 
 const route = useRoute()
@@ -251,6 +270,7 @@ const leaderboardRoute = computed(() => ({
 }))
 const activeTab = ref('leaderboard')
 const leaderboard = ref<LeaderboardEntry[]>([])
+const categoryFilter = ref<LeaderboardCategoryFilter>({ ...DEFAULT_CATEGORY_FILTER })
 const leaderboardLoading = ref(false)
 const leaderboardError = ref<string | null>(null)
 const statsLoading = ref(false)
@@ -268,6 +288,18 @@ const statistics = ref<RaceStatistics>({
   averageFinishSeconds: null,
   averageLaps: null,
 })
+
+const categoryFacets = computed(() =>
+  availableFacets(leaderboard.value.map((entry) => entry.category_key)),
+)
+
+const filteredLeaderboard = computed(() =>
+  filterLeaderboard(leaderboard.value, categoryFilter.value, 'position'),
+)
+
+const leaderboardEmptyMessage = computed(() =>
+  leaderboard.value.length > 0 ? 'No racers match' : 'No results yet.',
+)
 
 const finishedEntries = computed(() =>
   leaderboard.value.filter((entry) => entry.status === 'finished'),
@@ -434,6 +466,7 @@ onMounted(async () => {
 watch(raceId, async () => {
   clearSelectedParticipant()
   highlightParticipantId.value = undefined
+  categoryFilter.value = { ...DEFAULT_CATEGORY_FILTER }
   await Promise.all([loadRace(), loadEvent()])
   await loadLeaderboard()
   await loadStatistics()
