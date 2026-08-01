@@ -168,6 +168,16 @@ describe('useFullscreenRotator', () => {
       expect(pageIndex.value).toBe(0)
     })
 
+    it('does not jump when settings are open', async () => {
+      const { open, jumpToRace, openSettings, pageIndex, currentPage } = setup()
+      open.value = true
+      await nextTick()
+      openSettings()
+      expect(jumpToRace('6h', 'teams')).toBe(false)
+      expect(pageIndex.value).toBe(0)
+      expect(currentPage.value?.race).toBe('12h')
+    })
+
     it('resets dwell when already on the target page', async () => {
       const { open, jumpToRace, pageIndex } = setup()
       open.value = true

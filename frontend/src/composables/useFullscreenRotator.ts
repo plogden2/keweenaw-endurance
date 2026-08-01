@@ -185,9 +185,9 @@ export function useFullscreenRotator(opts: {
     scheduleAdvance()
   }
 
-  /** Jump to a race page for a live lap. No-op when closed or paused. */
+  /** Jump to a race page for a live lap. No-op when closed, paused, or settings open. */
   function jumpToRace(race: RotatorRaceKey, preferredMode: RotatorMode): boolean {
-    if (!opts.open.value || !playing.value) return false
+    if (!opts.open.value || !playing.value || settingsOpen.value) return false
     const pages = activePages.value
     if (!pages.length) return false
 
