@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/services"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 )
 
 // ListEventTaps handles public GET /api/events/:id/taps.
@@ -118,21 +119,23 @@ func (h *Handlers) publishEventTapRecorded(eventID uuid.UUID, record *models.Tim
 		return
 	}
 
-	lapCount, _, _, _, err := h.services.Scan.ScoreSnapshot(record.ParticipantID.UUID())
-	if err != nil {
-		return
-	}
 	participant := record.Participant
 	if participant.ID.UUID() == uuid.Nil {
 		if err := h.services.DB.Preload("Race").First(&participant, "id = ?", record.ParticipantID).Error; err != nil {
 			return
 		}
 	}
+
+	lapCount := 1
+	if counted, _, _, _, err := h.services.Scan.ScoreSnapshot(record.ParticipantID.UUID()); err == nil {
+		lapCount = counted
+	}
+
 	h.services.LiveStream.Publish(eventID, services.LapRecordedEvent{
 		Type:            "lap_recorded",
-		EventID:         eventID.String(),
-		RaceID:          participant.RaceID.UUID().String(),
-		ParticipantID:   participant.ID.UUID().String(),
+		EventID:         uuidutil.Suffix(eventID),
+		RaceID:          participant.RaceID.Short(),
+		ParticipantID:   participant.ID.Short(),
 		ParticipantName: strings.TrimSpace(participant.FirstName + " " + participant.LastName),
 		BibNumber:       participant.BibNumber,
 		LapCount:        lapCount,

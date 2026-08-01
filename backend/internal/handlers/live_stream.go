@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/keweenaw-endurance/backend/internal/services"
 	"github.com/keweenaw-endurance/backend/internal/services/scan"
+	"github.com/keweenaw-endurance/backend/internal/uuidutil"
 )
 
 var liveStreamUpgrader = websocket.Upgrader{
@@ -24,9 +25,9 @@ func (h *Handlers) publishLapRecorded(eventID uuid.UUID, result *scan.ScanResult
 	}
 	h.services.LiveStream.Publish(eventID, services.LapRecordedEvent{
 		Type:            "lap_recorded",
-		EventID:         eventID.String(),
-		RaceID:          result.RaceID.UUID().String(),
-		ParticipantID:   result.Participant.ID.UUID().String(),
+		EventID:         uuidutil.Suffix(eventID),
+		RaceID:          result.RaceID.Short(),
+		ParticipantID:   result.Participant.ID.Short(),
 		ParticipantName: result.ParticipantName,
 		BibNumber:       result.BibNumber,
 		LapCount:        result.LapCount,

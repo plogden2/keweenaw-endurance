@@ -609,13 +609,16 @@ func TestRFIDHandlers_ManualEntry(t *testing.T) {
 	})
 	require.NoError(t, err)
 	checkpoint, err := svc.Checkpoints.CreateCheckpoint(&models.TimingCheckpoint{
-		RaceID: race.ID, Name: "Start", CheckpointType: "start",
+		RaceID: race.ID, Name: "Finish", CheckpointType: "finish",
 	})
 	require.NoError(t, err)
-	_, err = svc.Participants.CreateParticipant(&models.Participant{
+	participant, err := svc.Participants.CreateParticipant(&models.Participant{
 		RaceID: race.ID, BibNumber: "99", FirstName: "Manual", LastName: "Entry",
 	})
 	require.NoError(t, err)
+
+	sub, cancel := svc.LiveStream.Subscribe(event.ID.UUID(), 4)
+	defer cancel()
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	body := map[string]string{
@@ -632,6 +635,18 @@ func TestRFIDHandlers_ManualEntry(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
+
+	select {
+	case ev := <-sub:
+		assert.Equal(t, "lap_recorded", ev.Type)
+		assert.Equal(t, race.ID.Short(), ev.RaceID, "spectator UI matches live race ids (short)")
+		assert.Equal(t, participant.ID.Short(), ev.ParticipantID)
+		assert.Equal(t, "Manual Entry", ev.ParticipantName)
+		assert.Equal(t, "99", ev.BibNumber)
+		assert.GreaterOrEqual(t, ev.LapCount, 1)
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected lap_recorded on live stream after manual entry")
+	}
 }
 
 func TestRFIDHandlers_GetSyncStatus(t *testing.T) {
@@ -1490,6 +1505,35 @@ func TestBibHandlers_WriteTagForBibReturnsBibLogical(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, logical, resp["tag_uid"])
 	assert.Equal(t, bib.ID.Short(), resp["bib_id"])
+}
+
+func TestRFIDHandlers_WriteTag_EmptyBibReturns400(t *testing.T) {
+	router, svc := setupHandlerTest(t)
+
+	event, err := svc.Events.CreateEvent(&models.Event{
+		Name: "Event", EventDate: time.Now().AddDate(0, 1, 0),
+	})
+	require.NoError(t, err)
+	race, err := svc.Races.CreateRace(&models.Race{
+		EventID: event.ID, Name: "Race", RaceType: "time_based", DistanceKm: 10,
+	})
+	require.NoError(t, err)
+	participant, err := svc.Participants.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "", FirstName: "No", LastName: "Bib",
+	})
+	require.NoError(t, err)
+
+	payload, _ := json.Marshal(map[string]string{"participant_id": participant.ID.Short()})
+	req := httptest.NewRequest(http.MethodPost, "/api/rfid/write-tag", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", adminAuthHeader(t, svc))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	var resp map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Contains(t, resp["error"], "bib_number is required")
 }
 
 func TestRFIDHandlers_WriteTag_ParticipantStillWorks(t *testing.T) {

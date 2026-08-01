@@ -743,6 +743,12 @@ import { usePinAuthStore } from '@/stores/pinAuth'
 import { useEventsStore } from '@/stores/events'
 import { useStationStore } from '@/stores/station'
 import { getErrorMessage } from '@/utils/error'
+import { publicIdsMatch } from '@/utils/id'
+import {
+  detectLapIncreases,
+  lapSnapshotKey,
+  type LapCountSnapshot,
+} from '@/utils/liveLapCelebration'
 import type { RaceStatus } from '@/types/models'
 import { resolveCategoryColor } from '@/themes/defaultLegend'
 
@@ -819,6 +825,11 @@ const focusParticipantId = ref<string | undefined>()
 const celebrationVisible = ref(false)
 const celebrationName = ref('')
 const celebrationRaceId = ref<string | undefined>()
+/** Prior lap counts from live polls — fallback when WS fan-out misses an instance. */
+let lapCountSnapshot: LapCountSnapshot = new Map()
+/** Suppress poll↔WS double celebration for the same participant. */
+let lastCelebratedKey = ''
+let lastCelebratedAt = 0
 const legendBusy = ref(false)
 const pageScrolledFromTop = ref(false)
 const { isBusy } = useSpectatorIdle({ legendBusy, pageScrolledFromTop })
@@ -977,7 +988,7 @@ function chartBindings(): Array<{ raceId?: string; chart: typeof chart12hRef }> 
 
 function refreshFlowForRace(raceId: string) {
   for (const { raceId: id, chart } of chartBindings()) {
-    if (id === raceId) {
+    if (id && publicIdsMatch(id, raceId)) {
       void chart.value?.loadRecords?.()
     }
   }
@@ -999,8 +1010,23 @@ function clearFocusState() {
   focusParticipantId.value = undefined
 }
 
+function noteCelebration(ev: LapRecordedEvent) {
+  lastCelebratedKey = lapSnapshotKey(ev.race_id, ev.participant_id)
+  lastCelebratedAt = Date.now()
+  if (typeof ev.lap_count === 'number' && ev.lap_count >= 0) {
+    lapCountSnapshot.set(lastCelebratedKey, ev.lap_count)
+  }
+}
+
+function shouldSkipDuplicateCelebration(ev: LapRecordedEvent): boolean {
+  const key = lapSnapshotKey(ev.race_id, ev.participant_id)
+  return key === lastCelebratedKey && Date.now() - lastCelebratedAt < 2500
+}
+
 function startCelebration(ev: LapRecordedEvent) {
+  if (shouldSkipDuplicateCelebration(ev)) return
   clearCelebrationTimers()
+  noteCelebration(ev)
 
   celebrationRaceId.value = ev.race_id
   celebrationName.value = ev.participant_name
@@ -1084,11 +1110,20 @@ async function cacheLiveLabels(data: EventLiveResponse) {
 }
 
 async function applyLiveData(data: EventLiveResponse) {
+  const { events, next } = detectLapIncreases(data.races ?? [], lapCountSnapshot)
+  lapCountSnapshot = next
+
   live.value = data
   countdownAnchoredAt = Date.now()
   nowMs.value = countdownAnchoredAt
   eventsStore.setCurrentEventSummary(data.event)
   void cacheLiveLabels(data)
+
+  // Poll fallback: celebrate when boards show a new lap (covers multi-instance WS gaps).
+  for (const ev of events) {
+    if (!visibleRaceIds.value.some((id) => publicIdsMatch(id, ev.race_id))) continue
+    startCelebration(ev)
+  }
 }
 
 async function loadLive() {
@@ -1233,12 +1268,15 @@ watch(
 
 watch(lastLap, (ev) => {
   if (!ev || ev.type !== 'lap_recorded') return
-  if (!visibleRaceIds.value.includes(ev.race_id)) return
+  if (!visibleRaceIds.value.some((id) => publicIdsMatch(id, ev.race_id))) return
   startCelebration(ev)
 })
 
 watch(visibleRaceIds, (ids) => {
-  if (celebrationRaceId.value && !ids.includes(celebrationRaceId.value)) {
+  if (
+    celebrationRaceId.value &&
+    !ids.some((id) => publicIdsMatch(id, celebrationRaceId.value))
+  ) {
     clearCelebrationTimers()
     clearFocusState()
   }

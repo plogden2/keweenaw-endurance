@@ -44,9 +44,9 @@ func (h *Handlers) CreateKaraokeBonus(c *gin.Context) {
 			eventID := participant.Race.EventID.UUID()
 			h.services.LiveStream.Publish(eventID, services.LapRecordedEvent{
 				Type:            "lap_recorded",
-				EventID:         eventID.String(),
-				RaceID:          participant.RaceID.UUID().String(),
-				ParticipantID:   participant.ID.UUID().String(),
+				EventID:         uuidutil.Suffix(eventID),
+				RaceID:          participant.RaceID.Short(),
+				ParticipantID:   participant.ID.Short(),
 				ParticipantName: strings.TrimSpace(participant.FirstName + " " + participant.LastName),
 				BibNumber:       participant.BibNumber,
 				LapCount:        result.LapCount,

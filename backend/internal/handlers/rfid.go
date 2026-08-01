@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/keweenaw-endurance/backend/internal/models"
 	"github.com/keweenaw-endurance/backend/internal/services"
 )
 
@@ -183,6 +184,14 @@ func (h *Handlers) ManualTimingEntry(c *gin.Context) {
 	if err != nil {
 		respondServiceError(c, err)
 		return
+	}
+
+	// Fan out the same spectator celebration used for RFID finish taps.
+	var race models.Race
+	if err := h.services.DB.Select("id", "event_id").First(&race, "id = ?", raceID).Error; err == nil {
+		eventID := race.EventID.UUID()
+		h.refreshLiveCSV(eventID)
+		h.publishEventTapRecorded(eventID, record)
 	}
 
 	c.JSON(http.StatusCreated, record)

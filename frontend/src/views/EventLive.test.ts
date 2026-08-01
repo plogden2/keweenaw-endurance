@@ -512,6 +512,46 @@ describe('EventLive.vue', () => {
 
       expect(wrapper.find('[data-testid="lap-celebration"]').exists()).toBe(false)
     })
+
+    it('shows overlay when lap race_id is a full UUID whose suffix matches the visible race', async () => {
+      ;(eventsLiveApi.getLive as Mock).mockResolvedValue({
+        data: {
+          ...livePayload,
+          races: livePayload.races.map((race) =>
+            race.id === 'r-12' ? { ...race, id: 'ab12cd' } : race,
+          ),
+        },
+      })
+      const wrapper = await mountLive()
+
+      lastLap.value = lapEvent({
+        race_id: '550e8400-e29b-41d4-a716-446655ab12cd',
+        participant_name: 'Alex Rivera',
+      })
+      await nextTick()
+
+      expect(wrapper.find('[data-testid="lap-celebration"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="lap-celebration"]').text()).toContain('Alex Rivera')
+    })
+
+    it('celebrates when a polled leaderboard lap count increases', async () => {
+      vi.useFakeTimers()
+      const wrapper = await mountLive()
+      expect(wrapper.find('[data-testid="lap-celebration"]').exists()).toBe(false)
+
+      const bumped = structuredClone(livePayload)
+      const alex = bumped.races[0]?.leaderboard_overall[0]
+      if (alex) alex.laps = (alex.laps ?? 0) + 1
+      ;(eventsLiveApi.getLive as Mock).mockResolvedValue({ data: bumped })
+
+      await vi.advanceTimersByTimeAsync(2000)
+      await flushPromises()
+      await nextTick()
+
+      expect(wrapper.find('[data-testid="lap-celebration"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="lap-celebration"]').text()).toContain('Alex Rivera')
+      vi.useRealTimers()
+    })
   })
 
   describe('sticky highlight v-model wiring', () => {
