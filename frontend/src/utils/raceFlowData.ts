@@ -233,31 +233,16 @@ function createParticipantFlow(participant: FlowParticipantInput): ParticipantFl
   }
 }
 
-/** Format elapsed minutes as signed `hh:mm:ss.ssss` (gun at 00:00:00.0000). */
-export function formatElapsedClock(minutes: number): string {
-  if (!Number.isFinite(minutes)) {
-    return '00:00:00.0000'
+function formatElapsedMinutes(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes))
+  const hours = Math.floor(total / 60)
+  const mins = total % 60
+
+  if (hours > 0) {
+    return `${hours}h ${mins}m`
   }
 
-  const sign = minutes < 0 ? '-' : ''
-  let totalTenThousandths = Math.round(Math.abs(minutes) * 60 * 10000)
-  const hours = Math.floor(totalTenThousandths / (3600 * 10000))
-  totalTenThousandths -= hours * 3600 * 10000
-  const mins = Math.floor(totalTenThousandths / (60 * 10000))
-  totalTenThousandths -= mins * 60 * 10000
-  const secs = Math.floor(totalTenThousandths / 10000)
-  const frac = totalTenThousandths % 10000
-
-  return (
-    `${sign}${String(hours).padStart(2, '0')}:` +
-    `${String(mins).padStart(2, '0')}:` +
-    `${String(secs).padStart(2, '0')}.` +
-    `${String(frac).padStart(4, '0')}`
-  )
-}
-
-function formatElapsedMinutes(minutes: number): string {
-  return formatElapsedClock(minutes)
+  return `${mins}m`
 }
 
 export function buildParticipantFlowTooltip(

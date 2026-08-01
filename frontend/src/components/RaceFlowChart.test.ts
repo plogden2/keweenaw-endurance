@@ -5,7 +5,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { Chart } from 'chart.js'
 import RaceFlowChart from './RaceFlowChart.vue'
 import { timingApi } from '@/services/api'
-import { assignContrastFlowColors, buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, distanceToPolylinePx, expandSteppedLapPoints, findNearestPolylineDatasetIndex, formatAverageResult, formatDuration, formatElapsedClock, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, getParticipantTeamKey, getParticipantTeamLabel, NO_TEAM_KEY, pickPlotClickDatasetIndex, PLOT_CLICK_HIT_PX, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
+import { assignContrastFlowColors, buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, distanceToPolylinePx, expandSteppedLapPoints, findNearestPolylineDatasetIndex, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, getParticipantTeamKey, getParticipantTeamLabel, NO_TEAM_KEY, pickPlotClickDatasetIndex, PLOT_CLICK_HIT_PX, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
 import { convertDistanceFromKm, KM_TO_MILES } from '@/utils/units'
 import { setupPinia } from '@/test/helpers'
 import type { TimingRecord } from '@/types/models'
@@ -975,13 +975,6 @@ describe('raceFlowData', () => {
     expect(kyle?.points.at(-1)).toMatchObject({ elapsedMinutes: -1, value: 1 })
   })
 
-  it('formats elapsed minutes as hh:mm:ss.ssss', () => {
-    expect(formatElapsedClock(0)).toBe('00:00:00.0000')
-    expect(formatElapsedClock(1.5)).toBe('00:01:30.0000')
-    expect(formatElapsedClock(90 + 1 / 6000)).toBe('01:30:00.0100')
-    expect(formatElapsedClock(-5)).toBe('-00:05:00.0000')
-  })
-
   it('keeps each participant flow monotonic in elapsed time', () => {
     const flows = buildParticipantFlows(sampleRecords, '2024-06-01T10:30:00.000Z', 'lap_based')
 
@@ -1319,12 +1312,8 @@ describe('RaceFlowChart.vue', () => {
           x: {
             min?: number
             max?: number
-            ticks?: {
-              font?: { size?: number }
-              color?: string
-              callback?: (value: string | number, index: number, ticks: unknown[]) => string
-            }
-            title?: { text?: string; font?: { size?: number }; color?: string }
+            ticks?: { font?: { size?: number }; color?: string }
+            title?: { font?: { size?: number }; color?: string }
           }
           y: {
             ticks?: { font?: { size?: number }; color?: string }
@@ -1357,8 +1346,6 @@ describe('RaceFlowChart.vue', () => {
         expect(dataset.data[index].x).toBeGreaterThanOrEqual(dataset.data[index - 1].x)
       }
     }
-    expect(chartConfig.options.scales.x.title?.text).toBe('Elapsed time')
-    expect(chartConfig.options.scales.x.ticks?.callback?.(1.5, 0, [])).toBe('00:01:30.0000')
     expect(chartConfig.options.scales.x.ticks?.font?.size).toBe(10)
     expect(chartConfig.options.scales.y.ticks?.font?.size).toBe(10)
     expect(chartConfig.options.plugins.title?.display).toBe(false)

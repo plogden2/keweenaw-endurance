@@ -34,6 +34,26 @@ export function formatTimeHHMM(iso: string): string {
   return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`
 }
 
+/** 24h `hh:mm:ss.ssss` in the display timezone (ms padded to 4 fractional digits). */
+export function formatTimeHHMMSSssss(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: getDisplayTimeZone(),
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(d)
+  let hour = parts.find((p) => p.type === 'hour')?.value ?? '00'
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? '00'
+  const second = parts.find((p) => p.type === 'second')?.value ?? '00'
+  // Some engines emit "24" for midnight under hour12: false.
+  if (hour === '24') hour = '00'
+  const frac = (d.getMilliseconds() / 1000).toFixed(4).slice(2)
+  return `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:${second.padStart(2, '0')}.${frac}`
+}
+
 /**
  * Interpret YYYY-MM-DD + HH:mm as device-local wall time and return UTC ISO (Z).
  */

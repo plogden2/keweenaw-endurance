@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatDateTime,
   formatTimeHHMM,
+  formatTimeHHMMSSssss,
   getDisplayTimeZone,
   isoToDateInputValue,
   isoToTimeInputValue,
@@ -63,6 +64,20 @@ describe('isoToDateInputValue', () => {
 
   it('returns empty for invalid ISO', () => {
     expect(isoToDateInputValue('bad')).toBe('')
+  })
+})
+
+describe('formatTimeHHMMSSssss', () => {
+  it('formats wall clock as hh:mm:ss.ssss in the display timezone', () => {
+    // 12:00:00.123 UTC → 08:00:00.1230 America/Detroit (EDT, UTC-4) when device TZ is Detroit.
+    const formatted = formatTimeHHMMSSssss('2026-08-01T12:00:00.123Z')
+    expect(formatted).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{4}$/)
+    // Fractional seconds come from the absolute instant (ms), independent of TZ.
+    expect(formatted.endsWith('.1230')).toBe(true)
+  })
+
+  it('returns em dash for invalid ISO', () => {
+    expect(formatTimeHHMMSSssss('bad')).toBe('—')
   })
 })
 

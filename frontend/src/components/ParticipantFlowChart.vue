@@ -42,7 +42,6 @@ import {
   buildParticipantFlows,
   clampElapsedToDuration,
   expandSteppedLapPoints,
-  formatElapsedClock,
   getCurrentElapsedMinutes,
   getFlowLineColor,
   getFlowYAxisLabel,
@@ -304,15 +303,11 @@ function renderChart(): void {
             min: Math.min(0, ...(built.dataset.data as Array<{ x: number }>).map((p) => p.x)),
             title: {
               display: true,
-              text: 'Elapsed time',
+              text: 'Elapsed time (minutes)',
               color: '#1a3f3d',
               font: { size: 9, weight: 'bold' },
             },
-            ticks: {
-              color: '#1a3f3d',
-              font: { size: 8 },
-              callback: (value: string | number) => formatElapsedClock(Number(value)),
-            },
+            ticks: { color: '#1a3f3d', font: { size: 8 } },
             max: built.xAxisMax,
           },
           y: {

@@ -389,7 +389,6 @@ import {
   compareTeamKeys,
   expandSteppedLapPoints,
   findNearestPolylineDatasetIndex,
-  formatElapsedClock,
   getCurrentElapsedMinutes,
   getFlowYAxisLabel,
   getParticipantAgeGroupLabel,
@@ -1541,14 +1540,13 @@ function renderChart(): void {
           min: zoomWindow.value.min,
           title: {
             display: true,
-            text: 'Elapsed time',
+            text: 'Elapsed time (minutes)',
             color: axisInk,
             font: { size: axisTitleSize, weight: 'bold' },
           },
           ticks: {
             color: axisInk,
             font: { size: tickSize },
-            callback: (value: string | number) => formatElapsedClock(Number(value)),
           },
           max: zoomWindow.value.max,
         },

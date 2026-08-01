@@ -133,6 +133,12 @@ describe('EventTaps.vue', () => {
     expect(wrapper.text()).toContain('Karaoke')
   })
 
+  it('formats tap times as hh:mm:ss.ssss', async () => {
+    const wrapper = await mountEventTaps()
+    const t1 = wrapper.find('[data-testid="tap-row-t1"] td')
+    expect(t1.text()).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{4}$/)
+  })
+
   it('grays out voided rows and shows a badge', async () => {
     const wrapper = await mountEventTaps()
     const voidedRow = wrapper.find('[data-testid="tap-row-t2"]')

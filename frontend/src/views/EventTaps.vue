@@ -178,7 +178,7 @@ import { useEventTestModeStore } from '@/stores/eventTestMode'
 import { useEventsStore } from '@/stores/events'
 import { usePinAuthStore } from '@/stores/pinAuth'
 import type { Participant, TimingRecord } from '@/types/models'
-import { formatDateTime } from '@/utils/datetime'
+import { formatTimeHHMMSSssss } from '@/utils/datetime'
 import { getErrorMessage } from '@/utils/error'
 
 const PAGE_LIMIT = 50
@@ -222,7 +222,7 @@ function typeLabel(recordType: TimingRecord['record_type']): string {
 }
 
 function formatTime(iso: string): string {
-  return formatDateTime(iso)
+  return formatTimeHHMMSSssss(iso)
 }
 
 function clearSuccessTimer(): void {
