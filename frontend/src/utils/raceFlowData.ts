@@ -233,16 +233,31 @@ function createParticipantFlow(participant: FlowParticipantInput): ParticipantFl
   }
 }
 
-function formatElapsedMinutes(minutes: number): string {
-  const total = Math.max(0, Math.round(minutes))
-  const hours = Math.floor(total / 60)
-  const mins = total % 60
-
-  if (hours > 0) {
-    return `${hours}h ${mins}m`
+/** Format elapsed minutes as signed `hh:mm:ss.ssss` (gun at 00:00:00.0000). */
+export function formatElapsedClock(minutes: number): string {
+  if (!Number.isFinite(minutes)) {
+    return '00:00:00.0000'
   }
 
-  return `${mins}m`
+  const sign = minutes < 0 ? '-' : ''
+  let totalTenThousandths = Math.round(Math.abs(minutes) * 60 * 10000)
+  const hours = Math.floor(totalTenThousandths / (3600 * 10000))
+  totalTenThousandths -= hours * 3600 * 10000
+  const mins = Math.floor(totalTenThousandths / (60 * 10000))
+  totalTenThousandths -= mins * 60 * 10000
+  const secs = Math.floor(totalTenThousandths / 10000)
+  const frac = totalTenThousandths % 10000
+
+  return (
+    `${sign}${String(hours).padStart(2, '0')}:` +
+    `${String(mins).padStart(2, '0')}:` +
+    `${String(secs).padStart(2, '0')}.` +
+    `${String(frac).padStart(4, '0')}`
+  )
+}
+
+function formatElapsedMinutes(minutes: number): string {
+  return formatElapsedClock(minutes)
 }
 
 export function buildParticipantFlowTooltip(
@@ -515,12 +530,30 @@ function pushLapPoint(
   kind: LapPointKind,
   mergeWithinMinutes: number = LAP_POINT_MERGE_MINUTES,
 ): void {
+  // Drop the gun-origin placeholder when the first scored tap is before gun;
+  // otherwise Math.max with (0,0) collapses all pre-start taps to x=0.
+  if (
+    flow.points.length === 1 &&
+    flow.points[0].elapsedMinutes === 0 &&
+    flow.points[0].value === 0 &&
+    elapsedMinutes < 0
+  ) {
+    flow.points.pop()
+  }
+
   if (flow.points.length === 0) {
-    flow.points.push({ elapsedMinutes: 0, value: 0 })
+    // Post-gun series keep an explicit (0, 0) origin. Pre-gun taps start at
+    // their true (negative) elapsed so spaced early taps stay separated.
+    if (elapsedMinutes >= 0) {
+      flow.points.push({ elapsedMinutes: 0, value: 0 })
+    } else {
+      flow.points.push({ elapsedMinutes, value: laps, kind })
+      return
+    }
   }
 
   const last = flow.points.at(-1)!
-  const x = Math.max(0, last.elapsedMinutes, elapsedMinutes)
+  const x = Math.max(last.elapsedMinutes, elapsedMinutes)
 
   // Never merge into the gun-start origin — every series must keep (0, 0).
   if (last.elapsedMinutes === 0 && last.value === 0) {
@@ -588,8 +621,8 @@ function buildLapFlows(
   registeredParticipants?: FlowParticipantInput[],
   mergeWithinMinutes: number = LAP_POINT_MERGE_MINUTES,
 ): ParticipantFlow[] {
-  // Include scored laps before gun start (leaderboard counts them). Elapsed is
-  // clamped to >= 0 in pushLapPoint so the axis never goes negative.
+  // Include scored laps before gun start (leaderboard counts them). Pre-gun
+  // taps keep negative elapsed so distinct early taps do not stack at x=0.
   const finishRecords = records
     .filter((record) => record.checkpoint?.checkpoint_type === 'finish' && record.participant)
     .filter((record) => isScoredLapRecord(record))

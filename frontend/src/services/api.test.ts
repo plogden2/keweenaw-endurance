@@ -328,7 +328,7 @@ describe('RFID scanner APIs', () => {
       {
         participant_id: 'p-1',
       },
-      { timeout: 25_000 },
+      { timeout: 50_000 },
     )
   })
 
@@ -340,6 +340,7 @@ describe('RFID scanner APIs', () => {
     })
     expect(shouldRouteWriteTagLocal()).toBe(true)
     expect(localBridgeAcceptsWriteTag({ bib_id: 'bib-1' })).toBe(false)
+    expect(localBridgeAcceptsWriteTag({ logical_uuid: 'bib-1' })).toBe(false)
 
     ;(apiClient.post as Mock).mockResolvedValue({
       data: { bib_id: 'bib-1', tag_uid: 'uuid-1', tag_uids: ['uuid-1'] },
@@ -350,7 +351,7 @@ describe('RFID scanner APIs', () => {
       {
         bib_id: 'bib-1',
       },
-      { timeout: 25_000 },
+      { timeout: 50_000 },
     )
   })
 

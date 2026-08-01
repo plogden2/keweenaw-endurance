@@ -710,7 +710,7 @@ func (a *App) runContinuousArm(ctx context.Context) {
 		if logicalUUID == "" {
 			continue
 		}
-		// Arm path already beeped when the raw READ line arrived.
+		// Arm path already beeped after a successful UUID decode.
 		a.emitRead(strings.ToLower(strings.TrimSpace(logicalUUID)), false)
 	}
 }
@@ -764,13 +764,17 @@ func (a *App) emitRead(logicalUUID string, playBeep bool) {
 		a.lastTapBib = e.Bib
 		a.lastTapRaceID = e.RaceID
 		a.lastTapRaceName = e.RaceName
-		if a.lastTapResult == "" {
-			a.lastTapResult = "read"
-		}
 	} else {
 		a.lastTapUUID = logicalUUID
 		a.lastTapAt = a.lastReadAt
+		a.lastTapName = ""
+		a.lastTapBib = ""
+		a.lastTapRaceID = ""
+		a.lastTapRaceName = ""
 	}
+	// Reset until hosted scan_result confirms a scored lap (avoids stale "(lap)"
+	// when the station is unarmed / server rejects the read).
+	a.lastTapResult = "read"
 	writeOnly := a.cfg.WriteOnly
 	if writeOnly {
 		a.lastTapResult = "write_only"

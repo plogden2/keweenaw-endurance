@@ -39,9 +39,8 @@ type luaArmProcess struct {
 	closed   bool
 }
 
-// immediateTapBeep plays the tap tone as soon as a raw READ is seen, without
-// waiting for emitRead / offline enqueue. Debounced so a resting tag does not
-// machine-gun the speaker while the Lua loop re-arms.
+// immediateTapBeep plays the tap tone after a UUID decodes successfully.
+// Debounced so a resting tag does not machine-gun the speaker while re-arming.
 func (r *CLIProxmarkReader) immediateTapBeep() {
 	if r == nil || !r.beepEnabled.Load() {
 		return
@@ -97,7 +96,8 @@ func (r *CLIProxmarkReader) armScanLua(ctx context.Context) (string, error) {
 		case <-ctx.Done():
 			return "", ctx.Err()
 		case err := <-arm.errc:
-			r.stopLuaArm()
+			// Only tear down the arm that failed — a replaced successor must keep running.
+			r.stopLuaArmIf(arm)
 			if err == nil {
 				err = io.EOF
 			}
@@ -111,6 +111,7 @@ func (r *CLIProxmarkReader) armScanLua(ctx context.Context) (string, error) {
 				// Empty/partial dump (collision, no tag memory) — keep listening.
 				continue
 			}
+			r.immediateTapBeep()
 			return uid, nil
 		}
 	}
@@ -118,6 +119,15 @@ func (r *CLIProxmarkReader) armScanLua(ctx context.Context) (string, error) {
 
 func (r *CLIProxmarkReader) ensureLuaArm(ctx context.Context) error {
 	r.mu.Lock()
+	for r.luaArmStarting {
+		r.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(20 * time.Millisecond):
+		}
+		r.mu.Lock()
+	}
 	if r.writing {
 		r.mu.Unlock()
 		return fmt.Errorf("lua arm blocked: write in progress")
@@ -126,22 +136,40 @@ func (r *CLIProxmarkReader) ensureLuaArm(ctx context.Context) error {
 		r.mu.Unlock()
 		return nil
 	}
+	r.luaArmStarting = true
 	gain := r.hfGain
 	cliPath := r.cliPath
 	port := r.port
+	stale := r.luaArm
+	r.luaArm = nil
 	r.mu.Unlock()
+
+	if stale != nil {
+		_ = stale.Close()
+	}
+	// Dual arms on one COM port produce coin beeps with empty parses and no site taps.
+	if killAll := killAllProxmarkHook; killAll != nil {
+		_ = killAll()
+	}
 
 	scriptPath, err := writeContinuousArmScript(HFThreshFromGain(gain))
 	if err != nil {
+		r.mu.Lock()
+		r.luaArmStarting = false
+		r.mu.Unlock()
 		return err
 	}
-	arm, err := startLuaArm(ctx, cliPath, port, scriptPath, r.immediateTapBeep)
+	arm, err := startLuaArm(ctx, cliPath, port, scriptPath, nil)
 	if err != nil {
+		r.mu.Lock()
+		r.luaArmStarting = false
+		r.mu.Unlock()
 		return err
 	}
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.luaArmStarting = false
 	if r.writing {
-		r.mu.Unlock()
 		_ = arm.Close()
 		return fmt.Errorf("lua arm blocked: write in progress")
 	}
@@ -149,13 +177,22 @@ func (r *CLIProxmarkReader) ensureLuaArm(ctx context.Context) error {
 		_ = r.luaArm.Close()
 	}
 	r.luaArm = arm
-	r.mu.Unlock()
 	return nil
 }
 
 func (r *CLIProxmarkReader) stopLuaArm() {
+	r.stopLuaArmIf(nil)
+}
+
+// stopLuaArmIf closes the active lua arm. When want is non-nil, only closes if
+// it is still the active arm (avoids killing a successor after a restart race).
+func (r *CLIProxmarkReader) stopLuaArmIf(want *luaArmProcess) {
 	r.mu.Lock()
 	arm := r.luaArm
+	if want != nil && arm != want {
+		r.mu.Unlock()
+		return
+	}
 	r.luaArm = nil
 	r.mu.Unlock()
 	if arm != nil {
@@ -247,7 +284,6 @@ func (a *luaArmProcess) readLoop(r io.Reader) {
 	sc.Buffer(buf, 1024*1024)
 	var chunk strings.Builder
 	readyClosed := false
-	beeped := false
 	for sc.Scan() {
 		line := sc.Text()
 		chunk.WriteString(line)
@@ -258,23 +294,15 @@ func (a *luaArmProcess) readLoop(r io.Reader) {
 			chunk.Reset()
 			continue
 		}
-		// Beep at the first UUID payload line — before ArmScan/emitRead/offline enqueue.
-		if !beeped && a.onTapBeep != nil && (raw14aReadPattern.MatchString(line) || classicBlockPipePattern.MatchString(line)) {
-			beeped = true
-			a.onTapBeep()
-		}
 		if strings.Contains(line, keweenawTapEnd) {
-			if !beeped && a.onTapBeep != nil {
-				// Raw line missed (format change) — still give immediate feedback.
-				a.onTapBeep()
-			}
+			// Beep is owned by armScanLua after parsePollUUID succeeds — raw dump
+			// lines can match under COM contention without a scorable UUID.
 			select {
 			case a.taps <- chunk.String():
 			default:
 				// Drop if consumer is slow; next tap will follow.
 			}
 			chunk.Reset()
-			beeped = false
 		}
 	}
 	if !readyClosed {

@@ -5,7 +5,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { Chart } from 'chart.js'
 import RaceFlowChart from './RaceFlowChart.vue'
 import { timingApi } from '@/services/api'
-import { assignContrastFlowColors, buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, distanceToPolylinePx, expandSteppedLapPoints, findNearestPolylineDatasetIndex, formatAverageResult, formatDuration, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, getParticipantTeamKey, getParticipantTeamLabel, NO_TEAM_KEY, pickPlotClickDatasetIndex, PLOT_CLICK_HIT_PX, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
+import { assignContrastFlowColors, buildParticipantFlowTooltip, buildParticipantFlows, buildRaceStatistics, buildExtrapolationPoint, clampElapsedToDuration, distanceToPolylinePx, expandSteppedLapPoints, findNearestPolylineDatasetIndex, formatAverageResult, formatDuration, formatElapsedClock, getAverageResultLabel, getCurrentElapsedMinutes, getParticipantAgeGroupKey, getParticipantAgeGroupLabel, getParticipantGenderKey, getParticipantTeamKey, getParticipantTeamLabel, NO_TEAM_KEY, pickPlotClickDatasetIndex, PLOT_CLICK_HIT_PX, resolveRaceFlowAxisMaxMinutes, resolveRaceFlowXAxisMax, resolveRaceStartMs } from '@/utils/raceFlowData'
 import { convertDistanceFromKm, KM_TO_MILES } from '@/utils/units'
 import { setupPinia } from '@/test/helpers'
 import type { TimingRecord } from '@/types/models'
@@ -866,14 +866,14 @@ describe('raceFlowData', () => {
     expect(findNearestPolylineDatasetIndex([horizontal, diagonal], 20, 80)).toBeUndefined()
   })
 
-  it('excludes timing records before race start so elapsed never goes negative', () => {
+  it('keeps pre-gun taps at true (negative) elapsed so spaced taps do not collapse to x=0', () => {
     const earlyAndOnTime: TimingRecord[] = [
       {
         id: 'early',
         participant_id: 'p1',
         checkpoint_id: 'cp-finish',
-        timestamp: '2024-05-31T12:00:00.000Z',
-        local_timestamp: '2024-05-31T12:00:00.000Z',
+        timestamp: '2024-06-01T10:25:00.000Z',
+        local_timestamp: '2024-06-01T10:25:00.000Z',
         sync_status: 'synced',
         participant: {
           id: 'p1',
@@ -922,14 +922,64 @@ describe('raceFlowData', () => {
       'lap_based',
     )
 
-    // Pre-start scored laps are kept (leaderboard counts them) but elapsed is
-    // clamped to >= 0 so the axis never goes negative.
+    // Pre-start scored laps keep true elapsed relative to gun (negative x).
     expect(flows).toHaveLength(1)
-    expect(flows[0].points).toHaveLength(3)
-    expect(flows[0].points[0]).toEqual({ elapsedMinutes: 0, value: 0 })
-    expect(flows[0].points[1]).toMatchObject({ elapsedMinutes: 0, value: 1 })
-    expect(flows[0].points[2]).toMatchObject({ elapsedMinutes: 30, value: 2 })
-    expect(flows[0].points.every((point) => point.elapsedMinutes >= 0)).toBe(true)
+    expect(flows[0].points).toHaveLength(2)
+    expect(flows[0].points[0]).toMatchObject({ elapsedMinutes: -5, value: 1 })
+    expect(flows[0].points[1]).toMatchObject({ elapsedMinutes: 30, value: 2 })
+  })
+
+  it('spaces distinct pre-gun taps from different racers across elapsed time', () => {
+    const participant = (id: string, bib: string, first: string, last: string) => ({
+      id,
+      race_id: 'race-1',
+      bib_number: bib,
+      first_name: first,
+      last_name: last,
+      status: 'started' as const,
+    })
+    const finish = {
+      id: 'cp-finish',
+      race_id: 'race-1',
+      name: 'Finish',
+      checkpoint_type: 'finish' as const,
+      is_active: true,
+    }
+    const taps: TimingRecord[] = [
+      {
+        id: 't1',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:27:00.000Z',
+        local_timestamp: '2024-06-01T10:27:00.000Z',
+        sync_status: 'synced',
+        participant: participant('p1', '1', 'Isaac', 'Oldenburg'),
+        checkpoint: finish,
+      },
+      {
+        id: 't2',
+        participant_id: 'p2',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:29:00.000Z',
+        local_timestamp: '2024-06-01T10:29:00.000Z',
+        sync_status: 'synced',
+        participant: participant('p2', '2', 'Kyle', 'Marsh'),
+        checkpoint: finish,
+      },
+    ]
+
+    const flows = buildParticipantFlows(taps, '2024-06-01T10:30:00.000Z', 'lap_based')
+    const isaac = flows.find((f) => f.participantId === 'p1')
+    const kyle = flows.find((f) => f.participantId === 'p2')
+    expect(isaac?.points.at(-1)).toMatchObject({ elapsedMinutes: -3, value: 1 })
+    expect(kyle?.points.at(-1)).toMatchObject({ elapsedMinutes: -1, value: 1 })
+  })
+
+  it('formats elapsed minutes as hh:mm:ss.ssss', () => {
+    expect(formatElapsedClock(0)).toBe('00:00:00.0000')
+    expect(formatElapsedClock(1.5)).toBe('00:01:30.0000')
+    expect(formatElapsedClock(90 + 1 / 6000)).toBe('01:30:00.0100')
+    expect(formatElapsedClock(-5)).toBe('-00:05:00.0000')
   })
 
   it('keeps each participant flow monotonic in elapsed time', () => {
@@ -1269,8 +1319,12 @@ describe('RaceFlowChart.vue', () => {
           x: {
             min?: number
             max?: number
-            ticks?: { font?: { size?: number }; color?: string }
-            title?: { font?: { size?: number }; color?: string }
+            ticks?: {
+              font?: { size?: number }
+              color?: string
+              callback?: (value: string | number, index: number, ticks: unknown[]) => string
+            }
+            title?: { text?: string; font?: { size?: number }; color?: string }
           }
           y: {
             ticks?: { font?: { size?: number }; color?: string }
@@ -1303,6 +1357,8 @@ describe('RaceFlowChart.vue', () => {
         expect(dataset.data[index].x).toBeGreaterThanOrEqual(dataset.data[index - 1].x)
       }
     }
+    expect(chartConfig.options.scales.x.title?.text).toBe('Elapsed time')
+    expect(chartConfig.options.scales.x.ticks?.callback?.(1.5, 0, [])).toBe('00:01:30.0000')
     expect(chartConfig.options.scales.x.ticks?.font?.size).toBe(10)
     expect(chartConfig.options.scales.y.ticks?.font?.size).toBe(10)
     expect(chartConfig.options.plugins.title?.display).toBe(false)

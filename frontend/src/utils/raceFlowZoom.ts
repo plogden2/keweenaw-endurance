@@ -11,34 +11,40 @@ export const MAX_VISIBLE_DATASETS = 80
 /** Minimum visible X span in minutes. */
 export const MIN_ZOOM_SPAN_MINUTES = 1
 
-export function createFullZoomWindow(fullMax: number): ZoomWindow {
-  const max = Math.max(fullMax, MIN_ZOOM_SPAN_MINUTES)
-  return { min: 0, max }
+export function createFullZoomWindow(fullMax: number, fullMin = 0): ZoomWindow {
+  const min = fullMin
+  const max = Math.max(fullMax, min + MIN_ZOOM_SPAN_MINUTES)
+  return { min, max }
 }
 
-export function clampZoomWindow(window: ZoomWindow, fullMax: number): ZoomWindow {
-  const domainMax = Math.max(fullMax, MIN_ZOOM_SPAN_MINUTES)
+export function clampZoomWindow(
+  window: ZoomWindow,
+  fullMax: number,
+  fullMin = 0,
+): ZoomWindow {
+  const domainMin = fullMin
+  const domainMax = Math.max(fullMax, domainMin + MIN_ZOOM_SPAN_MINUTES)
   let { min, max } = window
-  let span = Math.max(max - min, MIN_ZOOM_SPAN_MINUTES)
+  const span = Math.max(max - min, MIN_ZOOM_SPAN_MINUTES)
 
-  if (span >= domainMax - 1e-9) {
-    return createFullZoomWindow(domainMax)
+  if (span >= domainMax - domainMin - 1e-9) {
+    return createFullZoomWindow(domainMax, domainMin)
   }
 
   const center = (min + max) / 2
   min = center - span / 2
   max = center + span / 2
 
-  if (min < 0) {
-    max -= min
-    min = 0
+  if (min < domainMin) {
+    max += domainMin - min
+    min = domainMin
   }
   if (max > domainMax) {
     min -= max - domainMax
     max = domainMax
   }
-  if (min < 0) {
-    min = 0
+  if (min < domainMin) {
+    min = domainMin
   }
 
   return { min, max: Math.max(max, min + MIN_ZOOM_SPAN_MINUTES) }
@@ -49,6 +55,7 @@ export function zoomInX(
   fullMax: number,
   factor = 0.7,
   centerX?: number,
+  fullMin = 0,
 ): ZoomWindow {
   const span = Math.max(window.max - window.min, MIN_ZOOM_SPAN_MINUTES)
   const newSpan = Math.max(span * factor, MIN_ZOOM_SPAN_MINUTES)
@@ -59,6 +66,7 @@ export function zoomInX(
   return clampZoomWindow(
     { min: center - newSpan / 2, max: center + newSpan / 2 },
     fullMax,
+    fullMin,
   )
 }
 
@@ -67,6 +75,7 @@ export function zoomOutX(
   fullMax: number,
   factor = 1 / 0.7,
   centerX?: number,
+  fullMin = 0,
 ): ZoomWindow {
   const span = Math.max(window.max - window.min, MIN_ZOOM_SPAN_MINUTES)
   const newSpan = span * factor
@@ -77,17 +86,31 @@ export function zoomOutX(
   return clampZoomWindow(
     { min: center - newSpan / 2, max: center + newSpan / 2 },
     fullMax,
+    fullMin,
   )
 }
 
-export function zoomToLastMinutes(fullMax: number, minutes: number): ZoomWindow {
-  const domainMax = Math.max(fullMax, MIN_ZOOM_SPAN_MINUTES)
-  const span = Math.min(Math.max(minutes, MIN_ZOOM_SPAN_MINUTES), domainMax)
-  return clampZoomWindow({ min: domainMax - span, max: domainMax }, domainMax)
+export function zoomToLastMinutes(
+  fullMax: number,
+  minutes: number,
+  fullMin = 0,
+): ZoomWindow {
+  const domainMax = Math.max(fullMax, fullMin + MIN_ZOOM_SPAN_MINUTES)
+  const domainSpan = domainMax - fullMin
+  const span = Math.min(Math.max(minutes, MIN_ZOOM_SPAN_MINUTES), domainSpan)
+  return clampZoomWindow(
+    { min: domainMax - span, max: domainMax },
+    domainMax,
+    fullMin,
+  )
 }
 
-export function isZoomAtFull(window: ZoomWindow, fullMax: number): boolean {
-  const full = createFullZoomWindow(fullMax)
+export function isZoomAtFull(
+  window: ZoomWindow,
+  fullMax: number,
+  fullMin = 0,
+): boolean {
+  const full = createFullZoomWindow(fullMax, fullMin)
   return (
     Math.abs(window.min - full.min) < 1e-6 && Math.abs(window.max - full.max) < 1e-6
   )

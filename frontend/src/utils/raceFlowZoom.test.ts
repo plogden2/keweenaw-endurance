@@ -17,6 +17,10 @@ describe('raceFlowZoom', () => {
     expect(createFullZoomWindow(720)).toEqual({ min: 0, max: 720 })
   })
 
+  it('creates a full window that includes pre-gun (negative) elapsed', () => {
+    expect(createFullZoomWindow(90, -5)).toEqual({ min: -5, max: 90 })
+  })
+
   it('zooms in around the window center and clamps to domain', () => {
     const next = zoomInX({ min: 0, max: 100 }, 100)
     expect(next.max - next.min).toBeLessThan(100)

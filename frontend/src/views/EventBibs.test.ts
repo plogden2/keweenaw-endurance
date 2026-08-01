@@ -32,26 +32,30 @@ const sampleBibs = [
   {
     id: 'bib-1',
     bib_number: '1',
+    logical_uuid: '11111111-1111-1111-1111-111111111111',
     tag_count: 1,
-    tag_uids: ['uuid-1'],
+    tag_uids: ['11111111-1111-1111-1111-111111111111'],
     participant_id: 'p1',
     participant_name: 'Alex Runner',
   },
   {
     id: 'bib-10',
     bib_number: '10',
+    logical_uuid: '10101010-1010-1010-1010-101010101010',
     tag_count: 0,
     tag_uids: [],
   },
   {
     id: 'bib-100',
     bib_number: '100',
+    logical_uuid: '10010010-0100-1001-0010-010010010010',
     tag_count: 3,
     tag_uids: [],
   },
   {
     id: 'bib-2',
     bib_number: '2',
+    logical_uuid: '22222222-2222-2222-2222-222222222222',
     tag_count: 0,
     tag_uids: [],
   },
@@ -148,7 +152,7 @@ describe('EventBibs.vue', () => {
 
     expect(rfidApi.writeTag).toHaveBeenCalledWith({
       bib_id: 'bib-2',
-      logical_uuid: 'bib-2',
+      logical_uuid: '22222222-2222-2222-2222-222222222222',
     })
   })
 

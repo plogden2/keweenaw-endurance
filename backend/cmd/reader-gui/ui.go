@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -616,14 +615,16 @@ func (ui *readerUI) onSave() {
 }
 
 func (ui *readerUI) onKillOrphans() {
-	killed, err := bridgeapp.KillProxmarkOrphans(os.Getpid())
+	// Kill every proxmark3 — including the continuous-arm child. Keeping the arm
+	// made "Kill orphans" a no-op when COM was busy, which is the common write failure.
+	killed, err := bridgeapp.KillProxmarkOrphans(0)
 	if err != nil {
 		dialog.ShowError(err, ui.win)
 		return
 	}
-	msg := fmt.Sprintf("Killed %d orphan proxmark process(es).\nKept any proxmark owned by this Reader window.", killed)
+	msg := fmt.Sprintf("Killed %d proxmark process(es).\nThe bridge will re-arm COM automatically if it is running.", killed)
 	if killed == 0 {
-		msg = "No orphan proxmark processes found."
+		msg = "No proxmark processes found.\nIf writes still fail: Stop bridge, unplug/replug the Proxmark USB, Start bridge."
 	}
 	dialog.ShowInformation("Kill orphans", msg, ui.win)
 }

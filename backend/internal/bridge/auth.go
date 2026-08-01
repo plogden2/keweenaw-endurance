@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // HostedAuth carries credentials for hosted API and WebSocket calls.
@@ -119,6 +121,76 @@ func BridgeWebSocketURL(baseURL, deviceID string) (string, error) {
 // ParticipantTag is the first active tag for a racer.
 type ParticipantTag struct {
 	TagUID string `json:"tag_uid"`
+}
+
+// FetchBibLogicalUUID resolves a short public bib id (or full UUID) to the
+// full bib logical UUID via GET /api/events/:id/bibs.
+func (a *HostedAuth) FetchBibLogicalUUID(client *http.Client, eventID, bibRef string) (string, error) {
+	if a == nil {
+		return "", fmt.Errorf("auth not configured")
+	}
+	eventID = strings.TrimSpace(eventID)
+	bibRef = strings.ToLower(strings.TrimSpace(bibRef))
+	if eventID == "" || bibRef == "" {
+		return "", fmt.Errorf("event_id and bib id are required")
+	}
+	if _, err := uuid.Parse(bibRef); err == nil {
+		return bibRef, nil
+	}
+	if client == nil {
+		client = &http.Client{Timeout: 15 * time.Second}
+	}
+
+	url := fmt.Sprintf("%s/api/events/%s/bibs", a.BaseURL, eventID)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	for k, vals := range a.WSHeaders() {
+		for _, v := range vals {
+			req.Header.Set(k, v)
+		}
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("fetch bibs failed: %s", strings.TrimSpace(string(raw)))
+	}
+
+	var wrapped struct {
+		Data []struct {
+			ID          string   `json:"id"`
+			LogicalUUID string   `json:"logical_uuid"`
+			TagUIDs     []string `json:"tag_uids"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err != nil {
+		return "", err
+	}
+	for _, bib := range wrapped.Data {
+		id := strings.ToLower(strings.TrimSpace(bib.ID))
+		logical := strings.ToLower(strings.TrimSpace(bib.LogicalUUID))
+		if id == bibRef || logical == bibRef || strings.HasSuffix(logical, bibRef) {
+			if logical != "" {
+				if _, err := uuid.Parse(logical); err == nil {
+					return logical, nil
+				}
+			}
+			for _, tag := range bib.TagUIDs {
+				tag = strings.ToLower(strings.TrimSpace(tag))
+				if _, err := uuid.Parse(tag); err == nil {
+					return tag, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("bib %q not found in event catalog", bibRef)
 }
 
 // FetchLogicalUUID loads the active logical tag for a participant from hosted.

@@ -23,6 +23,8 @@ var (
 type BibListItem struct {
 	ID              uuidutil.PublicUUID  `json:"id"`
 	BibNumber       string               `json:"bib_number"`
+	// LogicalUUID is the full bib UUID written to chips (PublicUUID JSON is short).
+	LogicalUUID     string               `json:"logical_uuid"`
 	TagCount        int                  `json:"tag_count"`
 	TagUIDs         []string             `json:"tag_uids,omitempty"`
 	ParticipantID   *uuidutil.PublicUUID `json:"participant_id,omitempty"`
@@ -155,10 +157,11 @@ func (s *BibService) ListBibs(eventID uuid.UUID) ([]BibListItem, error) {
 			uids = []string{}
 		}
 		item := BibListItem{
-			ID:        b.ID,
-			BibNumber: b.BibNumber,
-			TagCount:  len(uids),
-			TagUIDs:   uids,
+			ID:          b.ID,
+			BibNumber:   b.BibNumber,
+			LogicalUUID: strings.ToLower(b.ID.UUID().String()),
+			TagCount:    len(uids),
+			TagUIDs:     uids,
 		}
 		if p, ok := byBibNumber[b.BibNumber]; ok {
 			pid := p.ID

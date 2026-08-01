@@ -354,6 +354,7 @@ import {
   compareTeamKeys,
   expandSteppedLapPoints,
   findNearestPolylineDatasetIndex,
+  formatElapsedClock,
   getCurrentElapsedMinutes,
   getFlowYAxisLabel,
   getParticipantAgeGroupLabel,
@@ -658,6 +659,13 @@ const datasetCapMessage = computed(() => {
   return `Showing ${renderedFlows.value.length} of ${renderSelection.value.totalVisible} selected lines — filter or deselect to see more.`
 })
 
+const fullXAxisMin = computed(() =>
+  visibleFlows.value.reduce((min, flow) => {
+    const firstElapsed = flow.points[0]?.elapsedMinutes ?? 0
+    return Math.min(min, firstElapsed)
+  }, 0),
+)
+
 const fullXAxisMax = computed(() => {
   const showCurrentTime = currentElapsedMinutes.value != null
   const maxElapsedMinutes = visibleFlows.value.reduce((max, flow) => {
@@ -677,7 +685,9 @@ const fullXAxisMax = computed(() => {
   )
 })
 
-const zoomAtFull = computed(() => isZoomAtFull(zoomWindow.value, fullXAxisMax.value))
+const zoomAtFull = computed(() =>
+  isZoomAtFull(zoomWindow.value, fullXAxisMax.value, fullXAxisMin.value),
+)
 
 // Space hues across filtered racers so lines stay distinct; legend toggles
 // (visibility) do not reshuffle colors.
@@ -1127,18 +1137,21 @@ function applyZoomToChart(chart: Chart = chartInstance.value!): void {
 
 function syncZoomWindowToFullDomain(): void {
   if (!zoomPinned) {
-    zoomWindow.value = createFullZoomWindow(fullXAxisMax.value)
+    zoomWindow.value = createFullZoomWindow(fullXAxisMax.value, fullXAxisMin.value)
     return
   }
-  if (zoomWindow.value.max > fullXAxisMax.value) {
-    zoomWindow.value = createFullZoomWindow(fullXAxisMax.value)
+  if (
+    zoomWindow.value.max > fullXAxisMax.value ||
+    zoomWindow.value.min < fullXAxisMin.value
+  ) {
+    zoomWindow.value = createFullZoomWindow(fullXAxisMax.value, fullXAxisMin.value)
     zoomPinned = false
   }
 }
 
 function setZoomWindow(next: ZoomWindow): void {
   zoomWindow.value = next
-  zoomPinned = !isZoomAtFull(next, fullXAxisMax.value)
+  zoomPinned = !isZoomAtFull(next, fullXAxisMax.value, fullXAxisMin.value)
 }
 
 function stickyZoomCenter(): number | undefined {
@@ -1151,21 +1164,37 @@ function stickyZoomCenter(): number | undefined {
 }
 
 function zoomIn(): void {
-  setZoomWindow(zoomInX(zoomWindow.value, fullXAxisMax.value, 0.7, stickyZoomCenter()))
+  setZoomWindow(
+    zoomInX(
+      zoomWindow.value,
+      fullXAxisMax.value,
+      0.7,
+      stickyZoomCenter(),
+      fullXAxisMin.value,
+    ),
+  )
   if (chartInstance.value) {
     applyZoomToChart()
   }
 }
 
 function zoomOut(): void {
-  setZoomWindow(zoomOutX(zoomWindow.value, fullXAxisMax.value, 1 / 0.7, stickyZoomCenter()))
+  setZoomWindow(
+    zoomOutX(
+      zoomWindow.value,
+      fullXAxisMax.value,
+      1 / 0.7,
+      stickyZoomCenter(),
+      fullXAxisMin.value,
+    ),
+  )
   if (chartInstance.value) {
     applyZoomToChart()
   }
 }
 
 function zoomLastHour(): void {
-  setZoomWindow(zoomToLastMinutes(fullXAxisMax.value, 60))
+  setZoomWindow(zoomToLastMinutes(fullXAxisMax.value, 60, fullXAxisMin.value))
   if (chartInstance.value) {
     applyZoomToChart()
   }
@@ -1173,7 +1202,7 @@ function zoomLastHour(): void {
 
 function resetZoom(): void {
   zoomPinned = false
-  zoomWindow.value = createFullZoomWindow(fullXAxisMax.value)
+  zoomWindow.value = createFullZoomWindow(fullXAxisMax.value, fullXAxisMin.value)
   if (chartInstance.value) {
     applyZoomToChart()
   }
@@ -1464,13 +1493,14 @@ function renderChart(): void {
           min: zoomWindow.value.min,
           title: {
             display: true,
-            text: 'Elapsed time (minutes)',
+            text: 'Elapsed time',
             color: axisInk,
             font: { size: axisTitleSize, weight: 'bold' },
           },
           ticks: {
             color: axisInk,
             font: { size: tickSize },
+            callback: (value: string | number) => formatElapsedClock(Number(value)),
           },
           max: zoomWindow.value.max,
         },

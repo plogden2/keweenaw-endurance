@@ -32,6 +32,7 @@ Trim leading silence from the MP3, convert once to mono 16-bit PCM WAV, embed th
 2. ffmpeg (or equivalent) once at build/prep time:
    - Remove leading silence (threshold ~2% FS / ~−34 dB; cut at first audible sample)
    - Trim trailing silence after the last audible sample (same threshold); keep a few ms of natural decay if present in the source
+   - Speed up 1.5× (`atempo=1.5`) so the coin reads snappier on tap
    - Convert to mono, 16-bit PCM, 22050 Hz WAV (matches current beep sample rate and keeps embed size small)
 3. Output committed asset: `backend/internal/rfid/assets/tap-coin.wav`
 4. Keep the MP3 in frontend assets as the source of truth for re-export; do not wire the MP3 into the Go reader.

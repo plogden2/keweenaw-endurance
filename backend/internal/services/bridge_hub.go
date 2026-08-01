@@ -12,7 +12,9 @@ import (
 
 const (
 	DefaultBridgeDeviceID     = "laptop-finish-1"
-	defaultBridgeWriteTimeout = 20 * time.Second
+	// Proxmark write often needs arm-cancel settle + retries (15–25s). Keep above
+	// worst-case CLI session so the hub does not 503 after a successful chip write.
+	defaultBridgeWriteTimeout = 45 * time.Second
 )
 
 var (

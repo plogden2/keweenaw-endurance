@@ -34,3 +34,17 @@ func TestBridgeWebSocketURL(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "wss://keweenawendurance.com/api/rfid/bridge?device_id=laptop-finish-1", url)
 }
+
+func TestFetchBibLogicalUUID_ResolvesShortPublicID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/events/b117f5/bibs", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"1e2281","logical_uuid":"c52e2894-fd3f-4c6f-853d-5bf80e1e2281","tag_uids":[]}]}`))
+	}))
+	defer srv.Close()
+
+	auth := &HostedAuth{BaseURL: srv.URL, BridgeToken: "tok"}
+	got, err := auth.FetchBibLogicalUUID(srv.Client(), "b117f5", "1e2281")
+	require.NoError(t, err)
+	assert.Equal(t, "c52e2894-fd3f-4c6f-853d-5bf80e1e2281", got)
+}

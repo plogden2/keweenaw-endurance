@@ -258,6 +258,24 @@ func TestRFIDService_WriteTag(t *testing.T) {
 	assert.Equal(t, logical, uid)
 }
 
+func TestWriteTag_RequiresBibNumber(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	partSvc := NewParticipantService(db)
+	p, err := partSvc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "", FirstName: "No", LastName: "Bib",
+	})
+	require.NoError(t, err)
+	require.Empty(t, p.BibNumber)
+
+	svc := NewRFIDService(db, rfid.NewMockReader())
+	svc.ConfigureBridge(&config.Config{RFID: config.RFIDConfig{Hardware: true}}, nil)
+
+	_, err = svc.WriteTag(p.ID.UUID())
+	require.ErrorIs(t, err, ErrInvalidRFIDInput)
+	assert.ErrorContains(t, err, "bib_number is required")
+}
+
 func TestWriteTag_ProgramsBibUUIDWithoutSilicon(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)

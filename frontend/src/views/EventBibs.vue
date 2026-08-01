@@ -199,7 +199,7 @@ async function programTag(bib: BibListItem) {
   try {
     await rfidApi.writeTag({
       bib_id: bib.id,
-      logical_uuid: bib.id,
+      logical_uuid: bib.logical_uuid || bib.tag_uids?.[0] || undefined,
     })
     await loadBibs()
     programSuccess.value = `Wrote tag for bib ${bib.bib_number}`

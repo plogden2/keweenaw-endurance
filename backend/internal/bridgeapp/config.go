@@ -111,7 +111,11 @@ func LoadConfigFile(path string) (Config, error) {
 func LoadConfig(path string) (Config, error) {
 	cfg := DefaultConfig()
 	if path == "" {
-		path = ConfigPath(cfg.DataDir)
+		// Prefer the GUI's AppData config so headless device-bridge matches reader-gui.
+		path = ConfigPath(PreferredGUIDataDir())
+		if _, err := os.Stat(path); err != nil {
+			path = ConfigPath(cfg.DataDir)
+		}
 	}
 	if raw, err := os.ReadFile(path); err == nil {
 		var file configFile

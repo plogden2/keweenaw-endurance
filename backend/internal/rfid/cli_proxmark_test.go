@@ -166,6 +166,66 @@ func TestCLIProxmarkReader_WriteLogicalUUIDWritesFourPages(t *testing.T) {
 	)
 }
 
+func TestCLIProxmarkReader_WriteLogicalUUID_RetriesTransientMultipleTagsOnDetect(t *testing.T) {
+	const logicalUUID = "1441674d-a011-471a-a601-722b88b117f5"
+	var nDetect, nWrite int
+
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Runner: func(command string) (string, error) {
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
+			if command == "hf 14a reader" {
+				nDetect++
+				if nDetect == 1 {
+					return "[#] Multiple tags detected. Collision after Bit 1\n", errors.New("exit")
+				}
+				return detectUltralightStdout, nil
+			}
+			if strings.Contains(command, "wrbl") {
+				nWrite++
+				return "ok", nil
+			}
+			return "ok", nil
+		},
+	})
+
+	err := reader.WriteLogicalUUID(logicalUUID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, nDetect)
+	assert.Equal(t, 1, nWrite)
+}
+
+func TestCLIProxmarkReader_WriteLogicalUUID_RetriesTransientMultipleTagsOnWrite(t *testing.T) {
+	const logicalUUID = "1441674d-a011-471a-a601-722b88b117f5"
+	var nWrite int
+
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Runner: func(command string) (string, error) {
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
+			if strings.Contains(command, "wrbl") {
+				nWrite++
+				if nWrite == 1 {
+					return "[#] Multiple tags detected. Collision after Bit 1\n", errors.New("exit")
+				}
+				return "ok", nil
+			}
+			return "ok", nil
+		},
+	})
+
+	err := reader.WriteLogicalUUID(logicalUUID)
+	require.NoError(t, err)
+	assert.Equal(t, 2, nWrite)
+}
+
 func TestCLIProxmarkReader_PollEmptyPagesReturnsEmpty(t *testing.T) {
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
@@ -640,4 +700,18 @@ func TestParsePollUUID_ClassicBlockDump(t *testing.T) {
 	got, err := parsePollUUID(stdout)
 	require.NoError(t, err)
 	assert.Equal(t, "1441674d-a011-471a-a601-722b88b117f5", got)
+}
+
+func TestParsePollUUID_FallsBackWhenFamilyReadFails(t *testing.T) {
+	// Continuous arm always runs both family reads. Mis-detected Classic SAK
+	// must still accept a valid Ultralight Type-2 payload.
+	stdout := strings.Join([]string{
+		detectClassicStdout,
+		"[!] Auth error",
+		"[+] 23 65 7B 2D AA 08 5F E8 85 53 E9 E3 AF FB 46 78 [ 4B A1 ]",
+		"KEWEENAW_TAP_END",
+	}, "\n")
+	got, err := parsePollUUID(stdout)
+	require.NoError(t, err)
+	assert.Equal(t, "23657b2d-aa08-5fe8-8553-e9e3affb4678", got)
 }

@@ -32,6 +32,20 @@ const (
 	proxmarkArmScanCmd = proxmarkArmWaitCmd + "; " + proxmarkReadLogicalUUIDCmd
 )
 
+// postArmCancelSettle waits after killing continuous arm before detect/write.
+// Overridable in tests; skipped entirely for injected runners.
+var postArmCancelSettle = 800 * time.Millisecond
+
+// killAllProxmarkHook is set from bridgeapp on Windows to terminate every
+// proxmark3.exe (including the continuous-arm child) before a hardware write.
+// Nil in unit tests / non-Windows.
+var killAllProxmarkHook func() error
+
+// SetKillAllProxmarkHook registers the OS-specific "kill every proxmark3" helper.
+func SetKillAllProxmarkHook(fn func() error) {
+	killAllProxmarkHook = fn
+}
+
 // CLICommandRunner executes the Proxmark3 CLI with the given pm3 subcommand string.
 // Tests inject a fake runner to avoid requiring real hardware. When set, the
 // reader uses one-shot process mode instead of a persistent session.
@@ -73,6 +87,7 @@ type CLIProxmarkReader struct {
 	armCancel      context.CancelFunc
 	armDone        chan struct{}
 	luaArm         *luaArmProcess
+	luaArmStarting bool // serialize ensureLuaArm across cancel/write restarts
 	lastTapBeep    time.Time
 }
 
@@ -336,41 +351,62 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 	}()
 
 	r.cancelArmAndWait()
-	// Let USB-CDC / RF field settle after killing the continuous arm process.
-	time.Sleep(500 * time.Millisecond)
-
-	r.mu.Lock()
-	ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionWriteTimeout)
-	detectOut, detectErr := r.runLocked(ctx, "hf 14a reader")
-	cancel()
-	fam, classErr := ClassifyISO14443A(detectOut)
-	if classErr != nil {
-		r.mu.Unlock()
-		return classErr
-	}
-	switch fam {
-	case TagFamilyNone:
-		if msg := classifyProxmarkWriteError(detectOut, detectErr); msg != "" {
-			r.mu.Unlock()
-			return errors.New(msg)
+	// Belt-and-suspenders: cancelArmAndWait should Kill the Lua arm, but Windows
+	// sometimes leaves a proxmark3.exe holding COM after a write-only toggle /
+	// failed Close. writing=true blocks ArmScan from respawning until we finish.
+	if !r.injectedRunner {
+		if killAll := killAllProxmarkHook; killAll != nil {
+			_ = killAll()
 		}
-		r.mu.Unlock()
-		return errors.New(noTagSelectedMessage())
-	case TagFamilyUnsupported:
-		r.mu.Unlock()
-		return errors.New(unsupportedTagTypeMessageFromStdout(detectOut))
 	}
-	cmd := writeCmdForFamily(fam, raw)
-	r.mu.Unlock()
+	// Let USB-CDC / RF field settle after killing the continuous arm process.
+	// A tag still on the antenna often spuriously reports "Multiple tags /
+	// Collision after Bit 1" on the first anticollision after arm cancel.
+	if !r.injectedRunner && postArmCancelSettle > 0 {
+		time.Sleep(postArmCancelSettle)
+	}
 
-	var stdout string
-	var writeErr error
-	for attempt := 0; attempt < 2; attempt++ {
+	const writeAttempts = 3
+	var (
+		stdout   string
+		writeErr error
+		lastMsg  string
+		fam      TagFamily
+	)
+	for attempt := 0; attempt < writeAttempts; attempt++ {
 		if attempt > 0 {
 			time.Sleep(400 * time.Millisecond)
 		}
+
 		r.mu.Lock()
 		ctx, cancel := context.WithTimeout(context.Background(), proxmarkSessionWriteTimeout)
+		detectOut, detectErr := r.runLocked(ctx, "hf 14a reader")
+		cancel()
+		var classErr error
+		fam, classErr = ClassifyISO14443A(detectOut)
+		if classErr != nil {
+			r.mu.Unlock()
+			return classErr
+		}
+		switch fam {
+		case TagFamilyNone:
+			msg := classifyProxmarkWriteError(detectOut, detectErr)
+			if msg == "" {
+				msg = noTagSelectedMessage()
+			}
+			r.mu.Unlock()
+			lastMsg = msg
+			// Transient anticollision glitch after continuous arm — retry.
+			if strings.Contains(msg, "Multiple tags") || strings.Contains(msg, "collision") {
+				continue
+			}
+			return errors.New(msg)
+		case TagFamilyUnsupported:
+			r.mu.Unlock()
+			return errors.New(unsupportedTagTypeMessageFromStdout(detectOut))
+		}
+		cmd := writeCmdForFamily(fam, raw)
+		ctx, cancel = context.WithTimeout(context.Background(), proxmarkSessionWriteTimeout)
 		stdout, writeErr = r.runLocked(ctx, cmd)
 		cancel()
 		if writeErr == nil {
@@ -386,9 +422,16 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 			}
 		}
 		r.mu.Unlock()
-		if classified := classifyProxmarkWriteError(stdout, writeErr); strings.Contains(classified, "Multiple tags") {
-			return errors.New(classified)
+		if msg := classifyProxmarkWriteError(stdout, writeErr); msg != "" {
+			lastMsg = msg
+			// Same transient collision — retry detect+write instead of aborting.
+			if strings.Contains(msg, "Multiple tags") || strings.Contains(msg, "collision") {
+				continue
+			}
 		}
+	}
+	if lastMsg != "" {
+		return errors.New(lastMsg)
 	}
 	if msg := classifyProxmarkWriteError(stdout, writeErr); msg != "" {
 		return errors.New(msg)
@@ -630,20 +673,34 @@ func parsePollUUID(stdout string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Beep is intentionally not here: bridgeapp.emitRead plays the tone on
-	// accepted taps. write-tag scores via emitRead without Polling, so a Poll-only
-	// beep would miss the dress-rehearsal / program-and-score path.
+	// Beep is intentionally not here: bridgeapp.emitRead / armScanLua play the
+	// tone only after a decoded UUID (avoids coin-on-garbage from dual-arm COM noise).
 	return uid, nil
 }
 
 // parseUUIDBytesForFamily extracts 16 logical-UUID bytes for the given family.
-// When family is unknown, tries Ultralight parsers then Classic block-1.
+// Continuous-arm transcripts always include both UL and Classic read attempts;
+// when the SAK-selected family fails, try the other before giving up.
 func parseUUIDBytesForFamily(stdout string, fam TagFamily) ([]byte, error) {
 	switch fam {
 	case TagFamilyClassic1K:
-		return parseClassicBlockDump(stdout)
+		raw, err := parseClassicBlockDump(stdout)
+		if err == nil && len(raw) == 16 && !isZeroBlock(raw) {
+			return raw, nil
+		}
+		if uraw, uerr := parseLogicalUUIDBytes(stdout); uerr == nil && len(uraw) == 16 && !isZeroBlock(uraw) {
+			return uraw, nil
+		}
+		return raw, err
 	case TagFamilyUltralight:
-		return parseLogicalUUIDBytes(stdout)
+		raw, err := parseLogicalUUIDBytes(stdout)
+		if err == nil && len(raw) == 16 && !isZeroBlock(raw) {
+			return raw, nil
+		}
+		if craw, cerr := parseClassicBlockDump(stdout); cerr == nil && len(craw) == 16 && !isZeroBlock(craw) {
+			return craw, nil
+		}
+		return raw, err
 	default:
 		raw, err := parseLogicalUUIDBytes(stdout)
 		if err == nil && len(raw) == 16 && !isZeroBlock(raw) {

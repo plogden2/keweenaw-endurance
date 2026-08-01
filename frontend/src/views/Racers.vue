@@ -377,12 +377,15 @@
                     Place a tag on the Proxmark3, then write. This programs this racer’s event bib
                     UUID onto the chip. Replacement tags get the same bib UUID.
                   </p>
+                  <p v-if="!hasBib(racer)" class="error" role="alert">
+                    Assign a bib number first, then write the tag.
+                  </p>
                   <div class="row">
                     <button
                       type="button"
                       class="btn ok"
                       data-testid="program-tag-write"
-                      :disabled="programming"
+                      :disabled="programming || !hasBib(racer)"
                       @click="writeTag(racer)"
                     >
                       {{ programming ? 'Writing…' : 'Write tag' }}
@@ -706,6 +709,10 @@ function toggleProgram(id: string) {
 async function writeTag(racer: Participant) {
   if (!pinAuth.isAuthenticated) {
     await router.push('/pin')
+    return
+  }
+  if (!hasBib(racer)) {
+    programError.value = 'Assign a bib number first, then write the tag.'
     return
   }
   programming.value = true

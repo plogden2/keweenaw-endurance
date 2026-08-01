@@ -1,9 +1,13 @@
 data/
 **/data/
 *.exe
+reader-gui.exe
+device-bridge.exe
 .git/
 tmp/
 bridge-data/
+.proxmark3/
+**/.proxmark3/
 vendor/
 **/node_modules/
 cmd/reader-gui/

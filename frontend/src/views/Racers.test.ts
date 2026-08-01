@@ -281,6 +281,21 @@ describe('Racers.vue', () => {
     expect(wrapper.find('[data-testid="program-tag-list"]').text()).toContain(logicalUuid)
   })
 
+  it('blocks write-tag until a bib number is assigned', async () => {
+    const wrapper = await mountRacers()
+    const rows = wrapper.findAll('[data-testid="racer-row"]')
+    await rows[2].find('[data-testid="program-tag"]').trigger('click')
+    await nextTick()
+
+    const writeBtn = wrapper.find('[data-testid="program-tag-write"]')
+    expect(writeBtn.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-testid="program-tag-panel"]').text()).toMatch(/assign a bib/i)
+
+    await writeBtn.trigger('click')
+    await flushPromises()
+    expect(rfidApi.writeTag).not.toHaveBeenCalled()
+  })
+
   it('shows assign-bib input for unassigned racers and saves on Enter', async () => {
     ;(raceParticipantsApi.update as Mock).mockResolvedValue({
       data: { ...sampleRacers[2], bib_number: '77', tag_uids: [] },

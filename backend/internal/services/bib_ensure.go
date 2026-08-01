@@ -17,7 +17,7 @@ func ensureBibForParticipant(db *gorm.DB, participant *models.Participant) (*mod
 	}
 	bibNumber := strings.TrimSpace(participant.BibNumber)
 	if bibNumber == "" {
-		return nil, fmt.Errorf("bib_number is required")
+		return nil, fmt.Errorf("%w: bib_number is required", ErrInvalidRFIDInput)
 	}
 	var race models.Race
 	if err := db.Select("id", "event_id").First(&race, "id = ?", participant.RaceID).Error; err != nil {

@@ -7,11 +7,21 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/keweenaw-endurance/backend/internal/rfid"
 	"golang.org/x/sys/windows"
 )
 
+func init() {
+	// Writes must reclaim COM even when the continuous-arm child still holds it.
+	rfid.SetKillAllProxmarkHook(func() error {
+		_, err := KillProxmarkOrphans(0)
+		return err
+	})
+}
+
 // KillProxmarkOrphans terminates proxmark3.exe processes that are not children
 // of keepParentPID (pass os.Getpid() from reader-gui to preserve the active arm).
+// Pass 0 to kill every proxmark3.exe (used before tag writes / Kill orphans button).
 // Returns how many processes were killed.
 func KillProxmarkOrphans(keepParentPID int) (int, error) {
 	procs, err := listProcessSnapshots()
