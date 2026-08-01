@@ -337,6 +337,15 @@
                         </option>
                       </select>
                     </label>
+                    <label>
+                      Team
+                      <select v-model="editForm.team_id" data-testid="racer-edit-team">
+                        <option value="">No team</option>
+                        <option v-for="team in teams" :key="team.id" :value="team.id">
+                          {{ team.name }}
+                        </option>
+                      </select>
+                    </label>
                   </div>
                   <p v-if="editError" class="error" role="alert">{{ editError }}</p>
                   <div class="row">
@@ -477,6 +486,7 @@ const editForm = reactive({
   first_name: '',
   last_name: '',
   category_id: '',
+  team_id: '',
 })
 
 const addForm = reactive({
@@ -592,6 +602,7 @@ function toggleEdit(racer: Participant) {
   editForm.first_name = racer.first_name
   editForm.last_name = racer.last_name
   editForm.category_id = racer.category_id || ''
+  editForm.team_id = racer.team_id || ''
   editError.value = null
 }
 
@@ -609,18 +620,23 @@ async function saveEdit(racer: Participant) {
   editSaving.value = true
   editError.value = null
   try {
+    const nextTeamId = editForm.team_id || null
     const { data } = await raceParticipantsApi.update(racer.id, {
       first_name: editForm.first_name.trim(),
       last_name: editForm.last_name.trim(),
       category_id: editForm.category_id || undefined,
+      team_id: nextTeamId,
     })
     const idx = racers.value.findIndex((r) => r.id === racer.id)
     if (idx >= 0) {
       const cat = categories.value.find((c) => c.id === (data.category_id || editForm.category_id))
+      const team = nextTeamId ? teams.value.find((t) => t.id === nextTeamId) : undefined
       racers.value[idx] = {
         ...racers.value[idx],
         ...data,
         category: cat ?? racers.value[idx].category,
+        team_id: data.team_id ?? nextTeamId,
+        team: team ?? (data.team_id ? racers.value[idx].team : undefined),
       }
     }
     closeEdit()

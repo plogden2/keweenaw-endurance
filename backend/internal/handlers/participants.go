@@ -182,6 +182,13 @@ func (h *Handlers) UpdateParticipant(c *gin.Context) {
 		return
 	}
 
+	existing, err := h.services.Participants.GetParticipant(id)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	previousRaceID := existing.RaceID.UUID()
+
 	update := &models.Participant{}
 	if req.BibNumber != nil {
 		trimmed := strings.TrimSpace(*req.BibNumber)
@@ -211,6 +218,14 @@ func (h *Handlers) UpdateParticipant(c *gin.Context) {
 	}
 	if req.Status != nil {
 		update.Status = *req.Status
+	}
+	if req.RaceID != nil {
+		raceID, err := h.resolveRaceID(strings.TrimSpace(*req.RaceID))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid race_id"})
+			return
+		}
+		update.RaceID = uuidutil.NewPublicUUID(raceID)
 	}
 	if req.CategoryID != nil {
 		if *req.CategoryID == "" {
@@ -248,6 +263,9 @@ func (h *Handlers) UpdateParticipant(c *gin.Context) {
 	}
 
 	h.refreshLiveCSVForRace(participant.RaceID.UUID())
+	if previousRaceID != participant.RaceID.UUID() {
+		h.refreshLiveCSVForRace(previousRaceID)
+	}
 	c.JSON(http.StatusOK, participant)
 }
 

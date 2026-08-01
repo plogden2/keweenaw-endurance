@@ -158,9 +158,7 @@ export type CreateParticipantPayload = {
   team_id?: string | null
 }
 
-export type UpdateParticipantPayload = Partial<
-  Omit<CreateParticipantPayload, 'race_id'>
->
+export type UpdateParticipantPayload = Partial<CreateParticipantPayload>
 
 export interface CreateEventTapPayload {
   participant_id: string

@@ -271,6 +271,23 @@
                         />
                       </label>
                       <label>
+                        Race
+                        <select
+                          v-model="editForm.race_id"
+                          data-testid="racer-edit-race"
+                          required
+                          @change="onEditRaceChange"
+                        >
+                          <option
+                            v-for="race in races"
+                            :key="race.id"
+                            :value="race.id"
+                          >
+                            {{ race.name }}
+                          </option>
+                        </select>
+                      </label>
+                      <label>
                         Category
                         <select
                           v-model="editForm.category_id"
@@ -279,11 +296,24 @@
                         >
                           <option disabled value="">Select category…</option>
                           <option
-                            v-for="cat in categoriesFor(racer.race_id)"
+                            v-for="cat in categoriesFor(editForm.race_id)"
                             :key="cat.id"
                             :value="cat.id"
                           >
                             {{ cat.name }}
+                          </option>
+                        </select>
+                      </label>
+                      <label>
+                        Team
+                        <select v-model="editForm.team_id" data-testid="racer-edit-team">
+                          <option value="">No team</option>
+                          <option
+                            v-for="team in teamsFor(editForm.race_id)"
+                            :key="team.id"
+                            :value="team.id"
+                          >
+                            {{ team.name }}
                           </option>
                         </select>
                       </label>
@@ -386,10 +416,11 @@ import {
   eventsApi,
   raceParticipantsApi,
   racesApi,
+  raceTeamsApi,
   rfidApi,
 } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
-import type { Category, Participant, Race } from '@/types/models'
+import type { Category, Participant, Race, Team } from '@/types/models'
 import { getErrorMessage } from '@/utils/error'
 
 const SEARCH_DEBOUNCE_MS = 200
@@ -403,6 +434,7 @@ const eventName = ref('Event')
 const races = ref<Race[]>([])
 const racers = ref<Participant[]>([])
 const categoriesByRace = reactive<Record<string, Category[]>>({})
+const teamsByRace = reactive<Record<string, Team[]>>({})
 const raceFilter = ref('')
 const searchInput = ref('')
 const searchQuery = ref('')
@@ -429,7 +461,9 @@ const editError = ref<string | null>(null)
 const editForm = reactive({
   first_name: '',
   last_name: '',
+  race_id: '',
   category_id: '',
+  team_id: '',
 })
 
 const addForm = reactive({
@@ -477,6 +511,10 @@ function categoriesFor(raceId: string): Category[] {
   return categoriesByRace[raceId] ?? []
 }
 
+function teamsFor(raceId: string): Team[] {
+  return teamsByRace[raceId] ?? []
+}
+
 const filteredRacers = computed(() => {
   let list = racers.value
   if (raceFilter.value) {
@@ -510,6 +548,12 @@ async function ensureCategories(raceId: string) {
   if (!raceId || categoriesByRace[raceId]) return
   const { data } = await raceParticipantsApi.listCategories(raceId)
   categoriesByRace[raceId] = data.data ?? []
+}
+
+async function ensureTeams(raceId: string) {
+  if (!raceId || teamsByRace[raceId]) return
+  const { data } = await raceTeamsApi.list(raceId)
+  teamsByRace[raceId] = Array.isArray(data) ? data : (data.data ?? [])
 }
 
 watch(
@@ -620,12 +664,28 @@ async function toggleEdit(racer: Participant) {
   editingId.value = racer.id
   editForm.first_name = racer.first_name
   editForm.last_name = racer.last_name
+  editForm.race_id = racer.race_id
   editForm.category_id = racer.category_id || ''
+  editForm.team_id = racer.team_id || ''
   editError.value = null
   try {
-    await ensureCategories(racer.race_id)
+    await Promise.all([ensureCategories(racer.race_id), ensureTeams(racer.race_id)])
   } catch (err) {
-    editError.value = getErrorMessage(err, 'Failed to load categories')
+    editError.value = getErrorMessage(err, 'Failed to load race options')
+  }
+}
+
+async function onEditRaceChange() {
+  const raceId = editForm.race_id
+  editForm.category_id = ''
+  editForm.team_id = ''
+  editError.value = null
+  if (!raceId) return
+  try {
+    await Promise.all([ensureCategories(raceId), ensureTeams(raceId)])
+    editForm.category_id = categoriesFor(raceId)[0]?.id ?? ''
+  } catch (err) {
+    editError.value = getErrorMessage(err, 'Failed to load race options')
   }
 }
 
@@ -643,21 +703,45 @@ async function saveEdit(racer: Participant) {
   editSaving.value = true
   editError.value = null
   try {
+    const nextRaceId = editForm.race_id || racer.race_id
     const { data } = await raceParticipantsApi.update(racer.id, {
       first_name: editForm.first_name.trim(),
       last_name: editForm.last_name.trim(),
+      race_id: nextRaceId,
       category_id: editForm.category_id || undefined,
+      team_id: editForm.team_id || null,
     })
     const idx = racers.value.findIndex((r) => r.id === racer.id)
     if (idx >= 0) {
-      const cat = categoriesFor(racer.race_id).find(
+      const raceMeta = races.value.find((r) => r.id === (data.race_id || nextRaceId))
+      const cat = categoriesFor(data.race_id || nextRaceId).find(
         (c) => c.id === (data.category_id || editForm.category_id),
       )
+      const team = editForm.team_id
+        ? teamsFor(data.race_id || nextRaceId).find((t) => t.id === editForm.team_id)
+        : undefined
       racers.value[idx] = {
         ...racers.value[idx],
         ...data,
-        category: cat ?? racers.value[idx].category,
-        race: racers.value[idx].race,
+        category: cat ?? (data.category_id ? racers.value[idx].category : undefined),
+        team: team ?? (data.team_id ? racers.value[idx].team : undefined),
+        team_name: team?.name ?? (data.team_id ? racers.value[idx].team_name : undefined),
+        race: raceMeta
+          ? {
+              ...(racers.value[idx].race ?? {
+                id: raceMeta.id,
+                event_id: raceMeta.event_id,
+                name: raceMeta.name,
+                race_type: raceMeta.race_type,
+                status: raceMeta.status,
+              }),
+              id: raceMeta.id,
+              name: raceMeta.name,
+              event_id: raceMeta.event_id,
+              race_type: raceMeta.race_type,
+              status: raceMeta.status,
+            }
+          : racers.value[idx].race,
       }
     }
     closeEdit()

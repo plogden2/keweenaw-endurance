@@ -65,6 +65,7 @@ type updateParticipantRequest struct {
 	Location   *string `json:"location"`
 	RFIDTagUID *string `json:"rfid_tag_uid"`
 	Status     *string `json:"status"`
+	RaceID     *string `json:"race_id"`
 	CategoryID *string `json:"category_id"`
 	TeamID     *string `json:"team_id"`
 }

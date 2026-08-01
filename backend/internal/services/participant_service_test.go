@@ -135,6 +135,47 @@ func TestParticipantService_SameBibAllowedAcrossEvents(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestParticipantService_UpdateRaceSameEventClearsStaleCategoryAndTeam(t *testing.T) {
+	db := setupServiceTestDB(t)
+	event := createTestEvent(t, db)
+	raceSvc := NewRaceService(db)
+	first, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "12H", RaceType: "time_based", DistanceKm: 42, DurationMinutes: 720,
+	})
+	require.NoError(t, err)
+	second, err := raceSvc.CreateRace(&models.Race{
+		EventID: event.ID, Name: "6H", RaceType: "time_based", DistanceKm: 21, DurationMinutes: 360,
+	})
+	require.NoError(t, err)
+
+	catSvc := NewCategoryService(db)
+	cat, err := catSvc.CreateCategory(&models.Category{
+		RaceID: first.ID, Name: "Open", CategoryType: "custom",
+	})
+	require.NoError(t, err)
+	team, err := NewTeamService(db).CreateTeam(&models.Team{RaceID: first.ID, Name: "Alpha"})
+	require.NoError(t, err)
+
+	svc := NewParticipantService(db)
+	created, err := svc.CreateParticipant(&models.Participant{
+		RaceID: first.ID, BibNumber: "5", FirstName: "Alex", LastName: "Rivera",
+		CategoryID: &cat.ID, TeamID: &team.ID,
+	})
+	require.NoError(t, err)
+
+	moved, err := svc.UpdateParticipant(created.ID.UUID(), &models.Participant{RaceID: second.ID})
+	require.NoError(t, err)
+	assert.Equal(t, second.ID, moved.RaceID)
+	assert.Nil(t, moved.CategoryID)
+	assert.Nil(t, moved.TeamID)
+	assert.Equal(t, "5", moved.BibNumber)
+
+	otherEventRace := createTestRace(t, db)
+	_, err = svc.UpdateParticipant(created.ID.UUID(), &models.Participant{RaceID: otherEventRace.ID})
+	assert.ErrorIs(t, err, ErrInvalidParticipantInput)
+	assert.ErrorContains(t, err, "same event")
+}
+
 func TestParticipantService_EnsureBibOnCreateAndUpdate(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)

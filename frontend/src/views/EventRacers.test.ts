@@ -8,6 +8,7 @@ import {
   eventsApi,
   raceParticipantsApi,
   racesApi,
+  raceTeamsApi,
 } from '@/services/api'
 import { usePinAuthStore } from '@/stores/pinAuth'
 
@@ -30,6 +31,9 @@ vi.mock('@/services/api', async () => {
       remove: vi.fn(),
       listCategories: vi.fn(),
       listTags: vi.fn(),
+    },
+    raceTeamsApi: {
+      list: vi.fn(),
     },
     rfidApi: {
       writeTag: vi.fn(),
@@ -135,11 +139,22 @@ describe('EventRacers.vue', () => {
     ;(eventParticipantsApi.list as Mock).mockResolvedValue({
       data: { data: structuredClone(sampleRacers), total: 3 },
     })
-    ;(raceParticipantsApi.listCategories as Mock).mockResolvedValue({
+    ;(raceParticipantsApi.listCategories as Mock).mockImplementation(async (raceId: string) => ({
       data: {
-        data: [{ id: 'c1', race_id: 'race-12h', name: 'Expert Men', category_type: 'custom' }],
+        data:
+          raceId === 'race-6h'
+            ? [{ id: 'c2', race_id: 'race-6h', name: 'Open', category_type: 'custom' }]
+            : [{ id: 'c1', race_id: 'race-12h', name: 'Expert Men', category_type: 'custom' }],
       },
-    })
+    }))
+    ;(raceTeamsApi.list as Mock).mockImplementation(async (raceId: string) => ({
+      data: {
+        data:
+          raceId === 'race-6h'
+            ? [{ id: 't6', race_id: 'race-6h', name: 'East Bluff B' }]
+            : [{ id: 't12', race_id: 'race-12h', name: 'East Bluff A' }],
+      },
+    }))
   })
 
   afterEach(() => {
@@ -208,6 +223,44 @@ describe('EventRacers.vue', () => {
     await input.trigger('keydown.enter')
     await flushPromises()
     expect(raceParticipantsApi.update).toHaveBeenCalledWith('p3', { bib_number: '77' })
+  })
+
+  it('edits race and team for a racer', async () => {
+    ;(raceParticipantsApi.update as Mock).mockResolvedValue({
+      data: {
+        ...sampleRacers[0],
+        race_id: 'race-6h',
+        category_id: 'c2',
+        team_id: 't6',
+        first_name: 'Alex',
+        last_name: 'Rivera',
+      },
+    })
+    const wrapper = await mountPage()
+    await wrapper.find('[data-testid="racer-edit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="racer-edit-panel"]').exists()).toBe(true)
+    expect(raceTeamsApi.list).toHaveBeenCalledWith('race-12h')
+
+    await wrapper.find('[data-testid="racer-edit-race"]').setValue('race-6h')
+    await flushPromises()
+    expect(raceParticipantsApi.listCategories).toHaveBeenCalledWith('race-6h')
+    expect(raceTeamsApi.list).toHaveBeenCalledWith('race-6h')
+
+    await wrapper.find('[data-testid="racer-edit-category"]').setValue('c2')
+    await wrapper.find('[data-testid="racer-edit-team"]').setValue('t6')
+    await wrapper.find('[data-testid="racer-edit-save"]').trigger('click')
+    await flushPromises()
+
+    expect(raceParticipantsApi.update).toHaveBeenCalledWith(
+      'p1',
+      expect.objectContaining({
+        race_id: 'race-6h',
+        category_id: 'c2',
+        team_id: 't6',
+      }),
+    )
   })
 
   it('adds a racer after selecting a race', async () => {

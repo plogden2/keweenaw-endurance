@@ -208,6 +208,28 @@ func (s *ParticipantService) UpdateParticipant(id uuid.UUID, input *models.Parti
 
 	bibChanged := false
 	var eventID uuid.UUID
+	if !input.RaceID.IsZero() && input.RaceID.UUID() != participant.RaceID.UUID() {
+		var currentRace, nextRace models.Race
+		if err := s.db.Select("id", "event_id").First(&currentRace, "id = ?", participant.RaceID).Error; err != nil {
+			return nil, err
+		}
+		if err := s.db.Select("id", "event_id").First(&nextRace, "id = ?", input.RaceID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, fmt.Errorf("%w: race not found", ErrInvalidParticipantInput)
+			}
+			return nil, err
+		}
+		if currentRace.EventID.UUID() != nextRace.EventID.UUID() {
+			return nil, fmt.Errorf("%w: race_id must be in the same event", ErrInvalidParticipantInput)
+		}
+		participant.RaceID = input.RaceID
+		// Category/team belong to the previous race; drop unless re-set below.
+		// Also clear preloaded associations so GORM Save does not restore the FKs.
+		participant.CategoryID = nil
+		participant.TeamID = nil
+		participant.Category = nil
+		participant.Team = nil
+	}
 	if input.ClearBibNumber {
 		participant.BibNumber = ""
 	} else if input.BibNumber != "" && input.BibNumber != participant.BibNumber {
