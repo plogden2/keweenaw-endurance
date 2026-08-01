@@ -11,6 +11,7 @@ export interface RotatorPageConfig {
 
 export interface RotatorSettings {
   dwellMs: number
+  showQrCode: boolean
   pages: RotatorPageConfig[]
 }
 
@@ -34,6 +35,7 @@ export const DEFAULT_ROTATOR_PAGES: RotatorPageConfig[] = [
 function cloneDefaultSettings(): RotatorSettings {
   return {
     dwellMs: DEFAULT_ROTATOR_DWELL_MS,
+    showQrCode: false,
     pages: DEFAULT_ROTATOR_PAGES.map((p) => ({ ...p })),
   }
 }
@@ -50,6 +52,7 @@ function normalizeSettings(raw: unknown): RotatorSettings {
     typeof obj.dwellMs === 'number' && Number.isFinite(obj.dwellMs) && obj.dwellMs >= 1000
       ? Math.min(120_000, Math.round(obj.dwellMs))
       : defaults.dwellMs
+  const showQrCode = obj.showQrCode === true
 
   const byKey = new Map<string, RotatorPageConfig>()
   if (Array.isArray(obj.pages)) {
@@ -83,11 +86,11 @@ function normalizeSettings(raw: unknown): RotatorSettings {
       seen.add(key)
     }
     if (ordered.length === 4) {
-      return { dwellMs, pages: ordered }
+      return { dwellMs, showQrCode, pages: ordered }
     }
   }
 
-  return { dwellMs, pages }
+  return { dwellMs, showQrCode, pages }
 }
 
 export function loadRotatorSettings(): RotatorSettings {
@@ -235,6 +238,11 @@ export function useFullscreenRotator(opts: {
     scheduleAdvance()
   }
 
+  function setShowQrCode(enabled: boolean) {
+    settings.value = { ...settings.value, showQrCode: Boolean(enabled) }
+    saveRotatorSettings(settings.value)
+  }
+
   function setPageEnabled(race: RotatorRaceKey, mode: RotatorMode, enabled: boolean) {
     settings.value = {
       ...settings.value,
@@ -349,6 +357,7 @@ export function useFullscreenRotator(opts: {
     closeSettings,
     applySettings,
     setDwellSeconds,
+    setShowQrCode,
     setPageEnabled,
     movePage,
     onKeydown,

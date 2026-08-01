@@ -97,6 +97,29 @@ describe('useFullscreenRotator', () => {
     expect(currentPage.value?.race).toBe('12h')
   })
 
+  it('defaults showQrCode to false', () => {
+    const settings = loadRotatorSettings()
+    expect(settings.showQrCode).toBe(false)
+  })
+
+  it('persists showQrCode when toggled', async () => {
+    const { open, setShowQrCode } = setup()
+    open.value = true
+    await nextTick()
+    setShowQrCode(true)
+    const stored = JSON.parse(sessionStorage.getItem(FS_ROTATOR_SETTINGS_KEY)!)
+    expect(stored.showQrCode).toBe(true)
+    expect(loadRotatorSettings().showQrCode).toBe(true)
+  })
+
+  it('normalizes missing showQrCode to false', () => {
+    sessionStorage.setItem(
+      FS_ROTATOR_SETTINGS_KEY,
+      JSON.stringify({ dwellMs: 5000, pages: [] }),
+    )
+    expect(loadRotatorSettings().showQrCode).toBe(false)
+  })
+
   it('persists settings to sessionStorage', async () => {
     const { open, setDwellSeconds, setPageEnabled } = setup()
     open.value = true
