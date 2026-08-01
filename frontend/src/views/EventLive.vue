@@ -183,6 +183,13 @@
         </button>
       </div>
 
+      <LeaderboardCategoryFilters
+        v-if="leaderboardMode === 'individuals' && !rotatorOpen"
+        v-model="categoryFilter"
+        :show-skill="categoryFacets.hasSkill"
+        :show-gender="categoryFacets.hasGender"
+      />
+
       <div v-if="activeTab === '12h'" data-testid="race-panel-12h">
         <section class="panel">
           <h2>{{ race12?.name || '12 Hour' }}</h2>
@@ -230,7 +237,7 @@
             </thead>
             <tbody>
               <tr
-                v-for="e in race12?.leaderboard_overall || []"
+                v-for="e in filtered12"
                 :key="e.participant_id"
                 data-testid="leaderboard-row"
                 :data-participant-id="e.participant_id"
@@ -247,8 +254,8 @@
                 </td>
                 <td data-testid="leaderboard-laps">{{ e.laps }}</td>
               </tr>
-              <tr v-if="!(race12?.leaderboard_overall?.length)">
-                <td colspan="4">No results yet</td>
+              <tr v-if="!filtered12.length">
+                <td colspan="4">{{ individualsEmptyMessage(race12?.leaderboard_overall) }}</td>
               </tr>
             </tbody>
           </table>
@@ -328,7 +335,7 @@
             </thead>
             <tbody>
               <tr
-                v-for="e in race6?.leaderboard_overall || []"
+                v-for="e in filtered6"
                 :key="e.participant_id"
                 data-testid="leaderboard-row"
                 :data-participant-id="e.participant_id"
@@ -339,8 +346,8 @@
                 <td>{{ e.name }}</td>
                 <td>{{ e.laps }}</td>
               </tr>
-              <tr v-if="!(race6?.leaderboard_overall?.length)">
-                <td colspan="4">No results yet</td>
+              <tr v-if="!filtered6.length">
+                <td colspan="4">{{ individualsEmptyMessage(race6?.leaderboard_overall) }}</td>
               </tr>
             </tbody>
           </table>
@@ -420,7 +427,7 @@
             </thead>
             <tbody>
               <tr
-                v-for="e in race90?.leaderboard_overall || []"
+                v-for="e in filtered90"
                 :key="e.participant_id"
                 data-testid="leaderboard-row"
                 :data-participant-id="e.participant_id"
@@ -431,8 +438,8 @@
                 <td>{{ e.name }}</td>
                 <td>{{ e.laps }}</td>
               </tr>
-              <tr v-if="!(race90?.leaderboard_overall?.length)">
-                <td colspan="4">No results yet</td>
+              <tr v-if="!filtered90.length">
+                <td colspan="4">{{ individualsEmptyMessage(race90?.leaderboard_overall) }}</td>
               </tr>
             </tbody>
           </table>
@@ -742,6 +749,7 @@ import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import EventTestModeDialog from '@/components/EventTestModeDialog.vue'
 import LapCelebrationOverlay from '@/components/LapCelebrationOverlay.vue'
+import LeaderboardCategoryFilters from '@/components/LeaderboardCategoryFilters.vue'
 import LiveEventQr from '@/components/LiveEventQr.vue'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
 import {
@@ -797,6 +805,12 @@ import {
 } from '@/utils/liveLapCelebration'
 import type { RaceStatus } from '@/types/models'
 import { resolveCategoryColor } from '@/themes/defaultLegend'
+import {
+  availableFacets,
+  DEFAULT_CATEGORY_FILTER,
+  filterLeaderboard,
+  type LeaderboardCategoryFilter,
+} from '@/utils/leaderboardCategoryFilter'
 
 type ChartRef = InstanceType<typeof RaceFlowChart> | null
 
@@ -871,6 +885,7 @@ const exportError = ref<string | null>(null)
 const exportingResults = ref(false)
 const activeTab = ref<'12h' | '6h' | '90m' | 'overlap'>('12h')
 const leaderboardMode = ref<'individuals' | 'teams'>('individuals')
+const categoryFilter = ref<LeaderboardCategoryFilter>({ ...DEFAULT_CATEGORY_FILTER })
 const rotatorOpen = ref(false)
 const FS_FLOW_WIDTH_KEY = 'event-live-fs-flow-width'
 const FS_FLOW_WIDTH_MIN = 25
@@ -965,6 +980,42 @@ const race90 = computed(
     matchRace((n) => n.includes('90') || n.includes('kids')) ??
     matchRace((n) => /\b5\b/.test(n) && n.includes('minute')),
 )
+
+const activeIndividualsRace = computed(() => {
+  if (activeTab.value === '12h') return race12.value
+  if (activeTab.value === '6h') return race6.value
+  if (activeTab.value === '90m') return race90.value
+  return undefined
+})
+
+const categoryFilterKeys = computed(() => {
+  const keys = new Set<string>()
+  for (const entry of activeIndividualsRace.value?.leaderboard_overall ?? []) {
+    if (entry.category_key) keys.add(entry.category_key)
+  }
+  for (const item of live.value?.category_legend ?? []) {
+    if (item.key) keys.add(item.key)
+  }
+  return [...keys]
+})
+
+const categoryFacets = computed(() => availableFacets(categoryFilterKeys.value))
+
+const filtered12 = computed(() =>
+  filterLeaderboard(race12.value?.leaderboard_overall ?? [], categoryFilter.value, 'place'),
+)
+const filtered6 = computed(() =>
+  filterLeaderboard(race6.value?.leaderboard_overall ?? [], categoryFilter.value, 'place'),
+)
+const filtered90 = computed(() =>
+  filterLeaderboard(race90.value?.leaderboard_overall ?? [], categoryFilter.value, 'place'),
+)
+
+function individualsEmptyMessage(
+  source: EventLiveRace['leaderboard_overall'] | undefined,
+): string {
+  return (source?.length ?? 0) > 0 ? 'No racers match' : 'No results yet'
+}
 
 const rotatorRaces = computed(() => ({
   '12h': {
