@@ -81,6 +81,10 @@ type Participant struct {
 	// TagUIDs is populated from rfid_tag_associations for list/detail JSON (not a column).
 	TagUIDs []string `gorm:"-" json:"tag_uids,omitempty"`
 
+	// ClearBibNumber clears BibNumber on UpdateParticipant (not a column). Distinguishes
+	// explicit unassign from omitted bib_number in PATCH-style updates.
+	ClearBibNumber bool `gorm:"-" json:"-"`
+
 	// Relationships
 	Race          Race           `gorm:"foreignKey:RaceID" json:"race,omitempty"`
 	Category      *Category      `gorm:"foreignKey:CategoryID" json:"category,omitempty"`

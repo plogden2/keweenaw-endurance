@@ -673,15 +673,17 @@ async function saveBib(racer: Participant) {
     await router.push('/pin')
     return
   }
-  const next = bibDraft.value.trim() || bibOriginal.value
+  const next = bibDraft.value.trim()
+  const unassigning = next === ''
   const hasTags = Boolean(racer.tag_uids?.length)
   const raceActive = race.value?.status === 'active'
-  if (hasTags || raceActive) {
-    const reason = hasTags
-      ? 'This racer already has programmed tags. Tags stay with the bib number.'
-      : 'This race is active.'
+  if (unassigning || hasTags || raceActive) {
     const ok = window.confirm(
-      `${reason} Change bib from ${bibOriginal.value} to ${next}?`,
+      unassigning
+        ? `Unassign bib ${bibOriginal.value}? Tags stay with the bib.`
+        : hasTags
+          ? `This racer already has programmed tags. Tags stay with the bib number. Change bib from ${bibOriginal.value} to ${next}?`
+          : `This race is active. Change bib from ${bibOriginal.value} to ${next}?`,
     )
     if (!ok) return
   }
@@ -689,9 +691,12 @@ async function saveBib(racer: Participant) {
     const { data } = await raceParticipantsApi.update(racer.id, { bib_number: next })
     const idx = racers.value.findIndex((r) => r.id === racer.id)
     if (idx >= 0) {
-      racers.value[idx] = { ...racers.value[idx], ...data, bib_number: data.bib_number ?? next }
+      const bibNumber = data.bib_number ?? next
+      racers.value[idx] = { ...racers.value[idx], ...data, bib_number: bibNumber }
     }
-    if (!(data.tag_uids?.length)) {
+    if (unassigning) {
+      bibNoTagsWarn.value = null
+    } else if (!(data.tag_uids?.length)) {
       bibNoTagsWarn.value = `Bib ${data.bib_number ?? next} has no programmed tags yet. Program a tag from this row when ready.`
     } else {
       bibNoTagsWarn.value = null

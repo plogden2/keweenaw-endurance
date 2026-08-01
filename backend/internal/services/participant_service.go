@@ -208,7 +208,9 @@ func (s *ParticipantService) UpdateParticipant(id uuid.UUID, input *models.Parti
 
 	bibChanged := false
 	var eventID uuid.UUID
-	if input.BibNumber != "" && input.BibNumber != participant.BibNumber {
+	if input.ClearBibNumber {
+		participant.BibNumber = ""
+	} else if input.BibNumber != "" && input.BibNumber != participant.BibNumber {
 		var race models.Race
 		if err := s.db.Select("id", "event_id").First(&race, "id = ?", participant.RaceID).Error; err != nil {
 			return nil, err

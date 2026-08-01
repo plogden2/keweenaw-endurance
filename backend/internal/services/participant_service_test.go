@@ -161,6 +161,47 @@ func TestParticipantService_EnsureBibOnCreateAndUpdate(t *testing.T) {
 	assert.Equal(t, "99", bib99.BibNumber)
 }
 
+func TestParticipantService_ClearBibKeepsBibAndTags(t *testing.T) {
+	db := setupServiceTestDB(t)
+	race := createTestRace(t, db)
+	svc := NewParticipantService(db)
+
+	created, err := svc.CreateParticipant(&models.Participant{
+		RaceID: race.ID, BibNumber: "12", FirstName: "Tag", LastName: "Owner",
+	})
+	require.NoError(t, err)
+
+	bib, err := NewBibService(db).EnsureBib(race.EventID.UUID(), "12")
+	require.NoError(t, err)
+	_, err = NewRFIDService(db, nil).AssociateTagToBib(bib.ID.UUID(), "TAG-STAYS-ON-BIB")
+	require.NoError(t, err)
+
+	before, err := svc.GetParticipant(created.ID.UUID())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"TAG-STAYS-ON-BIB"}, before.TagUIDs)
+
+	cleared, err := svc.UpdateParticipant(created.ID.UUID(), &models.Participant{ClearBibNumber: true})
+	require.NoError(t, err)
+	assert.Equal(t, "", cleared.BibNumber)
+	assert.Empty(t, cleared.TagUIDs)
+
+	// Bib inventory row and tag association remain for the number.
+	var still models.Bib
+	require.NoError(t, db.Where("event_id = ? AND bib_number = ?", race.EventID, "12").First(&still).Error)
+	var assocs []models.RFIDTagAssociation
+	require.NoError(t, db.Where("bib_id = ? AND active = ?", still.ID, true).Find(&assocs).Error)
+	require.Len(t, assocs, 1)
+	assert.Equal(t, "TAG-STAYS-ON-BIB", assocs[0].TagUID)
+
+	// Re-assign then name-only update must keep bib when ClearBibNumber is false.
+	_, err = svc.UpdateParticipant(created.ID.UUID(), &models.Participant{BibNumber: "12"})
+	require.NoError(t, err)
+	renamed, err := svc.UpdateParticipant(created.ID.UUID(), &models.Participant{FirstName: "Pat"})
+	require.NoError(t, err)
+	assert.Equal(t, "12", renamed.BibNumber)
+	assert.Equal(t, "Pat", renamed.FirstName)
+}
+
 func TestParticipantService_AttachTagUIDsViaBib(t *testing.T) {
 	db := setupServiceTestDB(t)
 	race := createTestRace(t, db)

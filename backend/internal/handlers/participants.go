@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -183,7 +184,12 @@ func (h *Handlers) UpdateParticipant(c *gin.Context) {
 
 	update := &models.Participant{}
 	if req.BibNumber != nil {
-		update.BibNumber = *req.BibNumber
+		trimmed := strings.TrimSpace(*req.BibNumber)
+		if trimmed == "" {
+			update.ClearBibNumber = true
+		} else {
+			update.BibNumber = trimmed
+		}
 	}
 	if req.FirstName != nil {
 		update.FirstName = *req.FirstName

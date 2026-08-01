@@ -311,6 +311,31 @@ describe('Racers.vue', () => {
     expect(raceParticipantsApi.update).toHaveBeenCalledWith('p3', { bib_number: '77' })
   })
 
+  it('unassigns bib when edit input is cleared and saved', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    ;(raceParticipantsApi.update as Mock).mockResolvedValue({
+      data: { ...sampleRacers[0], bib_number: '', tag_uids: [] },
+    })
+    const wrapper = await mountRacers()
+    const row = wrapper.find('[data-testid="racer-row"]')
+    await row.find('[data-testid="bib-edit"]').trigger('click')
+    await nextTick()
+
+    await wrapper.find('[data-testid="bib-edit-input"]').setValue('')
+    await nextTick()
+    expect(wrapper.find('[data-testid="bib-save"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="bib-save"]').trigger('click')
+    await flushPromises()
+
+    expect(raceParticipantsApi.update).toHaveBeenCalledWith('p1', { bib_number: '' })
+    expect(window.confirm).toHaveBeenCalled()
+    expect(String(vi.mocked(window.confirm).mock.calls[0]?.[0] ?? '')).toMatch(/unassign/i)
+    // Row returns to assign-bib UI for an unassigned racer.
+    expect(wrapper.find('[data-testid="bib-assign-input"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="bib-no-tags-warn"]').exists()).toBe(false)
+  })
+
   it('opens edit panel to save name/category and delete racer', async () => {
     ;(raceParticipantsApi.update as Mock).mockResolvedValue({
       data: {
