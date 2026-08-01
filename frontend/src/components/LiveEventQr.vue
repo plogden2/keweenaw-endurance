@@ -1,6 +1,6 @@
 <template>
   <div class="live-event-qr" data-testid="rotator-live-qr">
-    <canvas ref="canvasRef" class="live-event-qr__canvas" width="128" height="128" />
+    <canvas ref="canvasRef" class="live-event-qr__canvas" width="96" height="96" />
     <p class="live-event-qr__caption">view results at keweenawendurance.com</p>
   </div>
 </template>
@@ -17,8 +17,9 @@ async function renderQr() {
   if (!canvas || !props.url) return
   try {
     await QRCode.toCanvas(canvas, props.url, {
-      width: 128,
-      margin: 2,
+      width: 96,
+      // Card padding supplies the quiet zone; keep library margin minimal.
+      margin: 1,
       errorCorrectionLevel: 'M',
       color: { dark: '#1a1a1a', light: '#ffffff' },
     })
@@ -43,22 +44,22 @@ watch(
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.5rem;
+  gap: 0.15rem;
+  padding: 0.2rem 0.25rem 0.25rem;
   background: #fff;
   border-radius: 6px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
-  max-width: 10rem;
+  max-width: 7.5rem;
 }
 .live-event-qr__canvas {
   display: block;
-  width: 128px;
-  height: 128px;
+  width: 96px;
+  height: 96px;
 }
 .live-event-qr__caption {
   margin: 0;
-  font-size: 0.7rem;
-  line-height: 1.25;
+  font-size: 0.62rem;
+  line-height: 1.15;
   text-align: center;
   color: #1a1a1a;
 }
