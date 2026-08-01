@@ -36,11 +36,7 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/events/:eventId/racers',
     name: 'event-racers',
-    // Prefer race-scoped `/races/:raceId/racers` (e2e). Keep event path as a stable stub.
-    component: {
-      template:
-        '<div data-testid="racers-page"><p>Open a race’s racers page at <code>/races/:raceId/racers</code>.</p></div>',
-    },
+    component: () => import('@/views/EventRacers.vue'),
   },
   {
     path: '/timing',

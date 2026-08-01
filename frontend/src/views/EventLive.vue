@@ -111,9 +111,8 @@
           data-testid="live-ops-links"
         >
           <router-link
-            v-if="activeRaceId"
             class="ops-link"
-            :to="`/races/${activeRaceId}/racers`"
+            :to="`/events/${eventId}/racers`"
             data-testid="live-open-racers"
           >
             Racers

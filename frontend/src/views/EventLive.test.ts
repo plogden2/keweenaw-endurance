@@ -376,6 +376,13 @@ describe('EventLive.vue', () => {
     expect(bibsLink.text()).toBe('Bibs')
   })
 
+  it('links Racers ops to the event-wide racers page', async () => {
+    const wrapper = await mountReaderLive()
+    const racersLink = wrapper.find('[data-testid="live-open-racers"]')
+    expect(racersLink.exists()).toBe(true)
+    expect(racersLink.attributes('href')).toBe('/events/evt-1/racers')
+  })
+
   async function mountReaderLive() {
     const { usePinAuthStore } = await import('@/stores/pinAuth')
     const pin = usePinAuthStore()
