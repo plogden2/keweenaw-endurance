@@ -151,6 +151,9 @@ func TestCLIProxmarkReader_WriteLogicalUUIDWritesFourPages(t *testing.T) {
 			if command == "hf 14a reader" {
 				return detectUltralightStdout, nil
 			}
+			if command == proxmarkReadLogicalUUIDCmd {
+				return ulReadbackStdout(logicalUUID), nil
+			}
 			return "ok", nil
 		},
 	})
@@ -183,6 +186,9 @@ func TestCLIProxmarkReader_WriteLogicalUUID_RetriesTransientMultipleTagsOnDetect
 				}
 				return detectUltralightStdout, nil
 			}
+			if command == proxmarkReadLogicalUUIDCmd {
+				return ulReadbackStdout(logicalUUID), nil
+			}
 			if strings.Contains(command, "wrbl") {
 				nWrite++
 				return "ok", nil
@@ -210,6 +216,9 @@ func TestCLIProxmarkReader_WriteLogicalUUID_RetriesTransientMultipleTagsOnWrite(
 			if command == "hf 14a reader" {
 				return detectUltralightStdout, nil
 			}
+			if command == proxmarkReadLogicalUUIDCmd {
+				return ulReadbackStdout(logicalUUID), nil
+			}
 			if strings.Contains(command, "wrbl") {
 				nWrite++
 				if nWrite == 1 {
@@ -224,6 +233,31 @@ func TestCLIProxmarkReader_WriteLogicalUUID_RetriesTransientMultipleTagsOnWrite(
 	err := reader.WriteLogicalUUID(logicalUUID)
 	require.NoError(t, err)
 	assert.Equal(t, 2, nWrite)
+}
+
+func TestCLIProxmarkReader_WriteLogicalUUID_RequiresReadback(t *testing.T) {
+	const logicalUUID = "a6588848-7664-42b6-9a62-10abf3862e00"
+	// Simulates the race-day failure: CLI exits 0 but page 6 stayed zeroed.
+	partial := "[+] A6 58 88 48 76 64 42 B6 00 00 00 00 F3 86 2E 00 [ 00 00 ]\n"
+	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
+		Enabled: true,
+		Runner: func(command string) (string, error) {
+			if strings.HasPrefix(command, "hw sethfthresh") {
+				return "Thresholds set.", nil
+			}
+			if command == "hf 14a reader" {
+				return detectUltralightStdout, nil
+			}
+			if command == proxmarkReadLogicalUUIDCmd {
+				return partial, nil
+			}
+			return "ok", nil
+		},
+	})
+
+	err := reader.WriteLogicalUUID(logicalUUID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "write verify failed")
 }
 
 func TestCLIProxmarkReader_PollEmptyPagesReturnsEmpty(t *testing.T) {
@@ -368,6 +402,7 @@ func TestCLIProxmarkReader_IsAvailable(t *testing.T) {
 
 func TestCLIProxmarkReader_WritePageCommandFormat(t *testing.T) {
 	// Guard against regressing Ultralight to invalid --blk / 16-byte single-page writes.
+	const logicalUUID = "550e8400-e29b-41d4-a716-446655440099"
 	reader := NewCLIProxmarkReader(CLIProxmarkConfig{
 		Enabled: true,
 		Runner: func(command string) (string, error) {
@@ -376,6 +411,9 @@ func TestCLIProxmarkReader_WritePageCommandFormat(t *testing.T) {
 			}
 			if command == "hf 14a reader" {
 				return detectUltralightStdout, nil
+			}
+			if command == proxmarkReadLogicalUUIDCmd {
+				return ulReadbackStdout(logicalUUID), nil
 			}
 			assert.NotContains(t, command, "--blk")
 			assert.Contains(t, command, "-b ")
@@ -397,7 +435,7 @@ func TestCLIProxmarkReader_WritePageCommandFormat(t *testing.T) {
 			return "ok", nil
 		},
 	})
-	require.NoError(t, reader.WriteLogicalUUID("550e8400-e29b-41d4-a716-446655440099"))
+	require.NoError(t, reader.WriteLogicalUUID(logicalUUID))
 }
 
 func TestCLIProxmarkReader_PollPageCommandFormat(t *testing.T) {
@@ -529,6 +567,19 @@ const (
 	detectDESFireStdout    = "[+] UID: AA BB CC DD\n[+] ATQA: 03 44\n[+] SAK: 20\n"
 )
 
+// ulReadbackStdout is a Type-2 READ dump that parsePollUUID accepts for verify.
+func ulReadbackStdout(logicalUUID string) string {
+	raw, err := EncodeLogicalUUID(logicalUUID)
+	if err != nil {
+		return ""
+	}
+	parts := make([]string, 0, 16)
+	for _, b := range raw {
+		parts = append(parts, fmt.Sprintf("%02X", b))
+	}
+	return "[+] " + strings.Join(parts, " ") + " [ 00 00 ]\n"
+}
+
 func TestCLIProxmarkReader_WriteLogicalUUID_DispatchesClassic(t *testing.T) {
 	const logicalUUID = "1441674d-a011-471a-a601-722b88b117f5"
 	var commands []string
@@ -578,6 +629,9 @@ func TestCLIProxmarkReader_WriteLogicalUUID_DispatchesUltralight(t *testing.T) {
 			}
 			if command == "hf 14a reader" {
 				return detectUltralightStdout, nil
+			}
+			if command == proxmarkReadLogicalUUIDCmd {
+				return ulReadbackStdout(logicalUUID), nil
 			}
 			return "ok", nil
 		},

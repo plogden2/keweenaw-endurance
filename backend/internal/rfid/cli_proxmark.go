@@ -409,16 +409,16 @@ func (r *CLIProxmarkReader) WriteLogicalUUID(logicalUUID string) error {
 		ctx, cancel = context.WithTimeout(context.Background(), proxmarkSessionWriteTimeout)
 		stdout, writeErr = r.runLocked(ctx, cmd)
 		cancel()
-		if writeErr == nil {
-			r.mu.Unlock()
-			return nil
-		}
-		// Proxmark CLI often exits -10 (0xfffffff6) even when the device ran the
-		// script; confirm by reading user memory before failing the operator.
-		if pm3DeviceResponded(stdout) {
+		// Always read back — chained hf mfu wrbl can exit 0 with a page still zeroed
+		// (bib 4 shipped as …0000-0000… and scored unknown_tag).
+		if writeErr == nil || pm3DeviceResponded(stdout) {
 			if verifyErr := r.verifyLogicalUUIDLocked(logicalUUID, fam); verifyErr == nil {
 				r.mu.Unlock()
 				return nil
+			} else if writeErr == nil {
+				lastMsg = fmt.Sprintf("write verify failed: %v", verifyErr)
+				r.mu.Unlock()
+				continue
 			}
 		}
 		r.mu.Unlock()

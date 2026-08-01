@@ -425,6 +425,22 @@ func TestProcessScan_FallbackParticipantRFIDColumn(t *testing.T) {
 	assert.Equal(t, ResultLap, result.Result)
 }
 
+func TestProcessScan_ResolvesBibUUIDWithoutAssociation(t *testing.T) {
+	fx := seedActiveLapFixture(t, "active")
+	require.NoError(t, fx.db.Where("tag_uid = ?", fx.tagUID).Delete(&models.RFIDTagAssociation{}).Error)
+
+	var bib models.Bib
+	require.NoError(t, fx.db.Where("event_id = ? AND bib_number = ?", fx.event.ID, fx.participant.BibNumber).
+		First(&bib).Error)
+
+	svc := NewScanService(fx.db, nil)
+	result, err := svc.ProcessScan(fx.event.ID.UUID(), bib.ID.String(), "laptop-finish-1", time.Now().UTC())
+	require.NoError(t, err)
+	assert.Equal(t, ResultLap, result.Result)
+	require.NotNil(t, result.Participant)
+	assert.Equal(t, fx.participant.ID, result.Participant.ID)
+}
+
 func TestProcessScan_RejectsParticipantOutsideEvent(t *testing.T) {
 	fx := seedActiveLapFixture(t, "active")
 

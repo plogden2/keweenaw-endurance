@@ -3,6 +3,7 @@ package bridgeapp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -85,6 +86,40 @@ func TestFlushPending_WriteOnlySetsOnlineSynced(t *testing.T) {
 
 	require.NoError(t, app.flushPending(nil))
 	assert.Equal(t, string(bridge.ModeOnlineSynced), app.StatusSnapshot().Mode)
+}
+
+func TestApp_RecordWriteResultShowsBib(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{
+		HostedAPIURL: "http://127.0.0.1:1",
+		BridgeToken:  "tok",
+		DeviceID:     "laptop-finish-1",
+		EventID:      "11111111-1111-1111-1111-111111111111",
+		DataDir:      dir,
+		LocalAddr:    "127.0.0.1:0",
+		BridgeMock:   true,
+	}
+	normalizeConfig(&cfg)
+	app, err := New(cfg)
+	require.NoError(t, err)
+	app.roster.SeedForTest([]bridge.RosterEntry{{
+		Bib: "4", Name: "Lianna Miller", RaceID: "race-1", RaceName: "6 Hour",
+		LogicalUUID: "a6588848-7664-42b6-9a62-10abf3862e00",
+	}})
+
+	app.recordWriteResult("a6588848-7664-42b6-9a62-10abf3862e00", true, nil)
+	st := app.StatusSnapshot()
+	assert.True(t, st.LastWriteOK)
+	assert.Equal(t, "4", st.LastWriteBib)
+	assert.Equal(t, "Lianna Miller", st.LastWriteName)
+	assert.Contains(t, st.LastWriteMessage, "verified")
+
+	app.recordWriteResult("a6588848-7664-42b6-9a62-10abf3862e00", false, errors.New("write verify failed: readback mismatch"))
+	st = app.StatusSnapshot()
+	assert.False(t, st.LastWriteOK)
+	assert.Equal(t, "4", st.LastWriteBib)
+	assert.Contains(t, st.LastWriteMessage, "write verify failed")
+	assert.Contains(t, st.LastError, "write verify failed")
 }
 
 func TestApp_WriteOnlyPollDoesNotRecord(t *testing.T) {

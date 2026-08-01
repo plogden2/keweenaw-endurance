@@ -90,9 +90,13 @@ export interface BibListItem {
 }
 
 export interface BibTagWriteResponse {
-  bib_id: string
-  tag_uid: string
+  bib_id?: string
+  tag_uid?: string
   tag_uids?: string[]
+  logical_uuid?: string
+  ok?: boolean
+  bib?: string
+  name?: string
 }
 
 export interface RfidTagAssociation {

@@ -260,6 +260,8 @@ export const timingApi = {
 export interface WriteTagPayload {
   participant_id?: string
   bib_id?: string
+  /** Required with bib_id so local-bridge writes can register the server association. */
+  event_id?: string
   race_id?: string
   logical_uuid?: string
 }
@@ -313,18 +315,52 @@ async function writeTagLocal(
   return { data } as AxiosResponse<Participant | BibTagWriteResponse>
 }
 
+/** Local bridge cannot create RFIDTagAssociation rows — register after a successful chip write. */
+async function registerHostedTagAssociation(
+  payload: WriteTagPayload,
+  localData: Participant | BibTagWriteResponse,
+): Promise<void> {
+  const fromLocal =
+    localData && typeof localData === 'object' && 'logical_uuid' in localData
+      ? String((localData as BibTagWriteResponse).logical_uuid || '')
+      : ''
+  const tagUID = (payload.logical_uuid || fromLocal).trim().toLowerCase()
+  if (!tagUID || !UUID_RE.test(tagUID)) return
+  try {
+    if (payload.bib_id?.trim() && payload.event_id?.trim()) {
+      await apiClient.post(
+        `/api/events/${payload.event_id}/bibs/${payload.bib_id}/tags`,
+        { tag_uid: tagUID },
+      )
+      return
+    }
+    if (payload.participant_id?.trim() && payload.race_id?.trim()) {
+      await apiClient.post(
+        `/api/races/${payload.race_id}/participants/${payload.participant_id}/tags`,
+        { tag_uid: tagUID },
+      )
+    }
+  } catch {
+    // Chip write already succeeded; association can be repaired later.
+  }
+}
+
 export const rfidApi = {
   scan: (uid: string) =>
     apiClient.get<Participant>(`/api/rfid/scan/${encodeURIComponent(uid)}`),
   writeTag: async (payload: WriteTagPayload) => {
     if (shouldRouteWriteTagLocal() && localBridgeAcceptsWriteTag(payload)) {
-      return writeTagLocal(payload)
+      const local = await writeTagLocal(payload)
+      await registerHostedTagAssociation(payload, local.data)
+      return local
     }
     if (isBridgeSnapshotUnknown()) {
       await refreshBridgeSnapshotForWriteTag()
     }
     if (shouldRouteWriteTagLocal() && localBridgeAcceptsWriteTag(payload)) {
-      return writeTagLocal(payload)
+      const local = await writeTagLocal(payload)
+      await registerHostedTagAssociation(payload, local.data)
+      return local
     }
     // Bridge Proxmark write timeout is 45s server-side; keep client slightly above.
     return apiClient.post<Participant | BibTagWriteResponse>('/api/rfid/write-tag', payload, {

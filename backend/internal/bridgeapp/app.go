@@ -42,6 +42,13 @@ type Status struct {
 	LastTapBib      string     `json:"last_tap_bib,omitempty"`
 	LastTapRaceID   string     `json:"last_tap_race_id,omitempty"`
 	LastTapRaceName string     `json:"last_tap_race_name,omitempty"`
+	// Last write-tag outcome (website Program → local bridge). Separate from taps.
+	LastWriteOK      bool       `json:"last_write_ok"`
+	LastWriteAt      *time.Time `json:"last_write_at,omitempty"`
+	LastWriteUUID    string     `json:"last_write_uuid,omitempty"`
+	LastWriteBib     string     `json:"last_write_bib,omitempty"`
+	LastWriteName    string     `json:"last_write_name,omitempty"`
+	LastWriteMessage string     `json:"last_write_message,omitempty"`
 	WriteOnly    bool       `json:"write_only"`
 	Running      bool       `json:"running"`
 	LastError    string     `json:"last_error,omitempty"`
@@ -75,6 +82,12 @@ type App struct {
 	lastTapBib      string
 	lastTapRaceID   string
 	lastTapRaceName string
+	lastWriteOK      bool
+	lastWriteAt      time.Time
+	lastWriteUUID    string
+	lastWriteBib     string
+	lastWriteName    string
+	lastWriteMessage string
 	lastError  string
 	running    bool
 
@@ -269,9 +282,14 @@ func (a *App) StatusSnapshot() Status {
 		LastTapBib:      a.lastTapBib,
 		LastTapRaceID:   a.lastTapRaceID,
 		LastTapRaceName: a.lastTapRaceName,
-		WriteOnly:       a.cfg.WriteOnly,
-		Running:         a.running,
-		LastError:       a.lastError,
+		LastWriteOK:      a.lastWriteOK,
+		LastWriteUUID:    a.lastWriteUUID,
+		LastWriteBib:     a.lastWriteBib,
+		LastWriteName:    a.lastWriteName,
+		LastWriteMessage: a.lastWriteMessage,
+		WriteOnly:        a.cfg.WriteOnly,
+		Running:          a.running,
+		LastError:        a.lastError,
 	}
 	if a.lastSyncAt != nil {
 		t := *a.lastSyncAt
@@ -284,6 +302,10 @@ func (a *App) StatusSnapshot() Status {
 	if !a.lastTapAt.IsZero() {
 		t := a.lastTapAt
 		out.LastTapAt = &t
+	}
+	if !a.lastWriteAt.IsZero() {
+		t := a.lastWriteAt
+		out.LastWriteAt = &t
 	}
 	return out
 }
@@ -587,21 +609,25 @@ func (a *App) handleWriteTag(w http.ResponseWriter, r *http.Request) {
 
 	logicalUUID, err := a.resolveLogicalUUID(req)
 	if err != nil {
+		a.recordWriteResult("", false, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if err := a.writeChip(logicalUUID); err != nil {
-		a.setLastError(err)
+		a.recordWriteResult(logicalUUID, false, err)
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	a.setLastError(nil)
+	a.recordWriteResult(logicalUUID, true, nil)
+	st := a.StatusSnapshot()
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"logical_uuid": logicalUUID,
 		"ok":           true,
+		"bib":          st.LastWriteBib,
+		"name":         st.LastWriteName,
 	})
 }
 
@@ -663,6 +689,47 @@ func (a *App) writeChip(logicalUUID string) error {
 	// reads after wrbl are flaky and the dress rehearsal only waits on feedback.
 	a.emitRead(normalized, true)
 	return nil
+}
+
+// recordWriteResult updates the operator-facing write banner (bib + ok/fail).
+func (a *App) recordWriteResult(logicalUUID string, ok bool, writeErr error) {
+	normalized := strings.ToLower(strings.TrimSpace(logicalUUID))
+	bib, name := a.lookupWriteSubject(normalized)
+	msg := ""
+	if ok {
+		msg = "Chip verified on antenna"
+		a.setLastError(nil)
+	} else if writeErr != nil {
+		msg = writeErr.Error()
+		a.setLastError(writeErr)
+	}
+
+	a.mu.Lock()
+	a.lastWriteOK = ok
+	a.lastWriteAt = time.Now()
+	a.lastWriteUUID = normalized
+	a.lastWriteBib = bib
+	a.lastWriteName = name
+	a.lastWriteMessage = msg
+	a.mu.Unlock()
+	a.publishStatus()
+}
+
+func (a *App) lookupWriteSubject(logicalUUID string) (bib, name string) {
+	if logicalUUID == "" || a.roster == nil {
+		return "", ""
+	}
+	if e, found := a.roster.EntryForUUID(logicalUUID); found {
+		return e.Bib, e.Name
+	}
+	// Best-effort refresh so Program shows "Bib N" even if catalog wasn't loaded yet.
+	if a.auth != nil && strings.TrimSpace(a.cfg.EventID) != "" {
+		_ = a.roster.RefreshEvent(a.auth, a.client, a.cfg.EventID)
+		if e, found := a.roster.EntryForUUID(logicalUUID); found {
+			return e.Bib, e.Name
+		}
+	}
+	return "", ""
 }
 
 func (a *App) runPollLoop(ctx context.Context) {

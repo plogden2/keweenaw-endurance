@@ -80,7 +80,13 @@ describe('EventBibs.vue', () => {
     })
     ;(eventBibsApi.bulkCreate as Mock).mockResolvedValue({ data: [] })
     ;(rfidApi.writeTag as Mock).mockResolvedValue({
-      data: { bib_id: 'bib-2', tag_uid: 'bib-2', tag_uids: ['bib-2'] },
+      data: {
+        bib_id: 'bib-2',
+        tag_uid: '22222222-2222-2222-2222-222222222222',
+        tag_uids: ['22222222-2222-2222-2222-222222222222'],
+        logical_uuid: '22222222-2222-2222-2222-222222222222',
+        ok: true,
+      },
     })
   })
 
@@ -152,6 +158,7 @@ describe('EventBibs.vue', () => {
 
     expect(rfidApi.writeTag).toHaveBeenCalledWith({
       bib_id: 'bib-2',
+      event_id: 'e1',
       logical_uuid: '22222222-2222-2222-2222-222222222222',
     })
   })
@@ -165,7 +172,8 @@ describe('EventBibs.vue', () => {
 
     const success = wrapper.find('[data-testid="bib-program-success"]')
     expect(success.exists()).toBe(true)
-    expect(success.text()).toMatch(/wrote tag for bib 2/i)
+    expect(success.text()).toMatch(/WRITE OK — Bib 2/i)
+    expect(success.text()).toMatch(/chip verified/i)
   })
 
   it('shows write fail message when programming fails', async () => {
@@ -178,6 +186,7 @@ describe('EventBibs.vue', () => {
 
     const error = wrapper.find('[data-testid="bib-program-error"]')
     expect(error.exists()).toBe(true)
+    expect(error.text()).toMatch(/WRITE FAILED — Bib 2/i)
     expect(error.text()).toContain('Proxmark unavailable')
     expect(wrapper.find('[data-testid="bib-program-success"]').exists()).toBe(false)
   })

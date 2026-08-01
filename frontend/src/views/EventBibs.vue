@@ -197,14 +197,27 @@ async function programTag(bib: BibListItem) {
   programError.value = null
   programSuccess.value = null
   try {
-    await rfidApi.writeTag({
+    const { data } = await rfidApi.writeTag({
       bib_id: bib.id,
+      event_id: eventId.value,
       logical_uuid: bib.logical_uuid || bib.tag_uids?.[0] || undefined,
     })
     await loadBibs()
-    programSuccess.value = `Wrote tag for bib ${bib.bib_number}`
+    const who = bib.participant_name
+      ? `Bib ${bib.bib_number} · ${bib.participant_name}`
+      : `Bib ${bib.bib_number}`
+    const uid =
+      (data && typeof data === 'object' && 'logical_uuid' in data && data.logical_uuid) ||
+      bib.logical_uuid ||
+      ''
+    programSuccess.value = uid
+      ? `WRITE OK — ${who} — chip verified (${uid})`
+      : `WRITE OK — ${who} — chip verified`
   } catch (err) {
-    programError.value = getErrorMessage(err, 'Failed to write tag')
+    const who = bib.participant_name
+      ? `Bib ${bib.bib_number} · ${bib.participant_name}`
+      : `Bib ${bib.bib_number}`
+    programError.value = `WRITE FAILED — ${who} — ${getErrorMessage(err, 'write failed')}`
   } finally {
     programmingId.value = null
   }
@@ -369,9 +382,11 @@ input {
 .status.error,
 .error {
   color: var(--signal);
+  font-weight: 600;
 }
 
 .success {
   color: var(--success);
+  font-weight: 600;
 }
 </style>

@@ -55,6 +55,7 @@ type readerUI struct {
 
 	statusMode     *widget.Label
 	statusDetail   *widget.Label
+	statusWrite    *widget.Label
 	statusTap      *widget.Label
 	statusCooldown *widget.Label
 	statusError    *widget.Label
@@ -165,6 +166,9 @@ func (ui *readerUI) build() {
 	ui.statusMode.TextStyle = fyne.TextStyle{Bold: true}
 	ui.statusDetail = widget.NewLabel("Start the bridge when ready.")
 	ui.statusDetail.Wrapping = fyne.TextWrapWord
+	ui.statusWrite = widget.NewLabel("Last write: —")
+	ui.statusWrite.TextStyle = fyne.TextStyle{Bold: true}
+	ui.statusWrite.Wrapping = fyne.TextWrapWord
 	ui.statusTap = widget.NewLabel("Last tap: —")
 	ui.statusTap.Wrapping = fyne.TextWrapWord
 	ui.statusCooldown = widget.NewLabel("Successful scan cooldown: 1s (same chip)")
@@ -401,6 +405,7 @@ func (ui *readerUI) layout() fyne.CanvasObject {
 		widget.NewLabelWithStyle("Status", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		ui.statusMode,
 		ui.statusDetail,
+		ui.statusWrite,
 		ui.statusTap,
 		ui.statusCooldown,
 		ui.statusError,
@@ -775,11 +780,13 @@ func (ui *readerUI) statusLoop() {
 		if st.LastSyncAt != nil {
 			detail += "  last_sync=" + st.LastSyncAt.Local().Format(time.Kitchen)
 		}
+		writeLine := formatLastWrite(st)
 		tap := formatLastTap(st)
 		errText := st.LastError
 		fyne.Do(func() {
 			ui.statusMode.SetText(modeLabel)
 			ui.statusDetail.SetText(detail)
+			ui.statusWrite.SetText(writeLine)
 			ui.statusTap.SetText(tap)
 			ui.statusError.SetText(errText)
 		})
@@ -793,6 +800,45 @@ func hfGainLabelText(gain int) string {
 	return fmt.Sprintf("HF gain: %d", gain)
 }
 
+func formatLastWrite(st bridgeapp.Status) string {
+	if st.LastWriteAt == nil && st.LastWriteMessage == "" && st.LastWriteUUID == "" {
+		return "Last write: —"
+	}
+	who := writeSubject(st.LastWriteBib, st.LastWriteName, st.LastWriteUUID)
+	when := ""
+	if st.LastWriteAt != nil {
+		when = " @ " + st.LastWriteAt.Local().Format(time.Kitchen)
+	}
+	if st.LastWriteOK {
+		return "WRITE OK — " + who + when + " — chip verified"
+	}
+	detail := st.LastWriteMessage
+	if detail == "" {
+		detail = st.LastError
+	}
+	if detail == "" {
+		detail = "write failed"
+	}
+	return "WRITE FAILED — " + who + when + " — " + detail
+}
+
+func writeSubject(bib, name, uid string) string {
+	parts := []string{}
+	if strings.TrimSpace(bib) != "" {
+		parts = append(parts, "Bib "+strings.TrimSpace(bib))
+	}
+	if strings.TrimSpace(name) != "" {
+		parts = append(parts, strings.TrimSpace(name))
+	}
+	if len(parts) == 0 {
+		if uid != "" {
+			return uid
+		}
+		return "unknown bib"
+	}
+	return strings.Join(parts, " · ")
+}
+
 func formatLastTap(st bridgeapp.Status) string {
 	if st.LastTapUUID == "" && st.LastRead == "" {
 		return "Last tap: —"
@@ -802,11 +848,11 @@ func formatLastTap(st bridgeapp.Status) string {
 		uid = st.LastRead
 	}
 	parts := []string{}
+	if st.LastTapBib != "" {
+		parts = append(parts, "Bib "+st.LastTapBib)
+	}
 	if st.LastTapName != "" {
 		parts = append(parts, st.LastTapName)
-	}
-	if st.LastTapBib != "" {
-		parts = append(parts, "bib "+st.LastTapBib)
 	}
 	if st.LastTapRaceName != "" {
 		parts = append(parts, st.LastTapRaceName)

@@ -281,6 +281,28 @@ func (s *ScanService) resolveParticipant(eventID uuid.UUID, tagUID string) (*mod
 		return nil, nil, err
 	}
 
+	// Chip payload is the bib UUID (WriteTagForBib). Local-bridge programming can
+	// skip RFIDTagAssociation creation — still resolve by bibs.id.
+	if parsed, parseErr := uuid.Parse(tagUID); parseErr == nil {
+		var bib models.Bib
+		if err := s.db.First(&bib, "id = ? AND event_id = ?", parsed, eventID).Error; err == nil {
+			var p models.Participant
+			err := s.db.Preload("Category").Preload("Team").Preload("Race").
+				Joins("JOIN races ON races.id = participants.race_id").
+				Where("races.event_id = ? AND participants.bib_number = ?", eventID, bib.BibNumber).
+				First(&p).Error
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil, &bib, nil
+				}
+				return nil, nil, err
+			}
+			return &p, &bib, nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil, err
+		}
+	}
+
 	var p models.Participant
 	err = s.db.Preload("Category").Preload("Team").Preload("Race").
 		Where("rfid_tag_uid = ?", tagUID).First(&p).Error

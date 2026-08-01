@@ -412,6 +412,7 @@
                     </template>
                     <template v-else>No tags yet</template>
                   </p>
+                  <p v-if="programSuccess" class="success" role="status">{{ programSuccess }}</p>
                   <p v-if="programError" class="error" role="alert">{{ programError }}</p>
                 </div>
               </td>
@@ -467,6 +468,7 @@ const unassignedBibDrafts = reactive<Record<string, string>>({})
 const programmingId = ref<string | null>(null)
 const programming = ref(false)
 const programError = ref<string | null>(null)
+const programSuccess = ref<string | null>(null)
 
 const editingId = ref<string | null>(null)
 const editSaving = ref(false)
@@ -704,6 +706,7 @@ function toggleProgram(id: string) {
   editingId.value = null
   programmingId.value = programmingId.value === id ? null : id
   programError.value = null
+  programSuccess.value = null
 }
 
 async function writeTag(racer: Participant) {
@@ -717,8 +720,10 @@ async function writeTag(racer: Participant) {
   }
   programming.value = true
   programError.value = null
+  programSuccess.value = null
+  const who = `Bib ${racer.bib_number} · ${racer.first_name} ${racer.last_name}`.trim()
   try {
-    await rfidApi.writeTag({
+    const { data: writeData } = await rfidApi.writeTag({
       participant_id: racer.id,
       race_id: raceId.value,
       logical_uuid: racer.tag_uids?.[0] ?? racer.rfid_tag_uid ?? undefined,
@@ -733,8 +738,17 @@ async function writeTag(racer: Participant) {
         rfid_tag_uid: tags[tags.length - 1] ?? racers.value[idx].rfid_tag_uid,
       }
     }
+    const uid =
+      (writeData && typeof writeData === 'object' && 'logical_uuid' in writeData
+        ? writeData.logical_uuid
+        : undefined) ||
+      tags[tags.length - 1] ||
+      ''
+    programSuccess.value = uid
+      ? `WRITE OK — ${who} — chip verified (${uid})`
+      : `WRITE OK — ${who} — chip verified`
   } catch (err) {
-    programError.value = getErrorMessage(err, 'Failed to write tag')
+    programError.value = `WRITE FAILED — ${who} — ${getErrorMessage(err, 'write failed')}`
   } finally {
     programming.value = false
   }
@@ -1142,8 +1156,14 @@ tr.programming {
   font-family: ui-monospace, monospace;
 }
 
+.success {
+  color: var(--success);
+  font-weight: 600;
+}
+
 .error {
   color: var(--signal);
+  font-weight: 600;
 }
 
 .warn {
