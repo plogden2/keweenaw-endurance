@@ -126,8 +126,35 @@ const livePayload = {
       start_time: '2026-08-01T08:00:00-04:00',
       duration_minutes: 360,
       countdown_seconds: 3600,
-      leaderboard_overall: [],
-      leaderboard_teams: [],
+      leaderboard_overall: [
+        {
+          place: 1,
+          participant_id: 'p1',
+          bib_number: '12',
+          name: 'Alex Rivera',
+          category_key: 'expert_men',
+          laps: 8,
+          last_lap_at: '2026-08-01T11:02:41-04:00',
+        },
+        {
+          place: 2,
+          participant_id: 'p6',
+          bib_number: '60',
+          name: 'Solo Six',
+          category_key: 'expert_men',
+          laps: 3,
+          last_lap_at: '2026-08-01T11:01:00-04:00',
+        },
+      ],
+      leaderboard_teams: [
+        {
+          place: 1,
+          team_id: 'team-a',
+          name: 'East Bluff A',
+          avg_laps: 8,
+          member_count: 4,
+        },
+      ],
       flow_series: [],
     },
     {
@@ -160,6 +187,7 @@ function lapEvent(
 
 describe('EventLive.vue', () => {
   let activeWrapper: VueWrapper | null = null
+  const originalScrollIntoView = Element.prototype.scrollIntoView
 
   beforeEach(() => {
     setupPinia()
@@ -167,9 +195,11 @@ describe('EventLive.vue', () => {
     lastLap.value = null
     isBusyMock.value = false
     ;(eventsLiveApi.getLive as Mock).mockResolvedValue({ data: livePayload })
+    Element.prototype.scrollIntoView = vi.fn()
   })
 
   afterEach(() => {
+    Element.prototype.scrollIntoView = originalScrollIntoView
     activeWrapper?.unmount()
     activeWrapper = null
   })
@@ -821,6 +851,70 @@ describe('EventLive.vue', () => {
 
       expect(wrapper.find('[data-testid="lap-celebration"]').exists()).toBe(false)
       expect(wrapper.find('.fs-meta').text()).toContain('12 Hour · Individual')
+    })
+
+    it('scrolls the visible rotator leaderboard row after jumping race', async () => {
+      const scrollIntoView = vi.fn()
+      const previous = Element.prototype.scrollIntoView
+      Element.prototype.scrollIntoView = scrollIntoView
+      try {
+        const wrapper = await mountLive()
+        await flushPromises()
+        await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+        await nextTick()
+        await flushPromises()
+
+        lastLap.value = lapEvent({
+          race_id: 'r-6',
+          participant_id: 'p6',
+          participant_name: 'Solo Six',
+        })
+        await flushPromises()
+        await nextTick()
+        await flushPromises()
+        await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+        await flushPromises()
+
+        expect(wrapper.find('.fs-meta').text()).toContain('6 Hour · Individual')
+        const scrolled = scrollIntoView.mock.instances[0] as HTMLElement
+        const board = wrapper.find('[data-testid="rotator-leaderboard"]').element
+        expect(board.contains(scrolled)).toBe(true)
+        expect(scrolled.getAttribute('data-participant-id')).toBe('p6')
+      } finally {
+        Element.prototype.scrollIntoView = previous
+      }
+    })
+
+    it('scrolls the team row on the rotator board for a teammate lap', async () => {
+      const scrollIntoView = vi.fn()
+      const previous = Element.prototype.scrollIntoView
+      Element.prototype.scrollIntoView = scrollIntoView
+      try {
+        const wrapper = await mountLive()
+        await flushPromises()
+        await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+        await nextTick()
+        await flushPromises()
+
+        lastLap.value = lapEvent({
+          race_id: 'r-6',
+          participant_id: 'p1',
+          participant_name: 'Alex Rivera',
+        })
+        await flushPromises()
+        await nextTick()
+        await flushPromises()
+        await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+        await flushPromises()
+
+        expect(wrapper.find('.fs-meta').text()).toContain('6 Hour · Team')
+        const scrolled = scrollIntoView.mock.instances[0] as HTMLElement
+        const board = wrapper.find('[data-testid="rotator-leaderboard"]').element
+        expect(board.contains(scrolled)).toBe(true)
+        expect(scrolled.getAttribute('data-team-id')).toBe('team-a')
+      } finally {
+        Element.prototype.scrollIntoView = previous
+      }
     })
   })
 

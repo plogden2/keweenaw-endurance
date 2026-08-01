@@ -1,5 +1,5 @@
 <template>
-  <div class="event-live" data-testid="live-view">
+  <div ref="liveRootRef" class="event-live" data-testid="live-view">
     <LapCelebrationOverlay :visible="celebrationVisible" :name="celebrationName" />
     <p
       v-if="isReaderSession"
@@ -266,6 +266,8 @@
                 v-for="e in race12?.leaderboard_teams || []"
                 :key="e.team_id"
                 data-testid="leaderboard-team-row"
+                :data-team-id="e.team_id"
+                :class="{ 'leaderboard-row--focus': focusTeamId === e.team_id }"
               >
                 <td class="place">{{ e.place }}</td>
                 <td>{{ e.name }}</td>
@@ -356,6 +358,8 @@
                 v-for="e in race6?.leaderboard_teams || []"
                 :key="e.team_id"
                 data-testid="leaderboard-team-row"
+                :data-team-id="e.team_id"
+                :class="{ 'leaderboard-row--focus': focusTeamId === e.team_id }"
               >
                 <td class="place">{{ e.place }}</td>
                 <td>{{ e.name }}</td>
@@ -446,6 +450,8 @@
                 v-for="e in race90?.leaderboard_teams || []"
                 :key="e.team_id"
                 data-testid="leaderboard-team-row"
+                :data-team-id="e.team_id"
+                :class="{ 'leaderboard-row--focus': focusTeamId === e.team_id }"
               >
                 <td class="place">{{ e.place }}</td>
                 <td>{{ e.name }}</td>
@@ -610,6 +616,8 @@
                   v-for="e in rotatorRace?.leaderboard_teams || []"
                   :key="'fs-team-' + e.team_id"
                   data-testid="leaderboard-team-row"
+                  :data-team-id="e.team_id"
+                  :class="{ 'leaderboard-row--focus': focusTeamId === e.team_id }"
                 >
                   <td>{{ e.place }}</td>
                   <td>{{ e.name }}</td>
@@ -737,6 +745,12 @@ import {
   type RotatorRaceKey,
 } from '@/composables/useFullscreenRotator'
 import {
+  buildTeamIdMap,
+  leaderboardFocusRootSelector,
+  scrollLeaderboardFocusIntoView,
+  teamIdForParticipant,
+} from '@/utils/leaderboardFocus'
+import {
   buildTeamMembershipMap,
   preferredRotatorMode,
   rotatorKeyForRaceId,
@@ -822,6 +836,7 @@ function closeTestMode() {
 const { chipState, chipLabel } = useBridgeSyncStatus()
 const { lastLap } = useEventLiveStream(eventId)
 
+const liveRootRef = ref<HTMLElement | null>(null)
 const live = ref<EventLiveResponse | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -839,6 +854,7 @@ const online = ref(typeof navigator !== 'undefined' ? navigator.onLine : true)
 const pendingSync = ref(0)
 const highlightParticipantId = ref<string | undefined>()
 const focusParticipantId = ref<string | undefined>()
+const focusTeamId = ref<string | undefined>()
 const celebrationVisible = ref(false)
 const celebrationName = ref('')
 const celebrationRaceId = ref<string | undefined>()
@@ -956,12 +972,15 @@ const {
 
 /** participant_id → on a team (for rotator mode preference on lap jump). */
 let teamMembershipByParticipantId: Map<string, boolean> = new Map()
+/** participant_id → team_id (for scrolling the team leaderboard row). */
+let teamIdByParticipantId: Map<string, string> = new Map()
 
 async function refreshTeamMembership() {
   if (!eventId.value) return
   try {
     const roster = await loadTestModeRoster()
     teamMembershipByParticipantId = buildTeamMembershipMap(roster)
+    teamIdByParticipantId = buildTeamIdMap(roster)
   } catch {
     // Keep prior cache if roster fetch fails.
   }
@@ -1048,6 +1067,7 @@ function clearCelebrationTimers() {
 function clearFocusState() {
   highlightParticipantId.value = undefined
   focusParticipantId.value = undefined
+  focusTeamId.value = undefined
 }
 
 function noteCelebration(ev: LapRecordedEvent) {
@@ -1094,14 +1114,35 @@ function startCelebration(ev: LapRecordedEvent) {
     return
   }
 
+  const boardMode = rotatorOpen.value ? rotatorMode.value : leaderboardMode.value
+  const teamId = teamIdForParticipant(ev.participant_id, teamIdByParticipantId)
+  const focusMode = boardMode === 'teams' && teamId ? 'teams' : 'individuals'
+
   highlightParticipantId.value = ev.participant_id
-  focusParticipantId.value = ev.participant_id
-  void nextTick(() => {
-    const row = document.querySelector(
-      `[data-testid="leaderboard-row"][data-participant-id="${ev.participant_id}"]`,
-    )
-    row?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  })
+  if (focusMode === 'teams') {
+    focusTeamId.value = teamId
+    focusParticipantId.value = undefined
+  } else {
+    focusParticipantId.value = ev.participant_id
+    focusTeamId.value = undefined
+  }
+
+  // Rotator race/mode jumps remount the board — retry until the row exists,
+  // and only scroll inside the visible leaderboard (not the hidden tab under FS).
+  void scrollLeaderboardFocusIntoView(
+    () =>
+      liveRootRef.value?.querySelector(
+        leaderboardFocusRootSelector({
+          rotatorOpen: rotatorOpen.value,
+          activeTab: activeTab.value,
+        }),
+      ) ?? null,
+    {
+      participantId: ev.participant_id,
+      teamId,
+      mode: focusMode,
+    },
+  )
 
   focusTimer = window.setTimeout(() => {
     clearFocusState()
@@ -1337,6 +1378,7 @@ watch(celebrationRaceIds, (ids) => {
 watch(highlightParticipantId, (participantId) => {
   if (!participantId) {
     focusParticipantId.value = undefined
+    focusTeamId.value = undefined
   }
 })
 
