@@ -152,4 +152,72 @@ describe('eventTestMode store', () => {
     store.recordTagTap('MISSING')
     expect(store.lastFeedback?.ok).toBe(false)
   })
+
+  it('ingestLocalBridgeTap records new bridge taps and ignores duplicates / baseline', () => {
+    const store = useEventTestModeStore()
+    store.open('ev1', [
+      makeParticipant({
+        id: 'p1',
+        bib_number: '3',
+        first_name: 'Benjamin',
+        last_name: 'Ciavola',
+        tag_uids: ['7db35ca0-fdfc-44b5-a220-6d322d867f6f'],
+        race_id: 'r12',
+      }),
+    ])
+
+    // Baseline: tap that happened before test mode opened must not count.
+    store.noteBridgeTapBaseline({
+      last_tap_uuid: '7db35ca0-fdfc-44b5-a220-6d322d867f6f',
+      last_tap_at: '2026-07-31T21:25:00.000Z',
+      last_tap_bib: '3',
+      last_tap_race_id: 'r12',
+    })
+    expect(
+      store.ingestLocalBridgeTap({
+        last_tap_uuid: '7db35ca0-fdfc-44b5-a220-6d322d867f6f',
+        last_tap_at: '2026-07-31T21:25:00.000Z',
+        last_tap_bib: '3',
+        last_tap_race_id: 'r12',
+      }),
+    ).toBeNull()
+    expect(store.taps).toHaveLength(0)
+
+    const first = store.ingestLocalBridgeTap({
+      last_tap_uuid: '7db35ca0-fdfc-44b5-a220-6d322d867f6f',
+      last_tap_at: '2026-07-31T21:26:10.000Z',
+      last_tap_bib: '3',
+      last_tap_race_id: 'r12',
+    })
+    expect(first?.ok).toBe(true)
+    expect(first?.bib_number).toBe('3')
+    expect(store.taps).toHaveLength(1)
+
+    // Same snapshot again is a no-op.
+    expect(
+      store.ingestLocalBridgeTap({
+        last_tap_uuid: '7db35ca0-fdfc-44b5-a220-6d322d867f6f',
+        last_tap_at: '2026-07-31T21:26:10.000Z',
+        last_tap_bib: '3',
+        last_tap_race_id: 'r12',
+      }),
+    ).toBeNull()
+    expect(store.taps).toHaveLength(1)
+  })
+
+  it('ingestLocalBridgeTap falls back to bib when tag uid is missing from roster', () => {
+    const store = useEventTestModeStore()
+    store.open('ev1', [
+      makeParticipant({ id: 'p1', bib_number: '3', first_name: 'Ben', last_name: 'C', race_id: 'r12' }),
+    ])
+    const result = store.ingestLocalBridgeTap({
+      last_tap_uuid: 'unknown-chip-uuid',
+      last_tap_at: '2026-07-31T21:26:10.000Z',
+      last_tap_bib: '3',
+      last_tap_race_id: 'r12',
+    })
+    expect(result?.ok).toBe(true)
+    expect(store.taps).toHaveLength(1)
+    expect(store.taps[0]?.source).toBe('rfid')
+  })
 })

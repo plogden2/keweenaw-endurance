@@ -241,6 +241,50 @@ describe('useReaderStation', () => {
     stop()
   })
 
+  it('when test mode is open, scan_result falls back to bib when tag uid is unknown', async () => {
+    unlockReaderPin()
+    const station = useStationStore()
+    station.eventId = null
+    station.deviceId = 'laptop-finish-1'
+
+    const testMode = useEventTestModeStore()
+    testMode.open('evt-1', [
+      {
+        id: 'p1',
+        race_id: 'r1',
+        bib_number: '3',
+        first_name: 'Benjamin',
+        last_name: 'Ciavola',
+        status: 'registered',
+        tag_uids: [],
+      },
+    ])
+
+    const { useReaderStation } = await import('./useReaderStation')
+    const { start, stop } = useReaderStation()
+    start()
+
+    MockWebSocket.instances[0].emit({
+      type: 'scan_result',
+      tag_uid: '7db35ca0-fdfc-44b5-a220-6d322d867f6f',
+      read_at: '2026-08-01T12:00:01-04:00',
+      scan: {
+        result: 'test_read',
+        participant_name: 'Benjamin Ciavola',
+        bib_number: '3',
+        race_id: 'r1',
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(testMode.taps).toHaveLength(1)
+    })
+    expect(testMode.lastFeedback?.ok).toBe(true)
+    expect(testMode.lastFeedback?.bib_number).toBe('3')
+
+    stop()
+  })
+
   it('applies scan_result from bridge without posting a second scan', async () => {
     unlockReaderPin()
     const station = useStationStore()

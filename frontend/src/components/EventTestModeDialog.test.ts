@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import EventTestModeDialog from './EventTestModeDialog.vue'
+import { rfidApi } from '@/services/api'
 import { useEventTestModeStore } from '@/stores/eventTestMode'
 
 vi.mock('chart.js', () => ({
@@ -28,6 +29,17 @@ vi.mock('chart.js', () => ({
   Legend: vi.fn(),
 }))
 
+vi.mock('@/services/api', async () => {
+  const actual = await vi.importActual<typeof import('@/services/api')>('@/services/api')
+  return {
+    ...actual,
+    rfidApi: {
+      ...actual.rfidApi,
+      getLocalBridgeStatusForTestMode: vi.fn().mockResolvedValue(null),
+    },
+  }
+})
+
 const mountOpts = {
   global: {
     stubs: {
@@ -45,6 +57,7 @@ describe('EventTestModeDialog', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.mocked(rfidApi.getLocalBridgeStatusForTestMode).mockResolvedValue(null)
     const store = useEventTestModeStore()
     store.open('ev1', [
       {
@@ -64,12 +77,22 @@ describe('EventTestModeDialog', () => {
           duration_minutes: 720,
         },
       },
+      {
+        id: 'p-ben',
+        race_id: 'r1',
+        bib_number: '3',
+        first_name: 'Benjamin',
+        last_name: 'Ciavola',
+        status: 'registered',
+        tag_uids: ['7db35ca0-fdfc-44b5-a220-6d322d867f6f'],
+      },
     ])
   })
 
   afterEach(() => {
     wrapper?.unmount()
     wrapper = null
+    vi.useRealTimers()
   })
 
   it('renders banner, leaderboard, and records bib taps', async () => {
@@ -106,5 +129,43 @@ describe('EventTestModeDialog', () => {
     expect(wrapper.find('[data-testid="test-mode-discard-confirm"]').exists()).toBe(true)
     await wrapper.get('[data-testid="test-mode-discard-confirm-btn"]').trigger('click')
     expect(wrapper.emitted('close')).toHaveLength(1)
+  })
+
+  it('polls local bridge status and records new RFID taps after baseline', async () => {
+    vi.useFakeTimers()
+    const statusSpy = vi.mocked(rfidApi.getLocalBridgeStatusForTestMode)
+    statusSpy.mockResolvedValue({
+      connected: true,
+      pending_count: 0,
+      syncing: false,
+      mode: 'online_synced',
+      last_tap_uuid: '7db35ca0-fdfc-44b5-a220-6d322d867f6f',
+      last_tap_at: '2026-07-31T21:25:00.000Z',
+      last_tap_bib: '3',
+      last_tap_race_id: 'r1',
+    })
+
+    wrapper = mount(EventTestModeDialog, mountOpts)
+    await flushPromises()
+
+    const store = useEventTestModeStore()
+    expect(store.taps).toHaveLength(0)
+
+    statusSpy.mockResolvedValue({
+      connected: true,
+      pending_count: 0,
+      syncing: false,
+      mode: 'online_synced',
+      last_tap_uuid: '7db35ca0-fdfc-44b5-a220-6d322d867f6f',
+      last_tap_at: '2026-07-31T21:26:10.000Z',
+      last_tap_bib: '3',
+      last_tap_race_id: 'r1',
+    })
+    await vi.advanceTimersByTimeAsync(500)
+    await flushPromises()
+
+    expect(store.taps).toHaveLength(1)
+    expect(store.lastFeedback?.participant_name).toMatch(/Benjamin/)
+    expect(wrapper.get('[data-testid="test-mode-feedback"]').text()).toMatch(/Benjamin/)
   })
 })

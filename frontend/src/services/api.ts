@@ -88,9 +88,11 @@ async function withProbeTimeout<T>(promise: Promise<T>, ms = WRITE_TAG_PROBE_MS)
   }
 }
 
-async function fetchLocalBridgeStatus(): Promise<LocalBridgeStatusResponse | null> {
+async function fetchLocalBridgeStatus(
+  timeoutMs = WRITE_TAG_PROBE_MS,
+): Promise<LocalBridgeStatusResponse | null> {
   try {
-    const res = await withProbeTimeout(fetch(`${bridgeLocalUrl}/status`))
+    const res = await withProbeTimeout(fetch(`${bridgeLocalUrl}/status`), timeoutMs)
     if (!res?.ok) return null
     return (await res.json()) as LocalBridgeStatusResponse
   } catch {
@@ -266,8 +268,13 @@ export interface WriteTagPayload {
  * Local bridge resolves logical_uuid or participant_id (+ race_id offline).
  * bib_id-only writes must use hosted /api/rfid/write-tag.
  */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export function localBridgeAcceptsWriteTag(payload: WriteTagPayload): boolean {
-  if (payload.logical_uuid?.trim()) return true
+  // Short public IDs are not Proxmark payloads — keep those on hosted write-tag.
+  const logical = payload.logical_uuid?.trim()
+  if (logical && UUID_RE.test(logical)) return true
   if (payload.participant_id?.trim()) return true
   return false
 }
@@ -286,11 +293,11 @@ async function writeTagLocal(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(25_000),
+      signal: AbortSignal.timeout(50_000),
     })
   } catch (err) {
     if (err instanceof Error && err.name === 'TimeoutError') {
-      throw new Error('Local bridge write-tag timed out (25s)')
+      throw new Error('Local bridge write-tag timed out (50s)')
     }
     throw err
   }
@@ -319,9 +326,9 @@ export const rfidApi = {
     if (shouldRouteWriteTagLocal() && localBridgeAcceptsWriteTag(payload)) {
       return writeTagLocal(payload)
     }
-    // Bridge Proxmark write timeout is 20s server-side; keep client slightly above.
+    // Bridge Proxmark write timeout is 45s server-side; keep client slightly above.
     return apiClient.post<Participant | BibTagWriteResponse>('/api/rfid/write-tag', payload, {
-      timeout: 25_000,
+      timeout: 50_000,
     })
   },
   manualEntry: (payload: ManualTimingEntryPayload) =>
@@ -332,6 +339,8 @@ export const rfidApi = {
       params: { device_id: deviceId },
     }),
   getLocalBridgeStatus: () => fetchLocalBridgeStatus(),
+  /** Longer timeout for event test-mode RFID ingest polling. */
+  getLocalBridgeStatusForTestMode: () => fetchLocalBridgeStatus(2000),
   syncPending: () =>
     apiClient.post<{ synced_count: number }>('/api/rfid/sync-pending'),
 }
@@ -370,6 +379,7 @@ export interface ScanResult {
   result: ScanResultKind
   participant_name?: string
   race_name?: string
+  race_id?: string
   placement?: number
   placement_category?: number
   lap_count?: number

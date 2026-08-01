@@ -490,6 +490,8 @@ const props = defineProps<{
   /** When set, skip API fetch and render these records (e.g. event test mode). */
   externalTimingRecords?: TimingRecord[]
   externalParticipants?: Participant[]
+  /** RFID cooldown coalescing window; 0 keeps every tap (event test mode). */
+  mergeRfidLapPointsWithinMinutes?: number
 }>()
 
 /** Sticky legend/plot selection — v-model:highlight-participant-id */
@@ -551,6 +553,9 @@ const flows = computed(() =>
     chartRaceType.value,
     unitsStore.unitSystem,
     registeredParticipants.value,
+    props.mergeRfidLapPointsWithinMinutes != null
+      ? { mergeRfidLapPointsWithinMinutes: props.mergeRfidLapPointsWithinMinutes }
+      : undefined,
   ),
 )
 const hasData = computed(() => flows.value.length > 0)

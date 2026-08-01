@@ -80,6 +80,8 @@ export interface Bib {
 export interface BibListItem {
   id: string
   bib_number: string
+  /** Full bib UUID for Proxmark writes (id is the short public suffix). */
+  logical_uuid?: string
   tag_count: number
   tag_uids?: string[]
   participant_id?: string
@@ -224,6 +226,13 @@ export interface BridgeStatusResponse {
 export interface LocalBridgeStatusResponse extends BridgeStatusResponse {
   mode?: 'offline' | 'syncing' | 'online_synced' | string
   running?: boolean
+  last_tap_uuid?: string
+  last_tap_at?: string | null
+  last_tap_bib?: string
+  last_tap_race_id?: string
+  last_tap_name?: string
+  last_read?: string
+  last_read_at?: string | null
 }
 
 export interface ManualTimingEntryPayload {

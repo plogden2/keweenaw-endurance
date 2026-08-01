@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/keweenaw-endurance/backend/internal/bridge"
 	"github.com/keweenaw-endurance/backend/internal/rfid"
@@ -474,6 +475,7 @@ func (a *App) snapshotStatusMap() map[string]any {
 		"csv_path":      st.CSVPath,
 		"pending_path":  st.PendingPath,
 		"running":       st.Running,
+		"write_only":    st.WriteOnly,
 	}
 	if st.LastSyncAt != nil {
 		out["last_sync_at"] = st.LastSyncAt.UTC().Format(time.RFC3339)
@@ -483,6 +485,27 @@ func (a *App) snapshotStatusMap() map[string]any {
 	}
 	if st.LastReadAt != nil {
 		out["last_read_at"] = st.LastReadAt.UTC().Format(time.RFC3339)
+	}
+	if st.LastTapUUID != "" {
+		out["last_tap_uuid"] = st.LastTapUUID
+	}
+	if st.LastTapAt != nil {
+		out["last_tap_at"] = st.LastTapAt.UTC().Format(time.RFC3339)
+	}
+	if st.LastTapResult != "" {
+		out["last_tap_result"] = st.LastTapResult
+	}
+	if st.LastTapName != "" {
+		out["last_tap_name"] = st.LastTapName
+	}
+	if st.LastTapBib != "" {
+		out["last_tap_bib"] = st.LastTapBib
+	}
+	if st.LastTapRaceID != "" {
+		out["last_tap_race_id"] = st.LastTapRaceID
+	}
+	if st.LastTapRaceName != "" {
+		out["last_tap_race_name"] = st.LastTapRaceName
 	}
 	if st.LastError != "" {
 		out["last_error"] = st.LastError
@@ -498,7 +521,7 @@ func (a *App) runLocalHTTP(ctx context.Context) {
 
 	srv := &http.Server{
 		Addr:    a.cfg.LocalAddr,
-		Handler: mux,
+		Handler: withLocalCORS(mux),
 	}
 	go func() {
 		<-ctx.Done()
@@ -541,6 +564,10 @@ type writeTagRequest struct {
 }
 
 func (a *App) handleWriteTag(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -565,9 +592,11 @@ func (a *App) handleWriteTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := a.writeChip(logicalUUID); err != nil {
+		a.setLastError(err)
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
+	a.setLastError(nil)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -576,9 +605,37 @@ func (a *App) handleWriteTag(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func withLocalCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Vary", "Origin")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (a *App) resolveLogicalUUID(req writeTagRequest) (string, error) {
 	if uid := strings.TrimSpace(strings.ToLower(req.LogicalUUID)); uid != "" {
-		return uid, nil
+		if _, err := uuid.Parse(uid); err == nil {
+			return uid, nil
+		}
+		// Event Bibs UI may send the short public id; resolve via hosted catalog.
+		if a.auth != nil && strings.TrimSpace(a.cfg.EventID) != "" {
+			full, err := a.auth.FetchBibLogicalUUID(a.client, a.cfg.EventID, uid)
+			if err == nil {
+				return full, nil
+			}
+			return "", fmt.Errorf("logical_uuid %q: %w", uid, err)
+		}
+		return "", fmt.Errorf("logical_uuid must be a full UUID, got %q", uid)
 	}
 	if req.ParticipantID == "" {
 		return "", fmt.Errorf("logical_uuid or participant_id is required")
@@ -590,10 +647,8 @@ func (a *App) resolveLogicalUUID(req writeTagRequest) (string, error) {
 }
 
 func (a *App) writeChip(logicalUUID string) error {
-	// Drop stray proxmark processes so the write CLI owns COM exclusively.
-	if _, err := KillProxmarkOrphans(os.Getpid()); err != nil {
-		log.Printf("write-tag: kill orphans: %v", err)
-	}
+	// WriteLogicalUUID cancels the continuous arm and (via killAllProxmarkHook)
+	// terminates any proxmark3 still holding COM — including our own Lua arm.
 	if err := a.pm3.WriteLogicalUUID(logicalUUID); err != nil {
 		return err
 	}
@@ -972,7 +1027,14 @@ func (a *App) flushPending(conn *websocket.Conn) error {
 	a.mu.RUnlock()
 	if writeOnly {
 		// Hold queued automatic reads until write-only is turned off.
+		// Still mark online_synced so operators/UI see a healthy bridge while programming.
 		log.Printf("write-only: skipping pending flush (%d queued)", a.store.PendingCount())
+		a.mu.Lock()
+		a.syncing = false
+		a.mode = bridge.ModeOnlineSynced
+		now := time.Now().UTC()
+		a.lastSyncAt = &now
+		a.mu.Unlock()
 		return nil
 	}
 

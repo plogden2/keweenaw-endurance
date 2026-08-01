@@ -490,9 +490,14 @@ export function buildExtrapolationPoint(
 }
 
 /** Collapse duplicate RFID taps inside the cooldown window (not karaoke). */
-const LAP_POINT_MERGE_MINUTES = 1
+export const LAP_POINT_MERGE_MINUTES = 1
 
 export type LapPointKind = 'rfid' | 'karaoke'
+
+export type BuildParticipantFlowsOptions = {
+  /** Minutes of RFID cooldown coalescing. Use 0 for test mode (no cooldown). */
+  mergeRfidLapPointsWithinMinutes?: number
+}
 
 function isScoredLapRecord(record: TimingRecord): boolean {
   const recordType = record.record_type ?? 'rfid_lap'
@@ -508,6 +513,7 @@ function pushLapPoint(
   elapsedMinutes: number,
   laps: number,
   kind: LapPointKind,
+  mergeWithinMinutes: number = LAP_POINT_MERGE_MINUTES,
 ): void {
   if (flow.points.length === 0) {
     flow.points.push({ elapsedMinutes: 0, value: 0 })
@@ -528,7 +534,7 @@ function pushLapPoint(
     return
   }
 
-  if (x - last.elapsedMinutes <= LAP_POINT_MERGE_MINUTES) {
+  if (mergeWithinMinutes > 0 && x - last.elapsedMinutes <= mergeWithinMinutes) {
     last.elapsedMinutes = x
     last.value = Math.max(last.value, laps)
     last.kind = 'rfid'
@@ -580,6 +586,7 @@ function buildLapFlows(
   records: TimingRecord[],
   raceStartMs: number,
   registeredParticipants?: FlowParticipantInput[],
+  mergeWithinMinutes: number = LAP_POINT_MERGE_MINUTES,
 ): ParticipantFlow[] {
   // Include scored laps before gun start (leaderboard counts them). Elapsed is
   // clamped to >= 0 in pushLapPoint so the axis never goes negative.
@@ -611,7 +618,13 @@ function buildLapFlows(
       existingFlow.points.push({ elapsedMinutes: 0, value: 0 })
     }
     applyParticipantMeta(existingFlow, participant)
-    pushLapPoint(existingFlow, elapsedMinutes, laps, lapKindForRecord(record))
+    pushLapPoint(
+      existingFlow,
+      elapsedMinutes,
+      laps,
+      lapKindForRecord(record),
+      mergeWithinMinutes,
+    )
     flows.set(participant.id, existingFlow)
   }
 
@@ -659,6 +672,7 @@ export function buildParticipantFlows(
   raceType: RaceType = 'time_based',
   unitSystem: UnitSystem = 'imperial',
   registeredParticipants?: FlowParticipantInput[],
+  options?: BuildParticipantFlowsOptions,
 ): ParticipantFlow[] {
   // Soft-voided timing rows must not appear on race-flow charts.
   const activeRecords = records.filter((record) => !record.voided_at)
@@ -668,7 +682,14 @@ export function buildParticipantFlows(
   }
 
   if (raceType === 'lap_based') {
-    return buildLapFlows(activeRecords, raceStartMs, registeredParticipants)
+    const mergeWithinMinutes =
+      options?.mergeRfidLapPointsWithinMinutes ?? LAP_POINT_MERGE_MINUTES
+    return buildLapFlows(
+      activeRecords,
+      raceStartMs,
+      registeredParticipants,
+      mergeWithinMinutes,
+    )
   }
 
   return buildDistanceFlows(activeRecords, raceStartMs, unitSystem)

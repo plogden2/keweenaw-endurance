@@ -78,6 +78,7 @@
               :duration-minutes="durationMinutes"
               :external-timing-records="store.timingRecords"
               :external-participants="store.roster"
+              :merge-rfid-lap-points-within-minutes="0"
               v-model:highlight-participant-id="highlightParticipantId"
             />
           </section>
@@ -148,6 +149,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import RaceFlowChart from '@/components/RaceFlowChart.vue'
+import { rfidApi } from '@/services/api'
 import { useEventTestModeStore } from '@/stores/eventTestMode'
 import { resolveCategoryColor } from '@/themes/defaultLegend'
 
@@ -164,6 +166,8 @@ const submitting = ref(false)
 const confirmOpen = ref(false)
 const highlightParticipantId = ref<string | undefined>()
 const bibInputRef = ref<HTMLInputElement | null>(null)
+let bridgePollTimer: ReturnType<typeof setInterval> | undefined
+let bridgeBaselineReady = false
 
 const durationMinutes = computed(() => {
   const minutes = store.roster
@@ -210,13 +214,35 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+async function pollLocalBridgeTap() {
+  const status = await rfidApi.getLocalBridgeStatusForTestMode()
+  if (!status) return
+  const snap = {
+    last_tap_uuid: status.last_tap_uuid || status.last_read,
+    last_tap_at: status.last_tap_at || status.last_read_at,
+    last_tap_bib: status.last_tap_bib,
+    last_tap_race_id: status.last_tap_race_id,
+  }
+  if (!bridgeBaselineReady) {
+    store.noteBridgeTapBaseline(snap)
+    bridgeBaselineReady = true
+    return
+  }
+  store.ingestLocalBridgeTap(snap)
+}
+
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   void nextTick(() => bibInputRef.value?.focus())
+  void pollLocalBridgeTap()
+  bridgePollTimer = setInterval(() => {
+    void pollLocalBridgeTap()
+  }, 500)
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
+  if (bridgePollTimer) clearInterval(bridgePollTimer)
 })
 </script>
 

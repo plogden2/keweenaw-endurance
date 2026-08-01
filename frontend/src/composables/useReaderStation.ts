@@ -106,18 +106,44 @@ function createReaderStation(): UseReaderStation {
 
       if (raw?.type === 'scan_result' && raw.scan) {
         const tagUid = String(raw.tag_uid || '')
+        const scan = raw.scan as ScanResult
         // Bridge already scored server-side and fans out scan_result (not
         // tag_read). While test mode is open, fold that into the ephemeral
         // board and suppress production ScanPopup feedback.
         if (testMode.isOpen) {
-          if (tagUid) {
-            testMode.recordTagTap(tagUid, raw.read_at)
+          // Desktop Reader taps are ingested via local bridge /status polling in
+          // EventTestModeDialog (Cloud Run fan-out of scan_result is unreliable).
+          // Still swallow the frame so ScanPopup stays suppressed.
+          // Fall back to recording here when the stream is the only path (e.g. tests).
+          let feedback = tagUid
+            ? testMode.recordTagTap(tagUid, raw.read_at)
+            : null
+          if ((!feedback || !feedback.ok) && scan.bib_number) {
+            feedback = testMode.recordBibTap(
+              String(scan.bib_number),
+              raw.read_at,
+              scan.race_id,
+            )
+            if (feedback.ok) {
+              const last = testMode.taps.at(-1)
+              if (last) last.source = 'rfid'
+              feedback.source = 'rfid'
+              testMode.lastFeedback = feedback
+            }
+          }
+          if (feedback?.ok && (tagUid || scan.bib_number)) {
+            // Align poll dedupe so a later /status snapshot of this tap is skipped.
+            testMode.noteBridgeTapBaseline({
+              last_tap_uuid: tagUid || undefined,
+              last_tap_at: raw.read_at,
+              last_tap_bib: scan.bib_number ? String(scan.bib_number) : undefined,
+            })
           }
           return
         }
-        lastScan.value = raw.scan as ScanResult
-        if (tagUid && raw.scan.result === 'lap') {
-          void rememberScan(tagUid, raw.scan as ScanResult)
+        lastScan.value = scan
+        if (tagUid && scan.result === 'lap') {
+          void rememberScan(tagUid, scan)
         }
         error.value = null
         return

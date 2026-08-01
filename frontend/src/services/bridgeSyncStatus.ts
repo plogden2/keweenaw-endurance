@@ -7,6 +7,13 @@ export type BridgeStatusResponse = {
 
 export type LocalBridgeStatusResponse = BridgeStatusResponse & {
   mode?: 'offline' | 'syncing' | 'online_synced' | string
+  last_tap_uuid?: string
+  last_tap_at?: string | null
+  last_tap_bib?: string
+  last_tap_race_id?: string
+  last_tap_name?: string
+  last_read?: string
+  last_read_at?: string | null
 }
 
 export type SyncChipState = 'offline' | 'syncing' | 'online_synced'

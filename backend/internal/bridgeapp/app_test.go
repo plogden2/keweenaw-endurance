@@ -63,6 +63,30 @@ func TestApp_ManualEntryOfflineQueuesPending(t *testing.T) {
 	assert.True(t, filepath.IsAbs(app.store.PendingPath()) || app.store.PendingPath() != "")
 }
 
+func TestFlushPending_WriteOnlySetsOnlineSynced(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{
+		HostedAPIURL: "http://127.0.0.1:1",
+		BridgeToken:  "tok",
+		DeviceID:     "laptop-finish-1",
+		EventID:      "11111111-1111-1111-1111-111111111111",
+		DataDir:      dir,
+		LocalAddr:    "127.0.0.1:0",
+		BridgeMock:   true,
+		WriteOnly:    true,
+	}
+	normalizeConfig(&cfg)
+	app, err := New(cfg)
+	require.NoError(t, err)
+
+	app.mu.Lock()
+	app.mode = bridge.ModeOffline
+	app.mu.Unlock()
+
+	require.NoError(t, app.flushPending(nil))
+	assert.Equal(t, string(bridge.ModeOnlineSynced), app.StatusSnapshot().Mode)
+}
+
 func TestApp_WriteOnlyPollDoesNotRecord(t *testing.T) {
 	dir := t.TempDir()
 	cfg := Config{
@@ -154,6 +178,15 @@ func TestApp_ApplyScanResultMessage(t *testing.T) {
 	assert.Equal(t, "7", st.LastTapBib)
 	assert.Equal(t, "12 Hour", st.LastTapRaceName)
 	assert.Equal(t, "lap", st.LastTapResult)
+
+	// Local HTTP /status must expose last_tap_* so event test mode can poll taps.
+	m := app.snapshotStatusMap()
+	assert.Equal(t, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", m["last_tap_uuid"])
+	assert.Equal(t, "7", m["last_tap_bib"])
+	assert.Equal(t, "race-1", m["last_tap_race_id"])
+	assert.Equal(t, "Ada Lovelace", m["last_tap_name"])
+	assert.Equal(t, "lap", m["last_tap_result"])
+	assert.NotEmpty(t, m["last_tap_at"])
 }
 
 func TestApp_StartStopMock(t *testing.T) {

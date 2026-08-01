@@ -591,6 +591,97 @@ describe('raceFlowData', () => {
     expect(afterStart[0].value).toBe(2)
   })
 
+  it('keeps rapid RFID taps as separate steps when merge window is 0 (test mode)', () => {
+    const closeTaps: TimingRecord[] = [
+      {
+        id: 'lap-1',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:05:00.000Z',
+        local_timestamp: '2024-06-01T10:05:00.000Z',
+        sync_status: 'synced',
+        record_type: 'rfid_lap',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+      {
+        id: 'lap-2',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:05:20.000Z',
+        local_timestamp: '2024-06-01T10:05:20.000Z',
+        sync_status: 'synced',
+        record_type: 'rfid_lap',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+      {
+        id: 'lap-3',
+        participant_id: 'p1',
+        checkpoint_id: 'cp-finish',
+        timestamp: '2024-06-01T10:05:40.000Z',
+        local_timestamp: '2024-06-01T10:05:40.000Z',
+        sync_status: 'synced',
+        record_type: 'rfid_lap',
+        participant: {
+          id: 'p1',
+          race_id: 'race-1',
+          bib_number: '7',
+          first_name: 'Alex',
+          last_name: 'Runner',
+          status: 'started',
+        },
+        checkpoint: {
+          id: 'cp-finish',
+          race_id: 'race-1',
+          name: 'Finish',
+          checkpoint_type: 'finish',
+          is_active: true,
+        },
+      },
+    ]
+
+    const flows = buildParticipantFlows(
+      closeTaps,
+      '2024-06-01T10:00:00.000Z',
+      'lap_based',
+      'imperial',
+      undefined,
+      { mergeRfidLapPointsWithinMinutes: 0 },
+    )
+    const alex = flows.find((flow) => flow.participantId === 'p1')
+    const afterStart = alex?.points.filter((point) => point.value > 0) ?? []
+
+    expect(afterStart).toHaveLength(3)
+    expect(afterStart.map((p) => p.value)).toEqual([1, 2, 3])
+  })
+
   it('plots karaoke bonus laps as distinct music-note points', () => {
     const withKaraoke: TimingRecord[] = [
       {
