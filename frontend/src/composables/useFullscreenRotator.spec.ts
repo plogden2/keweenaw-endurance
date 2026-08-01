@@ -141,7 +141,7 @@ describe('useFullscreenRotator', () => {
       expect(pageIndex.value).toBe(0)
     })
 
-    it('falls back to the other mode when preferred is disabled', async () => {
+    it('falls back to individuals when teams is preferred but disabled', async () => {
       const { open, jumpToRace, setPageEnabled, currentPage } = setup()
       open.value = true
       await nextTick()
@@ -150,6 +150,33 @@ describe('useFullscreenRotator', () => {
       expect(jumpToRace('12h', 'teams')).toBe(true)
       expect(currentPage.value?.race).toBe('12h')
       expect(currentPage.value?.mode).toBe('individuals')
+    })
+
+    it('switches off the team page when preferred mode is individuals', async () => {
+      const { open, jumpToRace, pageIndex, currentPage } = setup()
+      open.value = true
+      await nextTick()
+      pageIndex.value = 1 // 12h teams
+      await nextTick()
+      expect(currentPage.value?.mode).toBe('teams')
+
+      expect(jumpToRace('12h', 'individuals')).toBe(true)
+      expect(currentPage.value).toEqual({ race: '12h', mode: 'individuals', enabled: true })
+    })
+
+    it('does not fall back to teams when individuals is preferred but disabled', async () => {
+      const { open, jumpToRace, setPageEnabled, pageIndex, currentPage } = setup()
+      open.value = true
+      await nextTick()
+      setPageEnabled('12h', 'individuals', false)
+      await nextTick()
+      // Active: 12h teams, 6h individuals, 6h teams
+      pageIndex.value = 0
+      await nextTick()
+      expect(currentPage.value).toEqual({ race: '12h', mode: 'teams', enabled: true })
+
+      expect(jumpToRace('12h', 'individuals')).toBe(false)
+      expect(currentPage.value?.mode).toBe('teams')
     })
 
     it('does not jump when paused', async () => {

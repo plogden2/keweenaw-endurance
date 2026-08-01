@@ -191,10 +191,10 @@ export function useFullscreenRotator(opts: {
     const pages = activePages.value
     if (!pages.length) return false
 
-    const fallback: RotatorMode = preferredMode === 'teams' ? 'individuals' : 'teams'
     let idx = pages.findIndex((p) => p.race === race && p.mode === preferredMode)
-    if (idx < 0) {
-      idx = pages.findIndex((p) => p.race === race && p.mode === fallback)
+    // Team racers may fall back to individuals; solo racers must never land on teams.
+    if (idx < 0 && preferredMode === 'teams') {
+      idx = pages.findIndex((p) => p.race === race && p.mode === 'individuals')
     }
     if (idx < 0) return false
 

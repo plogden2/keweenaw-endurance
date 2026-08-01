@@ -769,6 +769,34 @@ describe('EventLive.vue', () => {
       expect(wrapper.find('.fs-meta').text()).toContain('6 Hour · Individual')
     })
 
+    it('leaves the team page when a solo racer in that race records a lap', async () => {
+      const wrapper = await mountLive()
+      await flushPromises()
+      await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+      await nextTick()
+
+      // Advance to 12h · Team via a teammate lap, then a solo racer should flip to Individual.
+      lastLap.value = lapEvent({
+        race_id: 'r-12',
+        participant_id: 'p1',
+        participant_name: 'Alex Rivera',
+      })
+      await nextTick()
+      await flushPromises()
+      expect(wrapper.find('.fs-meta').text()).toContain('12 Hour · Team')
+
+      lastLap.value = lapEvent({
+        race_id: 'r-12',
+        participant_id: 'p6',
+        participant_name: 'Solo Six',
+        lap_count: 2,
+      })
+      await nextTick()
+      await flushPromises()
+
+      expect(wrapper.find('.fs-meta').text()).toContain('12 Hour · Individual')
+    })
+
     it('does not jump when rotator is paused', async () => {
       const wrapper = await mountLive()
       await flushPromises()
