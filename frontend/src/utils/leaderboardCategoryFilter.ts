@@ -56,18 +56,16 @@ export function matchesFilter(
   return true
 }
 
-export function filterLeaderboard<T extends Record<string, unknown>>(
+export function filterLeaderboard<T extends { category_key?: string }>(
   entries: T[],
   filter: LeaderboardCategoryFilter,
   placeField: 'place' | 'position',
 ): T[] {
-  const matched = entries.filter((e) =>
-    matchesFilter(e.category_key as string | undefined, filter),
-  )
+  const matched = entries.filter((e) => matchesFilter(e.category_key, filter))
   if (filter.skill === 'all' && filter.gender === 'all') {
-    return matched.map((e) => ({ ...e }))
+    return matched.slice()
   }
-  return matched.map((e, i) => ({ ...e, [placeField]: i + 1 }))
+  return matched.map((e, i) => ({ ...e, [placeField]: i + 1 }) as T)
 }
 
 export function availableFacets(keys: Array<string | undefined | null>): {
