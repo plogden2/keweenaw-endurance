@@ -380,4 +380,112 @@ describe('RaceDetails.vue', () => {
     await flushPromises()
     expect(chart.props('highlightParticipantId')).toBeUndefined()
   })
+
+  describe('leaderboard category filters', () => {
+    const categorizedLeaderboard = [
+      {
+        position: 1,
+        participant_id: 'p1',
+        bib_number: '1',
+        first_name: 'Alex',
+        last_name: 'Expert',
+        location: 'Houghton MI',
+        category_key: 'expert_men',
+        total_time_seconds: 3600,
+        status: 'finished',
+      },
+      {
+        position: 2,
+        participant_id: 'p2',
+        bib_number: '2',
+        first_name: 'Blake',
+        last_name: 'West',
+        location: 'Calumet MI',
+        category_key: 'expert_women',
+        total_time_seconds: 3700,
+        status: 'finished',
+      },
+      {
+        position: 3,
+        participant_id: 'p3',
+        bib_number: '3',
+        first_name: 'Casey',
+        last_name: 'Int',
+        location: 'Copper Harbor MI',
+        category_key: 'intermediate_women',
+        total_time_seconds: 3800,
+        status: 'finished',
+      },
+    ]
+
+    async function mountWithLeaderboard(
+      entries: typeof categorizedLeaderboard,
+    ) {
+      racesStore.currentRace = {
+        id: 'race-1',
+        name: 'Marathon',
+        race_type: 'time_based',
+        status: 'finished',
+      }
+      ;(timingApi.getLeaderboard as Mock).mockResolvedValue({ data: { data: entries } })
+      ;(timingApi.getLive as Mock).mockResolvedValue({
+        data: { race_id: 'race-1', records: [] },
+      })
+
+      const router = createTestRouter()
+      await router.push('/timing/evt-1/race/race-1')
+      await router.isReady()
+
+      const wrapper = mount(RaceDetails, {
+        global: { plugins: [router] },
+      })
+      await flushPromises()
+      return wrapper
+    }
+
+    it('renders filters on leaderboard tab', async () => {
+      const wrapper = await mountWithLeaderboard(categorizedLeaderboard)
+
+      expect(wrapper.find('[data-testid="leaderboard-category-filters"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="lb-filter-skill"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="lb-filter-gender"]').exists()).toBe(true)
+    })
+
+    it('filters to Expert Women with renumbered position', async () => {
+      const wrapper = await mountWithLeaderboard(categorizedLeaderboard)
+
+      await wrapper.find('[data-testid="lb-filter-skill-expert"]').trigger('click')
+      await wrapper.find('[data-testid="lb-filter-gender-women"]').trigger('click')
+      await flushPromises()
+
+      const rows = wrapper.findAll('tbody tr')
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!.text()).toContain('Blake')
+      expect(rows[0]!.text()).toContain('West')
+      expect(rows[0]!.find('td').text()).toBe('1')
+    })
+
+    it('shows empty message when filter matches no racers', async () => {
+      const wrapper = await mountWithLeaderboard([
+        {
+          position: 1,
+          participant_id: 'p1',
+          bib_number: '1',
+          first_name: 'Alex',
+          last_name: 'Expert',
+          location: 'Houghton MI',
+          category_key: 'expert_men',
+          total_time_seconds: 3600,
+          status: 'finished',
+        },
+      ])
+
+      await wrapper.find('[data-testid="lb-filter-skill-expert"]').trigger('click')
+      await wrapper.find('[data-testid="lb-filter-gender-women"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.text()).toContain('No racers match')
+      expect(wrapper.find('[data-testid="leaderboard-scroll"]').exists()).toBe(false)
+    })
+  })
 })

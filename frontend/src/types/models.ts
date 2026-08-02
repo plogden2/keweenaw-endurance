@@ -117,6 +117,7 @@ export interface LeaderboardEntry {
   total_time_seconds: number
   laps?: number
   status: string
+  category_key?: string
 }
 
 export interface PaginatedResponse<T> {

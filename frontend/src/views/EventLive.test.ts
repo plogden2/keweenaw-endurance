@@ -90,6 +90,7 @@ const livePayload = {
   category_legend: [
     { key: 'expert_men', label: 'Expert Men', color: '#1a5276' },
     { key: 'expert_women', label: 'Expert Women', color: '#8e44ad' },
+    { key: 'intermediate_women', label: 'Intermediate Women', color: '#27ae60' },
   ],
   races: [
     {
@@ -109,6 +110,24 @@ const livePayload = {
           category_key: 'expert_men',
           laps: 14,
           last_lap_at: '2026-08-01T11:02:41-04:00',
+        },
+        {
+          place: 2,
+          participant_id: 'p2',
+          bib_number: '22',
+          name: 'Blake West',
+          category_key: 'expert_women',
+          laps: 12,
+          last_lap_at: '2026-08-01T11:01:30-04:00',
+        },
+        {
+          place: 3,
+          participant_id: 'p3',
+          bib_number: '33',
+          name: 'Casey East',
+          category_key: 'intermediate_women',
+          laps: 10,
+          last_lap_at: '2026-08-01T11:00:00-04:00',
         },
       ],
       leaderboard_teams: [
@@ -169,7 +188,26 @@ const livePayload = {
       start_time: '2026-08-01T15:00:00-04:00',
       duration_minutes: 90,
       countdown_seconds: 25200,
-      leaderboard_overall: [],
+      leaderboard_overall: [
+        {
+          place: 1,
+          participant_id: 'kid1',
+          bib_number: '101',
+          name: 'Kid One',
+          category_key: 'men',
+          laps: 2,
+          last_lap_at: '2026-08-01T15:20:00-04:00',
+        },
+        {
+          place: 2,
+          participant_id: 'kid2',
+          bib_number: '102',
+          name: 'Kid Two',
+          category_key: 'women',
+          laps: 1,
+          last_lap_at: '2026-08-01T15:18:00-04:00',
+        },
+      ],
       leaderboard_teams: [],
       flow_series: [],
     },
@@ -303,6 +341,7 @@ describe('EventLive.vue', () => {
 
     expect(wrapper.find('[data-testid="leaderboard-overall"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="leaderboard-teams"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="leaderboard-category-filters"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('East Bluff A')
     expect(wrapper.text()).toContain('12.5')
 
@@ -312,6 +351,67 @@ describe('EventLive.vue', () => {
 
     expect(wrapper.find('[data-testid="leaderboard-overall"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="leaderboard-teams"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="leaderboard-category-filters"]').exists()).toBe(true)
+  })
+
+  describe('leaderboard category filters', () => {
+    it('renders filters in individuals mode', async () => {
+      const wrapper = await mountLive()
+
+      expect(wrapper.find('[data-testid="leaderboard-category-filters"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="lb-filter-skill"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="lb-filter-gender"]').exists()).toBe(true)
+    })
+
+    it('filters to Expert Women with renumbered place', async () => {
+      const wrapper = await mountLive()
+
+      await wrapper.find('[data-testid="lb-filter-skill-expert"]').trigger('click')
+      await wrapper.find('[data-testid="lb-filter-gender-women"]').trigger('click')
+      await flushPromises()
+
+      const rows = wrapper.findAll('[data-testid="leaderboard-row"]')
+      expect(rows).toHaveLength(1)
+      expect(rows[0]!.attributes('data-participant-id')).toBe('p2')
+      expect(rows[0]!.text()).toContain('Blake West')
+      expect(rows[0]!.find('.place').text()).toBe('1')
+    })
+
+    it('hides filters when fullscreen rotator is open', async () => {
+      const wrapper = await mountLive()
+
+      expect(wrapper.find('[data-testid="leaderboard-category-filters"]').exists()).toBe(true)
+
+      await wrapper.find('[data-testid="fullscreen-rotator-toggle"]').trigger('click')
+      await nextTick()
+
+      expect(wrapper.find('[data-testid="leaderboard-category-filters"]').exists()).toBe(false)
+      const rotator = wrapper.find('[data-testid="fullscreen-rotator"]')
+      expect(rotator.exists()).toBe(true)
+      expect(rotator.find('[data-testid="leaderboard-category-filters"]').exists()).toBe(false)
+    })
+
+    it('hides filters in teams mode', async () => {
+      const wrapper = await mountLive()
+
+      const toggle = wrapper.find('[data-testid="leaderboard-mode-toggle"]')
+      const teamsBtn = toggle.findAll('button').find((btn) => btn.text() === 'Teams')
+      await teamsBtn!.trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="leaderboard-category-filters"]').exists()).toBe(false)
+    })
+
+    it('hides Class chips on kids tab even when event legend has Expert', async () => {
+      const wrapper = await mountLive()
+
+      await wrapper.find('[data-testid="race-tab-90m"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="leaderboard-category-filters"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="lb-filter-skill"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="lb-filter-gender"]').exists()).toBe(true)
+    })
   })
 
   it('retints category legend and leaderboard dots with brand colors', async () => {
